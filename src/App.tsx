@@ -396,7 +396,7 @@ export default function App() {
             <SharePanel path={activePath} isOwner={role === "owner"} />
             <HistoryPanel path={activePath} />
             {isCanvas ? (
-              <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} />
+              <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
             ) : (
               <>
                 <div className={`editor-body view-${viewMode}`}>

@@ -12,9 +12,16 @@ const ORIGIN = "canvas-editor";
 interface CanvasNoteProps {
   raw: string;
   ytext: Y.Text;
+  dark?: boolean;
 }
 
-function parseScene(body: string): { elements: readonly ExcalidrawElement[]; appState: Partial<AppState> } | null {
+interface ParsedScene {
+  elements: readonly ExcalidrawElement[];
+  appState: Partial<AppState>;
+  files: BinaryFiles;
+}
+
+function parseScene(body: string): ParsedScene | null {
   const trimmed = body.trim();
   if (!trimmed) return null;
   try {
@@ -22,25 +29,27 @@ function parseScene(body: string): { elements: readonly ExcalidrawElement[]; app
     return {
       elements: Array.isArray(scene.elements) ? scene.elements : [],
       appState: scene.appState ?? {},
+      // Same shape Excalidraw's own .excalidraw file format uses: files
+      // keyed by fileId, each carrying its data as a base64 dataURL — so
+      // images ride along in the same JSON blob as everything else,
+      // through the same Yjs text/local+cloud sync/materialize-to-file
+      // path the rest of the note already uses.
+      files: scene.files && typeof scene.files === "object" ? scene.files : {},
     };
   } catch {
     return null;
   }
 }
 
-// The canvas scene (Excalidraw elements + view state) is persisted as JSON
-// in the note's body, through the same Yjs text this note would otherwise
-// hold markdown in — so it rides the existing local/cloud sync, materialize-
-// to-file, and rebuildable-SQLite-cache machinery for free. Concurrent
-// pixel-level co-drawing isn't as fine-grained as Excalidraw's own
-// multiplayer story would give you (a whole-scene diff-replace on every
-// change, not per-element ops), but two peers editing the same canvas note
-// still converge correctly.
-export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
+// See the note above parseScene for why images are persisted here at all —
+// the earlier version of this file only kept elements + appState, so a
+// dropped-in image would render for the current session and then silently
+// vanish on the next reload since its bytes were never saved anywhere.
+export default function CanvasNote({ raw, ytext, dark = true }: CanvasNoteProps) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialScene] = useState(() => parseScene(parseFrontmatter(raw).body));
 
-  function onChange(elements: readonly ExcalidrawElement[], appState: AppState, _files: BinaryFiles) {
+  function onChange(elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const { data } = parseFrontmatter(ytext.toString());
@@ -49,6 +58,7 @@ export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
         version: 2,
         elements,
         appState: { viewBackgroundColor: appState.viewBackgroundColor },
+        files,
       };
       const nextRaw = stringifyFrontmatter(data, JSON.stringify(scene, null, 2) + "\n");
       applyTextDiff(ytext, nextRaw, ORIGIN);
@@ -60,10 +70,11 @@ export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
       <Excalidraw
         initialData={{
           elements: initialScene?.elements ?? [],
-          appState: { ...initialScene?.appState, theme: "dark" },
+          appState: { ...initialScene?.appState, theme: dark ? "dark" : "light" },
+          files: initialScene?.files ?? {},
         }}
         onChange={onChange}
-        theme="dark"
+        theme={dark ? "dark" : "light"}
       />
     </div>
   );
