@@ -64,6 +64,7 @@ export default function App() {
   const [peerCount, setPeerCount] = useState(0);
   const [showGraph, setShowGraph] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [localSession, setLocalSession] = useState<CollabSession | null>(null);
   const [raw, setRaw] = useState("");
@@ -174,6 +175,7 @@ export default function App() {
   function openNote(p: string) {
     setShowGraph(false);
     setShareToken(null); // navigating from within the app is always as the owner
+    setSidebarOpen(false); // closes the mobile drawer after picking a note
     if (p === activePath) return;
     setActivePath(p);
   }
@@ -237,7 +239,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
+        ☰
+      </button>
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
           <input
             className="search-input"
@@ -276,7 +282,14 @@ export default function App() {
         <div className="sidebar-footer">
           <button onClick={onNewNote}>+ New note</button>
           <button onClick={onNewCanvas}>+ Canvas</button>
-          <button onClick={() => setShowGraph((g) => !g)}>{showGraph ? "Editor" : "Graph"}</button>
+          <button
+            onClick={() => {
+              setShowGraph((g) => !g);
+              setSidebarOpen(false);
+            }}
+          >
+            {showGraph ? "Editor" : "Graph"}
+          </button>
           <button onClick={onReindex}>Reindex</button>
         </div>
       </aside>
