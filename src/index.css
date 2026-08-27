@@ -463,6 +463,29 @@ button:hover {
   font-family: ui-monospace, monospace;
 }
 
+.mermaid-block {
+  margin: 12px 0;
+  text-align: center;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+}
+
+.mermaid-fallback {
+  color: var(--text-dim);
+}
+
+.mermaid-error {
+  color: #e0524a;
+  font-size: 0.9em;
+}
+
+.canvas-host {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ---- Backlinks ---- */
 
 .backlinks-panel {

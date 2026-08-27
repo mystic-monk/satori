@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchNote, type NoteListItem } from "./api";
 import { extractWikilinkRefs, renderNoteBody, type RenderEnv, type ResolvedNote } from "./markdown";
+import { renderMermaidBlocks } from "./mermaid-render";
 
 export function buildResolver(notes: NoteListItem[]) {
   const byPath = new Map(notes.map((n) => [n.path.replace(/\.md$/, ""), n]));
@@ -61,6 +62,10 @@ export default function Preview({ raw, notes, onNavigate }: PreviewProps) {
     const env: RenderEnv = { resolver, bodies, pathStack: new Set() };
     return renderNoteBody(raw, env);
   }, [raw, resolver, bodies]);
+
+  useEffect(() => {
+    if (containerRef.current) renderMermaidBlocks(containerRef.current);
+  }, [html]);
 
   function handleClick(e: React.MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");

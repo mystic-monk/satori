@@ -22,6 +22,12 @@ const SLASH_ITEMS: SlashItem[] = [
   { label: "Numbered list", hint: "1. ", snippet: "1. {{cursor}}" },
   { label: "Table", hint: "| a | b |", snippet: "| a | b |\n| --- | --- |\n| {{cursor}} |  |" },
   { label: "Code block", hint: "```", snippet: "```\n{{cursor}}\n```" },
+  {
+    label: "Mermaid diagram",
+    hint: "```mermaid",
+    snippet: "```mermaid\nflowchart TD\n  A --> B{{cursor}}\n```",
+  },
+  { label: "Canvas embed", hint: "canvas note", snippet: "See the linked canvas note: [[{{cursor}}]]" },
   { label: "Callout", hint: "> [!note]", snippet: "> [!note] {{cursor}}\n> " },
   { label: "Math block", hint: "$$ … $$", snippet: "$$\n{{cursor}}\n$$" },
   { label: "Note link", hint: "[[...]]", snippet: "[[{{cursor}}]]" },

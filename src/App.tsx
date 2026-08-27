@@ -17,8 +17,10 @@ import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
+import CanvasNote from "./CanvasNote";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
+import { parseFrontmatter } from "./frontmatter";
 
 const BRIDGE_ORIGIN = "bridge";
 
@@ -168,6 +170,23 @@ export default function App() {
     openNote(p);
   }
 
+  async function onNewCanvas() {
+    const title = window.prompt("New canvas title:");
+    if (!title) return;
+    const slug = title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
+    const scene = { type: "excalidraw", version: 2, elements: [], appState: {} };
+    const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
+    await createNote(p, template);
+    await loadNotes();
+    fetchTypes().then(setTypes);
+    openNote(p);
+  }
+
   async function onDelete() {
     if (!activePath) return;
     if (!window.confirm(`Delete ${activePath}?`)) return;
@@ -187,6 +206,7 @@ export default function App() {
 
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
+  const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
 
   function exportEnv(): RenderEnv {
     return { resolver, bodies: new Map(), pathStack: new Set() };
@@ -232,6 +252,7 @@ export default function App() {
         </ul>
         <div className="sidebar-footer">
           <button onClick={onNewNote}>+ New note</button>
+          <button onClick={onNewCanvas}>+ Canvas</button>
           <button onClick={() => setShowGraph((g) => !g)}>{showGraph ? "Editor" : "Graph"}</button>
           <button onClick={onReindex}>Reindex</button>
         </div>
@@ -247,20 +268,28 @@ export default function App() {
                 {status}
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>
-              <div className="view-mode-toggle">
-                {(["source", "split", "preview"] as ViewMode[]).map((m) => (
-                  <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
-                    {m}
+              {!isCanvas && (
+                <div className="view-mode-toggle">
+                  {(["source", "split", "preview"] as ViewMode[]).map((m) => (
+                    <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!isCanvas && (
+                <>
+                  <button onClick={() => exportMarkdown(activePath, raw)}>MD</button>
+                  <button
+                    onClick={() => exportHtml(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}
+                  >
+                    HTML
                   </button>
-                ))}
-              </div>
-              <button onClick={() => exportMarkdown(activePath, raw)}>MD</button>
-              <button onClick={() => exportHtml(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
-                HTML
-              </button>
-              <button onClick={() => exportPdf(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
-                PDF
-              </button>
+                  <button onClick={() => exportPdf(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
+                    PDF
+                  </button>
+                </>
+              )}
               <button onClick={onDelete}>Delete</button>
             </div>
             <div className="cloud-bar">
@@ -289,22 +318,28 @@ export default function App() {
               )}
             </div>
             <PropertiesPanel raw={raw} ytext={localSession.ytext} />
-            <div className={`editor-body view-${viewMode}`}>
-              {viewMode !== "preview" && (
-                <div className="editor-source">
-                  <Editor key={activePath} ytext={localSession.ytext} awareness={localSession.provider.awareness} />
+            {isCanvas ? (
+              <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} />
+            ) : (
+              <>
+                <div className={`editor-body view-${viewMode}`}>
+                  {viewMode !== "preview" && (
+                    <div className="editor-source">
+                      <Editor key={activePath} ytext={localSession.ytext} awareness={localSession.provider.awareness} />
+                    </div>
+                  )}
+                  {viewMode !== "source" && (
+                    <div className="editor-preview">
+                      <Preview raw={raw} notes={notes} onNavigate={openNote} />
+                    </div>
+                  )}
                 </div>
-              )}
-              {viewMode !== "source" && (
-                <div className="editor-preview">
-                  <Preview raw={raw} notes={notes} onNavigate={openNote} />
+                <div className="backlinks-panel">
+                  <div className="backlinks-header">Backlinks</div>
+                  <Backlinks path={activePath} onNavigate={openNote} />
                 </div>
-              )}
-            </div>
-            <div className="backlinks-panel">
-              <div className="backlinks-header">Backlinks</div>
-              <Backlinks path={activePath} onNavigate={openNote} />
-            </div>
+              </>
+            )}
           </>
         ) : (
           <div className="empty-state">Select a note or create a new one.</div>

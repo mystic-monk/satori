@@ -281,6 +281,22 @@ md.use(mathPlugin);
 md.use(calloutsPlugin);
 md.use(wikilinksPlugin);
 
+// ```mermaid fenced blocks render as diagrams. Mermaid needs an async,
+// DOM-attached render pass (mermaid.render() returns a Promise), which
+// markdown-it's synchronous renderer can't do — so this just emits a
+// placeholder carrying the raw source; Preview.tsx's effect finds
+// .mermaid-block elements after insertion and fills them in.
+const defaultFenceRule = md.renderer.rules.fence!.bind(md.renderer.rules);
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const lang = token.info.trim().split(/\s+/)[0];
+  if (lang === "mermaid") {
+    const source = md.utils.escapeHtml(token.content);
+    return `<div class="mermaid-block" data-mermaid-source="${source}"><pre class="mermaid-fallback">${source}</pre></div>`;
+  }
+  return defaultFenceRule(tokens, idx, options, env, self);
+};
+
 export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {
   const body = stripFrontmatter(raw);
   const re = /(!)?\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
