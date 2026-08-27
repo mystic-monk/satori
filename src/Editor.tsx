@@ -8,6 +8,35 @@ import { yCollab } from "y-codemirror.next";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 
+// oneDark covers all dark app themes reasonably well (an approximation for
+// solarized-dark, not a pixel-perfect match — full per-theme syntax color
+// mapping would need its own HighlightStyle per theme, not done here). For
+// light themes there's no bundled light package, so this covers just the
+// editor chrome (matching whichever light palette is active) and leaves
+// syntax colors to CodeMirror's own defaults, which read fine on white.
+function lightCmTheme() {
+  const style = getComputedStyle(document.documentElement);
+  const bg = style.getPropertyValue("--bg").trim() || "#ffffff";
+  const text = style.getPropertyValue("--text").trim() || "#1a1a1a";
+  const border = style.getPropertyValue("--border").trim() || "#e2e2e5";
+  const hover = style.getPropertyValue("--bg-hover").trim() || "#f0f0f0";
+  const accent = style.getPropertyValue("--accent").trim() || "#2563eb";
+  return EditorView.theme(
+    {
+      "&": { backgroundColor: bg, color: text },
+      ".cm-content": { caretColor: text },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: text },
+      ".cm-gutters": { backgroundColor: bg, color: border, border: "none" },
+      ".cm-activeLine": { backgroundColor: hover },
+      ".cm-activeLineGutter": { backgroundColor: hover },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+        backgroundColor: `${accent}33`,
+      },
+    },
+    { dark: false }
+  );
+}
+
 interface SlashItem {
   label: string;
   hint: string;
@@ -48,9 +77,10 @@ interface EditorProps {
   ytext: Y.Text;
   awareness: Awareness;
   readOnly?: boolean;
+  dark?: boolean;
 }
 
-export default function Editor({ ytext, awareness, readOnly = false }: EditorProps) {
+export default function Editor({ ytext, awareness, readOnly = false, dark = true }: EditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
@@ -93,7 +123,7 @@ export default function Editor({ ytext, awareness, readOnly = false }: EditorPro
       extensions: [
         basicSetup,
         markdown({ codeLanguages: languages }),
-        oneDark,
+        dark ? oneDark : lightCmTheme(),
         EditorView.lineWrapping,
         EditorState.readOnly.of(readOnly),
         EditorView.editable.of(!readOnly),
@@ -110,7 +140,7 @@ export default function Editor({ ytext, awareness, readOnly = false }: EditorPro
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ytext, awareness, readOnly]);
+  }, [ytext, awareness, readOnly, dark]);
 
   const filtered = slash
     ? SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(slash.query))

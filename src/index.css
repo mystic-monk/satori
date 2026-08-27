@@ -1,11 +1,56 @@
+/* Default palette (also the explicit "dark" theme, in case data-theme
+   hasn't been set yet by src/themes.ts on first paint). Overridden per
+   theme below via [data-theme="..."] on the <html> element. */
 :root {
   color-scheme: light dark;
   --bg: #1e1e1e;
   --bg-sidebar: #181818;
+  --bg-hover: #242424;
+  --bg-active: #29344a;
+  --bg-elevated: #202531;
   --border: #2e2e2e;
   --text: #ddd;
   --text-dim: #888;
   --accent: #4c8dff;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-sidebar: #f5f5f7;
+  --bg-hover: #eff1f4;
+  --bg-active: #dbe6fd;
+  --bg-elevated: #f0f4fb;
+  --border: #e2e2e5;
+  --text: #1a1a1a;
+  --text-dim: #666;
+  --accent: #2563eb;
+}
+
+:root[data-theme="solarized-dark"] {
+  color-scheme: dark;
+  --bg: #002b36;
+  --bg-sidebar: #073642;
+  --bg-hover: #0a4152;
+  --bg-active: #0d5068;
+  --bg-elevated: #0a4152;
+  --border: #0b4859;
+  --text: #93a1a1;
+  --text-dim: #587078;
+  --accent: #268bd2;
+}
+
+:root[data-theme="solarized-light"] {
+  color-scheme: light;
+  --bg: #fdf6e3;
+  --bg-sidebar: #eee8d5;
+  --bg-hover: #f5efdc;
+  --bg-active: #e3ecf5;
+  --bg-elevated: #f5efdc;
+  --border: #d3cbb7;
+  --text: #586e75;
+  --text-dim: #93a1a1;
+  --accent: #268bd2;
 }
 
 * {
@@ -67,11 +112,11 @@ body {
 }
 
 .note-list li:hover {
-  background: #242424;
+  background: var(--bg-hover);
 }
 
 .note-list li.active {
-  background: #29344a;
+  background: var(--bg-active);
 }
 
 .note-title {
@@ -111,7 +156,7 @@ body {
 }
 
 button {
-  background: #2a2a2a;
+  background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -121,7 +166,7 @@ button {
 }
 
 button:hover {
-  background: #333;
+  background: var(--bg-hover);
 }
 
 .editor-pane {
@@ -315,7 +360,7 @@ button:hover {
 .slash-menu {
   position: absolute;
   z-index: 10;
-  background: #24262b;
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -398,7 +443,7 @@ button:hover {
   border-radius: 6px;
   padding: 8px 14px;
   margin: 12px 0;
-  background: #202531;
+  background: var(--bg-elevated);
 }
 
 .callout-title {
@@ -537,7 +582,7 @@ button:hover {
 }
 
 .share-new-link {
-  background: #202531;
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 8px;

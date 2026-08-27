@@ -27,6 +27,8 @@ import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter } from "./frontmatter";
 import { getDisplayName, getCursorColor } from "./identity";
+import { THEMES, getStoredTheme, applyTheme, isDarkTheme } from "./themes";
+import { setMermaidDark } from "./mermaid-render";
 
 const BRIDGE_ORIGIN = "bridge";
 
@@ -66,6 +68,7 @@ export default function App() {
   const [showGraph, setShowGraph] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [themeId, setThemeId] = useState(() => getStoredTheme());
 
   const [localSession, setLocalSession] = useState<CollabSession | null>(null);
   const [raw, setRaw] = useState("");
@@ -97,6 +100,11 @@ export default function App() {
       setActivePath(p);
     }
   }, []);
+
+  useEffect(() => {
+    applyTheme(themeId);
+    setMermaidDark(isDarkTheme(themeId));
+  }, [themeId]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -281,6 +289,13 @@ export default function App() {
               ))}
             </select>
           )}
+          <select className="type-filter" value={themeId} onChange={(e) => setThemeId(e.target.value)}>
+            {THEMES.map((t) => (
+              <option key={t.id} value={t.id}>
+                Theme: {t.label}
+              </option>
+            ))}
+          </select>
         </div>
         <ul className="note-list">
           {results
@@ -392,6 +407,7 @@ export default function App() {
                         ytext={localSession.ytext}
                         awareness={localSession.provider.awareness}
                         readOnly={role === "view" || role === "comment"}
+                        dark={isDarkTheme(themeId)}
                       />
                     </div>
                   )}
