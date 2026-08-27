@@ -6,6 +6,16 @@ import type { Server as HttpServer } from "node:http";
 // persistence, no key material — this process can only ever see ciphertext,
 // which is the whole point (see src/crypto.ts and src/cloud-collab.ts on the
 // client for where the actual encryption happens).
+//
+// This is also why cloud mode has no server-enforced view/comment/edit
+// roles the way local mode does (server/collab.ts): enforcing "this peer
+// can't write" means inspecting messages, which means decoding them, which
+// breaks the one guarantee this file exists to provide. Real role
+// enforcement under encryption needs an asymmetric scheme (e.g. per-role
+// Ed25519 signing keys, with the relay checking signatures — which doesn't
+// require decrypting content) layered on top of the symmetric secretbox
+// encryption used today. Not built for v1; cloud-mode sharing is
+// effectively "whoever has the passphrase can read and write."
 const rooms = new Map<string, Set<WebSocket>>();
 
 export function setupRelayServer(server: HttpServer) {

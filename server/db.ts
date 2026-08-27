@@ -31,6 +31,29 @@ db.exec(`
     tokenize = 'porter unicode61'
   );
 
+  -- Unlike notes/notes_fts/links above, shares and history are NOT
+  -- rebuildable from the vault files — they're genuine app state (who has
+  -- been granted access, a log of past saves) with no representation in
+  -- plaintext markdown. They currently live in the same .pkm/ cache dir as
+  -- the rebuildable index, which is a known wart: deleting .pkm/ to "rebuild
+  -- the cache" also silently discards sharing config and history. Flagged
+  -- as a v2 cleanup — this should be its own persistent store.
+  CREATE TABLE IF NOT EXISTS shares (
+    token TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    role TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS shares_path ON shares(path);
+
+  CREATE TABLE IF NOT EXISTS history (
+    path TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    authors TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS history_path ON history(path);
+
   CREATE TABLE IF NOT EXISTS links (
     source TEXT NOT NULL,
     target TEXT NOT NULL,
@@ -239,4 +262,90 @@ export function searchNotes(query: string): SearchResult[] {
     )
     .all(MARK_START, MARK_END, fts) as { path: string; title: string; snippet: string }[];
   return rows.map((r) => ({ path: r.path, title: r.title, snippet: markify(r.snippet) }));
+}
+
+// ---- Access control ----
+//
+// Roles are enforced by the local collab server (server/collab.ts) dropping
+// mutating Yjs messages from "view"/"comment" connections — real
+// enforcement, not a UI-only restriction, because the local server already
+// sees this note's plaintext (same trust boundary as the REST API). This is
+// deliberately scoped to local/LAN sharing only: the cloud relay
+// (server/relay.ts) can't enforce roles without decoding messages, which
+// would break the "relay only ever sees ciphertext" privacy guarantee — see
+// the note in relay.ts.
+
+export type ShareRole = "view" | "comment" | "edit";
+
+export interface Share {
+  token: string;
+  path: string;
+  role: ShareRole;
+  label: string;
+  createdAt: number;
+}
+
+function randomToken(): string {
+  return Array.from({ length: 24 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
+}
+
+export function createShare(notePath: string, role: ShareRole, label: string): Share {
+  const share: Share = { token: randomToken(), path: notePath, role, label, createdAt: Date.now() };
+  db.prepare("INSERT INTO shares (token, path, role, label, created_at) VALUES (?, ?, ?, ?, ?)").run(
+    share.token,
+    share.path,
+    share.role,
+    share.label,
+    share.createdAt
+  );
+  return share;
+}
+
+export function listShares(notePath: string): Share[] {
+  const rows = db
+    .prepare("SELECT token, path, role, label, created_at as createdAt FROM shares WHERE path = ? ORDER BY created_at DESC")
+    .all(notePath) as Share[];
+  return rows;
+}
+
+export function revokeShare(token: string): void {
+  db.prepare("DELETE FROM shares WHERE token = ?").run(token);
+}
+
+export function resolveShareRole(notePath: string, token: string | null): ShareRole | "owner" {
+  if (!token) return "owner";
+  const row = db.prepare("SELECT role FROM shares WHERE token = ? AND path = ?").get(token, notePath) as
+    | { role: ShareRole }
+    | undefined;
+  return row?.role ?? "owner";
+}
+
+// ---- Change history ----
+//
+// Approximates "who changed what, when": logged whenever a note's CRDT
+// state is persisted (server/collab.ts Room.persist()), recording which
+// display names were connected — and therefore could have contributed —
+// since the last save. Not per-keystroke attribution (that would need a
+// CRDT-level authorship map), but enough to answer "who's been touching
+// this note."
+
+export function logHistory(notePath: string, authors: string[]): void {
+  if (authors.length === 0) return;
+  db.prepare("INSERT INTO history (path, at, authors) VALUES (?, ?, ?)").run(
+    notePath,
+    Date.now(),
+    JSON.stringify(authors)
+  );
+}
+
+export interface HistoryEntry {
+  at: number;
+  authors: string[];
+}
+
+export function getHistory(notePath: string): HistoryEntry[] {
+  const rows = db
+    .prepare("SELECT at, authors FROM history WHERE path = ? ORDER BY at DESC LIMIT 50")
+    .all(notePath) as { at: number; authors: string }[];
+  return rows.map((r) => ({ at: r.at, authors: JSON.parse(r.authors) }));
 }

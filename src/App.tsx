@@ -4,11 +4,13 @@ import {
   createNote,
   deleteNoteApi,
   fetchNotes,
+  fetchRole,
   fetchTypes,
   reindex,
   search,
   type NoteListItem,
   type SearchResult,
+  type ShareRole,
 } from "./api";
 import { openLocalCollab, type CollabSession } from "./collab";
 import { openCloudCollab, type CloudStatus } from "./cloud-collab";
@@ -18,9 +20,12 @@ import Backlinks from "./Backlinks";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
 import CanvasNote from "./CanvasNote";
+import SharePanel from "./SharePanel";
+import HistoryPanel from "./HistoryPanel";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter } from "./frontmatter";
+import { getDisplayName } from "./identity";
 
 const BRIDGE_ORIGIN = "bridge";
 
@@ -62,6 +67,8 @@ export default function App() {
 
   const [localSession, setLocalSession] = useState<CollabSession | null>(null);
   const [raw, setRaw] = useState("");
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [role, setRole] = useState<ShareRole | "owner">("owner");
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
@@ -76,6 +83,18 @@ export default function App() {
     loadNotes();
     fetchTypes().then(setTypes);
   }, [loadNotes]);
+
+  // A share link looks like ?path=<note>&token=<token> — open straight into
+  // that note under that token's role.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const p = params.get("path");
+    const token = params.get("token");
+    if (p) {
+      setShareToken(token);
+      setActivePath(p);
+    }
+  }, []);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -93,7 +112,10 @@ export default function App() {
   useEffect(() => {
     if (!activePath) return;
 
-    const session = openLocalCollab(activePath);
+    setRole("owner");
+    fetchRole(activePath, shareToken).then(setRole);
+
+    const session = openLocalCollab(activePath, { token: shareToken, name: getDisplayName() });
     setLocalSession(session);
     setStatus("connecting…");
     setPeerCount(0);
@@ -120,7 +142,7 @@ export default function App() {
       setRaw("");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePath]);
+  }, [activePath, shareToken]);
 
   // Opt-in cloud sync for the currently open note: connects to the E2E
   // relay under a room name (defaults to the note's path) and bridges it
@@ -151,6 +173,7 @@ export default function App() {
 
   function openNote(p: string) {
     setShowGraph(false);
+    setShareToken(null); // navigating from within the app is always as the owner
     if (p === activePath) return;
     setActivePath(p);
   }
@@ -290,34 +313,39 @@ export default function App() {
                   </button>
                 </>
               )}
-              <button onClick={onDelete}>Delete</button>
+              {role !== "owner" && <span className="role-badge">{role}</span>}
+              {role === "owner" && <button onClick={onDelete}>Delete</button>}
             </div>
-            <div className="cloud-bar">
-              <input
-                className="cloud-input"
-                placeholder={`Room (default: ${activePath})`}
-                value={cloudRoom}
-                onChange={(e) => setCloudRoom(e.target.value)}
-                disabled={cloudConnected}
-              />
-              <input
-                className="cloud-input"
-                type="password"
-                placeholder="Shared passphrase"
-                value={cloudPassphrase}
-                onChange={(e) => setCloudPassphrase(e.target.value)}
-                disabled={cloudConnected}
-              />
-              <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
-                {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
-              </button>
-              {cloudConnected && (
-                <span className={`cloud-status ${cloudStatus === "decrypt-failed" ? "cloud-status-error" : ""}`}>
-                  {cloudStatus === "decrypt-failed" ? "wrong passphrase — can't decrypt peer data" : cloudStatus}
-                </span>
-              )}
-            </div>
-            <PropertiesPanel raw={raw} ytext={localSession.ytext} />
+            {role === "owner" && (
+              <div className="cloud-bar">
+                <input
+                  className="cloud-input"
+                  placeholder={`Room (default: ${activePath})`}
+                  value={cloudRoom}
+                  onChange={(e) => setCloudRoom(e.target.value)}
+                  disabled={cloudConnected}
+                />
+                <input
+                  className="cloud-input"
+                  type="password"
+                  placeholder="Shared passphrase"
+                  value={cloudPassphrase}
+                  onChange={(e) => setCloudPassphrase(e.target.value)}
+                  disabled={cloudConnected}
+                />
+                <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
+                  {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
+                </button>
+                {cloudConnected && (
+                  <span className={`cloud-status ${cloudStatus === "decrypt-failed" ? "cloud-status-error" : ""}`}>
+                    {cloudStatus === "decrypt-failed" ? "wrong passphrase — can't decrypt peer data" : cloudStatus}
+                  </span>
+                )}
+              </div>
+            )}
+            <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
+            <SharePanel path={activePath} isOwner={role === "owner"} />
+            <HistoryPanel path={activePath} />
             {isCanvas ? (
               <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} />
             ) : (
@@ -325,7 +353,12 @@ export default function App() {
                 <div className={`editor-body view-${viewMode}`}>
                   {viewMode !== "preview" && (
                     <div className="editor-source">
-                      <Editor key={activePath} ytext={localSession.ytext} awareness={localSession.provider.awareness} />
+                      <Editor
+                        key={activePath}
+                        ytext={localSession.ytext}
+                        awareness={localSession.provider.awareness}
+                        readOnly={role === "view" || role === "comment"}
+                      />
                     </div>
                   )}
                   {viewMode !== "source" && (

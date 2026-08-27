@@ -8,15 +8,22 @@ export interface CollabSession {
   destroy: () => void;
 }
 
+export interface LocalCollabOptions {
+  token?: string | null; // a share token — see server/collab.ts's role enforcement
+  name?: string; // display name, used for presence and change history
+}
+
 // Local-mode session: talks to our own local collab relay (server/collab.ts)
 // over ws://localhost:3001/collab/<note-path>. Real-time, unencrypted — fine
 // because the relay is the user's own machine, same trust boundary as the
 // REST API.
-export function openLocalCollab(notePath: string): CollabSession {
+export function openLocalCollab(notePath: string, opts: LocalCollabOptions = {}): CollabSession {
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
   const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:3001`;
-  const provider = new WebsocketProvider(wsUrl, `collab/${notePath}`, doc, { connect: true });
+  const params: Record<string, string> = { name: opts.name || "Anonymous" };
+  if (opts.token) params.token = opts.token;
+  const provider = new WebsocketProvider(wsUrl, `collab/${notePath}`, doc, { connect: true, params });
   return {
     doc,
     ytext,

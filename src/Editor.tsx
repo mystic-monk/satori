@@ -33,6 +33,8 @@ const SLASH_ITEMS: SlashItem[] = [
   { label: "Note link", hint: "[[...]]", snippet: "[[{{cursor}}]]" },
   { label: "Note embed", hint: "![[...]]", snippet: "![[{{cursor}}]]" },
   { label: "Divider", hint: "---", snippet: "---\n{{cursor}}" },
+  { label: "Highlight", hint: "==...==", snippet: "=={{cursor}}==" },
+  { label: "Inline comment", hint: "%%...%%", snippet: "%%{{cursor}}%%" },
 ];
 
 interface SlashState {
@@ -45,9 +47,10 @@ interface SlashState {
 interface EditorProps {
   ytext: Y.Text;
   awareness: Awareness;
+  readOnly?: boolean;
 }
 
-export default function Editor({ ytext, awareness }: EditorProps) {
+export default function Editor({ ytext, awareness, readOnly = false }: EditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
@@ -92,6 +95,8 @@ export default function Editor({ ytext, awareness }: EditorProps) {
         markdown({ codeLanguages: languages }),
         oneDark,
         EditorView.lineWrapping,
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
         yCollab(ytext, awareness, { undoManager }),
         slashWatcher,
       ],
@@ -105,7 +110,7 @@ export default function Editor({ ytext, awareness }: EditorProps) {
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ytext, awareness]);
+  }, [ytext, awareness, readOnly]);
 
   const filtered = slash
     ? SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(slash.query))

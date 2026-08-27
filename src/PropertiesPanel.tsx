@@ -8,9 +8,10 @@ const ORIGIN = "properties-panel";
 interface PropertiesPanelProps {
   raw: string;
   ytext: Y.Text;
+  readOnly?: boolean;
 }
 
-export default function PropertiesPanel({ raw, ytext }: PropertiesPanelProps) {
+export default function PropertiesPanel({ raw, ytext, readOnly = false }: PropertiesPanelProps) {
   const parsed = useMemo(() => parseFrontmatter(raw), [raw]);
   const [open, setOpen] = useState(false);
 
@@ -49,13 +50,16 @@ export default function PropertiesPanel({ raw, ytext }: PropertiesPanelProps) {
               key={key}
               propKey={key}
               value={value}
+              readOnly={readOnly}
               onChange={(v) => updateField(key, v)}
               onRemove={() => removeField(key)}
             />
           ))}
-          <button className="properties-add" onClick={addField}>
-            + Add property
-          </button>
+          {!readOnly && (
+            <button className="properties-add" onClick={addField}>
+              + Add property
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -65,11 +69,13 @@ export default function PropertiesPanel({ raw, ytext }: PropertiesPanelProps) {
 function PropertyRow({
   propKey,
   value,
+  readOnly,
   onChange,
   onRemove,
 }: {
   propKey: string;
   value: unknown;
+  readOnly: boolean;
   onChange: (v: unknown) => void;
   onRemove: () => void;
 }) {
@@ -77,6 +83,7 @@ function PropertyRow({
   if (Array.isArray(value)) {
     control = (
       <input
+        disabled={readOnly}
         value={value.join(", ")}
         onChange={(e) =>
           onChange(
@@ -89,18 +96,20 @@ function PropertyRow({
       />
     );
   } else if (typeof value === "boolean") {
-    control = <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />;
+    control = <input type="checkbox" disabled={readOnly} checked={value} onChange={(e) => onChange(e.target.checked)} />;
   } else {
-    control = <input value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
+    control = <input disabled={readOnly} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
   }
 
   return (
     <div className="property-row">
       <label className="property-key">{propKey}</label>
       {control}
-      <button className="property-remove" onClick={onRemove} title="Remove property">
-        ×
-      </button>
+      {!readOnly && (
+        <button className="property-remove" onClick={onRemove} title="Remove property">
+          ×
+        </button>
+      )}
     </div>
   );
 }

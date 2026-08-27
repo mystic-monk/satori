@@ -458,6 +458,14 @@ button:hover {
   color: #e0524a;
 }
 
+.inline-comment {
+  background: #3a3320;
+  color: #e0c46a;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.92em;
+}
+
 .math-error {
   color: #e0524a;
   font-family: ui-monospace, monospace;
@@ -484,6 +492,123 @@ button:hover {
 .canvas-host {
   flex: 1;
   min-height: 0;
+}
+
+.role-badge {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.share-panel,
+.history-panel {
+  border-bottom: 1px solid var(--border);
+}
+
+.share-body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.share-create {
+  display: flex;
+  gap: 6px;
+}
+
+.share-create select,
+.share-create input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.share-create input {
+  flex: 1;
+}
+
+.share-new-link {
+  background: #202531;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.share-new-link input {
+  width: 100%;
+  margin-top: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.share-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.share-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-label {
+  flex: 1;
+}
+
+.share-role {
+  color: var(--text-dim);
+}
+
+.share-empty,
+.history-empty {
+  color: var(--text-dim);
+}
+
+.share-note {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: 0;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.history-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-time {
+  color: var(--text-dim);
 }
 
 /* ---- Backlinks ---- */

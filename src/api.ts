@@ -24,6 +24,21 @@ export interface LinkEdge {
   embed: boolean;
 }
 
+export type ShareRole = "view" | "comment" | "edit";
+
+export interface Share {
+  token: string;
+  path: string;
+  role: ShareRole;
+  label: string;
+  createdAt: number;
+}
+
+export interface HistoryEntry {
+  at: number;
+  authors: string[];
+}
+
 function encodePath(p: string): string {
   return p.split("/").map(encodeURIComponent).join("/");
 }
@@ -73,5 +88,34 @@ export async function search(q: string): Promise<SearchResult[]> {
 
 export async function reindex(): Promise<{ count: number }> {
   const res = await fetch("/api/reindex", { method: "POST" });
+  return res.json();
+}
+
+export async function fetchRole(p: string, token: string | null): Promise<ShareRole | "owner"> {
+  const res = await fetch(`/api/role/${encodePath(p)}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
+  const data = await res.json();
+  return data.role;
+}
+
+export async function createShare(p: string, role: ShareRole, label: string): Promise<Share> {
+  const res = await fetch("/api/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: p, role, label }),
+  });
+  return res.json();
+}
+
+export async function fetchShares(p: string): Promise<Share[]> {
+  const res = await fetch(`/api/shares/${encodePath(p)}`);
+  return res.json();
+}
+
+export async function revokeShareApi(token: string): Promise<void> {
+  await fetch(`/api/share/${encodeURIComponent(token)}`, { method: "DELETE" });
+}
+
+export async function fetchHistory(p: string): Promise<HistoryEntry[]> {
+  const res = await fetch(`/api/history/${encodePath(p)}`);
   return res.json();
 }

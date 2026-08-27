@@ -15,6 +15,12 @@ import {
   listTypes,
   getBacklinks,
   getAllLinks,
+  createShare,
+  listShares,
+  revokeShare,
+  getHistory,
+  resolveShareRole,
+  type ShareRole,
 } from "./db.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
@@ -77,6 +83,38 @@ app.delete("/api/notes/*", (req, res) => {
   removeNoteIndex(relPath);
   closeRoom(relPath);
   res.json({ ok: true });
+});
+
+app.get("/api/role/*", (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  const token = typeof req.query.token === "string" ? req.query.token : null;
+  res.json({ role: resolveShareRole(relPath, token) });
+});
+
+const SHARE_ROLES: ShareRole[] = ["view", "comment", "edit"];
+
+app.post("/api/share", (req, res) => {
+  const { path: relPath, role, label } = req.body as { path: string; role: ShareRole; label?: string };
+  if (!SHARE_ROLES.includes(role)) {
+    res.status(400).json({ error: "invalid role" });
+    return;
+  }
+  res.json(createShare(relPath, role, label?.trim() || role));
+});
+
+app.get("/api/shares/*", (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  res.json(listShares(relPath));
+});
+
+app.delete("/api/share/:token", (req, res) => {
+  revokeShare(req.params.token);
+  res.json({ ok: true });
+});
+
+app.get("/api/history/*", (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  res.json(getHistory(relPath));
 });
 
 app.get("/api/search", (req, res) => {

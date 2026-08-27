@@ -197,6 +197,36 @@ function calloutsPlugin(md: MDInstance) {
   );
 }
 
+// ==highlighted text== and %%inline comment%% — the two inline formatting
+// primitives markdown-it doesn't provide out of the box (bold/italic/
+// strikethrough/code all come standard). Simple non-nested delimiter
+// matching, same approach as the math_inline rule above.
+function highlightsAndCommentsPlugin(md: MDInstance) {
+  function delimitedRule(name: string, marker: string, render: (inner: string) => string) {
+    md.inline.ruler.after("emphasis", name, (state, silent) => {
+      const src = state.src;
+      const pos = state.pos;
+      if (!src.startsWith(marker, pos)) return false;
+      const end = src.indexOf(marker, pos + marker.length);
+      if (end === -1 || end === pos + marker.length) return false;
+      if (!silent) {
+        const token = state.push(name, "", 0);
+        token.content = src.slice(pos + marker.length, end);
+      }
+      state.pos = end + marker.length;
+      return true;
+    });
+    md.renderer.rules[name] = (tokens, idx) => render(tokens[idx].content);
+  }
+
+  delimitedRule("highlight_inline", "==", (inner) => `<mark>${md.utils.escapeHtml(inner)}</mark>`);
+  delimitedRule(
+    "comment_inline",
+    "%%",
+    (inner) => `<span class="inline-comment" title="comment">💬 ${md.utils.escapeHtml(inner)}</span>`
+  );
+}
+
 function stripFrontmatter(raw: string): string {
   const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
   return m ? raw.slice(m[0].length) : raw;
@@ -280,6 +310,7 @@ export const md = new MarkdownIt({
 md.use(mathPlugin);
 md.use(calloutsPlugin);
 md.use(wikilinksPlugin);
+md.use(highlightsAndCommentsPlugin);
 
 // ```mermaid fenced blocks render as diagrams. Mermaid needs an async,
 // DOM-attached render pass (mermaid.render() returns a Promise), which

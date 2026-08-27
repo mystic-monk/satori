@@ -8,7 +8,7 @@ import * as decoding from "lib0/decoding";
 import fs from "node:fs";
 import path from "node:path";
 import { readNoteRaw, writeNoteRaw } from "./vault.js";
-import { upsertNoteIndex } from "./db.js";
+import { upsertNoteIndex, resolveShareRole, logHistory, type ShareRole } from "./db.js";
 
 // Local-mode real-time collaboration. This server runs on the user's own
 // machine (or LAN) — it is not a cloud vendor — so it is allowed to decode
@@ -25,11 +25,18 @@ function crdtStatePath(notePath: string): string {
   return path.join(CRDT_DIR, `${notePath.replace(/\//g, "__")}.ybin`);
 }
 
+interface ConnInfo {
+  ids: Set<number>; // awareness clientIDs this connection controls
+  role: ShareRole | "owner";
+  name: string;
+}
+
 class Room {
   doc = new Y.Doc();
   awareness = new awarenessProtocol.Awareness(this.doc);
-  conns = new Map<WebSocket, Set<number>>(); // ws -> awareness clientIDs it controls
+  conns = new Map<WebSocket, ConnInfo>();
   saveTimer: ReturnType<typeof setTimeout> | null = null;
+  pendingAuthors = new Set<string>();
 
   constructor(public notePath: string) {
     const statePath = crdtStatePath(notePath);
@@ -56,8 +63,8 @@ class Room {
         const changed = added.concat(updated, removed);
         this.broadcastAwareness(changed);
         if (origin instanceof WebSocket) {
-          const ids = this.conns.get(origin);
-          if (ids) for (const id of added.concat(updated)) ids.add(id);
+          const info = this.conns.get(origin);
+          if (info) for (const id of added.concat(updated)) info.ids.add(id);
         }
       }
     );
@@ -76,6 +83,10 @@ class Room {
     const text = this.doc.getText("content").toString();
     writeNoteRaw(this.notePath, text);
     upsertNoteIndex(this.notePath);
+    if (this.pendingAuthors.size > 0) {
+      logHistory(this.notePath, Array.from(this.pendingAuthors));
+      this.pendingAuthors.clear();
+    }
   }
 
   broadcastUpdate(update: Uint8Array, origin: WebSocket | null) {
@@ -97,8 +108,8 @@ class Room {
     for (const conn of this.conns.keys()) if (conn.readyState === WebSocket.OPEN) conn.send(buf);
   }
 
-  addConn(ws: WebSocket) {
-    this.conns.set(ws, new Set());
+  addConn(ws: WebSocket, role: ShareRole | "owner", name: string) {
+    this.conns.set(ws, { ids: new Set(), role, name });
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MSG_SYNC);
@@ -115,10 +126,10 @@ class Room {
   }
 
   removeConn(ws: WebSocket) {
-    const ids = this.conns.get(ws);
+    const info = this.conns.get(ws);
     this.conns.delete(ws);
-    if (ids && ids.size > 0) {
-      awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(ids), null);
+    if (info && info.ids.size > 0) {
+      awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(info.ids), null);
     }
     if (this.conns.size === 0) {
       this.persist();
@@ -126,15 +137,40 @@ class Room {
     }
   }
 
+  // "view"/"comment" connections can still read (sync step 1 -> step 2 is a
+  // pure function of server state, safe to answer) but any message that
+  // would mutate the doc (sync step 2 or update, both of which flow into
+  // Y.applyUpdate) is dropped before it ever reaches the document. This is
+  // real server-side enforcement — not a client-side UI restriction the
+  // client could just ignore — because this server already has plaintext
+  // access to the note (see the file header). A malicious/modified client
+  // gains nothing by skipping the read-only UI: the server won't apply its
+  // writes regardless of what it sends.
   handleMessage(ws: WebSocket, data: Uint8Array) {
+    const info = this.conns.get(ws);
+    const readOnly = info?.role === "view" || info?.role === "comment";
     const decoder = decoding.createDecoder(data);
     const type = decoding.readVarUint(decoder);
+
     if (type === MSG_SYNC) {
+      if (readOnly) {
+        const subDecoder = decoding.clone(decoder);
+        const subtype = decoding.readVarUint(subDecoder);
+        if (subtype !== 0 /* messageYjsSyncStep1 */) return; // drop step2/update
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, MSG_SYNC);
+        syncProtocol.writeSyncStep2(encoder, this.doc, decoding.readVarUint8Array(subDecoder));
+        ws.send(encoding.toUint8Array(encoder));
+        return;
+      }
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, MSG_SYNC);
       syncProtocol.readSyncMessage(decoder, encoder, this.doc, ws);
       if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
+      if (info) this.pendingAuthors.add(info.name);
     } else if (type === MSG_AWARENESS) {
+      // Presence (cursor position, display name) isn't content — fine for
+      // read-only connections to broadcast.
       awarenessProtocol.applyAwarenessUpdate(this.awareness, decoding.readVarUint8Array(decoder), ws);
     }
   }
@@ -175,9 +211,14 @@ export function setupCollabServer(server: HttpServer) {
   });
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    const notePath = decodeURIComponent(req.url!.replace("/collab/", ""));
+    const url = new URL(req.url!, "http://internal");
+    const notePath = decodeURIComponent(url.pathname.replace("/collab/", ""));
+    const token = url.searchParams.get("token");
+    const name = url.searchParams.get("name")?.trim() || "Anonymous";
+    const role = resolveShareRole(notePath, token);
+
     const room = getRoom(notePath);
-    room.addConn(ws);
+    room.addConn(ws, role, name);
 
     ws.on("message", (data: Buffer) => room.handleMessage(ws, new Uint8Array(data)));
     ws.on("close", () => room.removeConn(ws));
