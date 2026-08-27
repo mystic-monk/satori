@@ -28,69 +28,28 @@ export function openLocalCollab(notePath: string): CollabSession {
   };
 }
 
-// Binds a <textarea> to a Y.Text two-way: local keystrokes become Yjs ops,
-// remote ops update the textarea in place. Cursor position is preserved by
-// diffing old vs new value down to a common prefix/suffix so only the
-// changed middle span is touched.
-export function bindTextareaToYText(
-  textarea: HTMLTextAreaElement,
-  ytext: Y.Text,
-  origin: unknown
-): () => void {
-  let applyingRemote = false;
+// Replaces a Y.Text's content with newValue by diffing against its current
+// string down to a common prefix/suffix and touching only the changed
+// middle span — so a full-text rewrite (e.g. the properties panel
+// regenerating the frontmatter block) doesn't clobber a concurrent edit
+// elsewhere in the same note the way delete-everything-then-insert would.
+export function applyTextDiff(ytext: Y.Text, newValue: string, origin: unknown): void {
+  const oldValue = ytext.toString();
+  if (oldValue === newValue) return;
 
-  textarea.value = ytext.toString();
+  let start = 0;
+  while (start < oldValue.length && start < newValue.length && oldValue[start] === newValue[start]) {
+    start++;
+  }
+  let oldEnd = oldValue.length;
+  let newEnd = newValue.length;
+  while (oldEnd > start && newEnd > start && oldValue[oldEnd - 1] === newValue[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
 
-  const onInput = () => {
-    if (applyingRemote) return;
-    const oldValue = ytext.toString();
-    const newValue = textarea.value;
-    if (oldValue === newValue) return;
-
-    let start = 0;
-    while (
-      start < oldValue.length &&
-      start < newValue.length &&
-      oldValue[start] === newValue[start]
-    ) {
-      start++;
-    }
-    let oldEnd = oldValue.length;
-    let newEnd = newValue.length;
-    while (
-      oldEnd > start &&
-      newEnd > start &&
-      oldValue[oldEnd - 1] === newValue[newEnd - 1]
-    ) {
-      oldEnd--;
-      newEnd--;
-    }
-
-    ytext.doc!.transact(() => {
-      if (oldEnd > start) ytext.delete(start, oldEnd - start);
-      if (newEnd > start) ytext.insert(start, newValue.slice(start, newEnd));
-    }, origin);
-  };
-
-  const onYTextChange = () => {
-    const newValue = ytext.toString();
-    if (textarea.value === newValue) return;
-    const selStart = textarea.selectionStart;
-    const selEnd = textarea.selectionEnd;
-    applyingRemote = true;
-    textarea.value = newValue;
-    // Best-effort cursor preservation: clamp the previous offsets into the
-    // new (possibly shorter/longer) text rather than resetting to 0.
-    textarea.selectionStart = Math.min(selStart, newValue.length);
-    textarea.selectionEnd = Math.min(selEnd, newValue.length);
-    applyingRemote = false;
-  };
-
-  textarea.addEventListener("input", onInput);
-  ytext.observe(onYTextChange);
-
-  return () => {
-    textarea.removeEventListener("input", onInput);
-    ytext.unobserve(onYTextChange);
-  };
+  ytext.doc!.transact(() => {
+    if (oldEnd > start) ytext.delete(start, oldEnd - start);
+    if (newEnd > start) ytext.insert(start, newValue.slice(start, newEnd));
+  }, origin);
 }

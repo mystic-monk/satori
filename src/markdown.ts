@@ -1,0 +1,297 @@
+import MarkdownIt from "markdown-it";
+
+type MDInstance = InstanceType<typeof MarkdownIt>;
+// The full "highlight.js" package bundles ~190 languages (~1MB+) eagerly;
+// registering a curated set against the core keeps the app bundle small.
+import hljs from "highlight.js/lib/core";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import python from "highlight.js/lib/languages/python";
+import bash from "highlight.js/lib/languages/bash";
+import json from "highlight.js/lib/languages/json";
+import xml from "highlight.js/lib/languages/xml";
+import css from "highlight.js/lib/languages/css";
+import rust from "highlight.js/lib/languages/rust";
+import go from "highlight.js/lib/languages/go";
+import sql from "highlight.js/lib/languages/sql";
+import yaml from "highlight.js/lib/languages/yaml";
+import markdown from "highlight.js/lib/languages/markdown";
+import katex from "katex";
+
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("js", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("ts", typescript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("py", python);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("sh", bash);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("rs", rust);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("yml", yaml);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("md", markdown);
+
+export interface ResolvedNote {
+  path: string;
+  title: string;
+}
+
+export interface NoteResolver {
+  resolve(ref: string): ResolvedNote | null;
+}
+
+export interface RenderEnv {
+  resolver: NoteResolver;
+  bodies: Map<string, string>; // path -> raw body (frontmatter stripped), for transclusion
+  pathStack: Set<string>; // cycle guard for nested transclusion
+  [key: string]: unknown; // markdown-it's Env type is an open string-keyed bag
+  [key: symbol]: unknown;
+}
+
+function renderMath(tex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(tex, { throwOnError: false, displayMode, trust: false });
+  } catch {
+    return `<span class="math-error">${new MarkdownIt().utils.escapeHtml(tex)}</span>`;
+  }
+}
+
+function mathPlugin(md: MDInstance) {
+  // Block math: a line that is exactly $$...$$ (single line) or a $$ ... $$
+  // fence spanning multiple lines.
+  md.block.ruler.before(
+    "fence",
+    "math_block",
+    (state, startLine, endLine, silent) => {
+      const start = state.bMarks[startLine] + state.tShift[startLine];
+      const max = state.eMarks[startLine];
+      const line = state.src.slice(start, max);
+      if (!line.trim().startsWith("$$")) return false;
+
+      const firstLineRest = line.trim().slice(2);
+      if (firstLineRest.trim().endsWith("$$") && firstLineRest.trim().length >= 2) {
+        // single-line $$...$$
+        if (silent) return true;
+        const tex = firstLineRest.trim().slice(0, -2);
+        const token = state.push("math_block", "", 0);
+        token.content = tex;
+        token.map = [startLine, startLine + 1];
+        state.line = startLine + 1;
+        return true;
+      }
+
+      let nextLine = startLine + 1;
+      let found = false;
+      const bodyLines: string[] = [firstLineRest];
+      while (nextLine < endLine) {
+        const s = state.bMarks[nextLine] + state.tShift[nextLine];
+        const e = state.eMarks[nextLine];
+        const text = state.src.slice(s, e);
+        if (text.trim() === "$$") {
+          found = true;
+          break;
+        }
+        bodyLines.push(text);
+        nextLine++;
+      }
+      if (!found) return false;
+      if (silent) return true;
+
+      const token = state.push("math_block", "", 0);
+      token.content = bodyLines.join("\n").trim();
+      token.map = [startLine, nextLine + 1];
+      state.line = nextLine + 1;
+      return true;
+    },
+    { alt: [] }
+  );
+  md.renderer.rules.math_block = (tokens, idx) =>
+    `<div class="math-block">${renderMath(tokens[idx].content, true)}</div>\n`;
+
+  // Inline math: $...$ (no surrounding whitespace right after/before $, avoids
+  // colliding with currency amounts like "$5 and $10").
+  md.inline.ruler.after("escape", "math_inline", (state, silent) => {
+    const src = state.src;
+    const pos = state.pos;
+    if (src[pos] !== "$" || src[pos + 1] === "$") return false;
+    if (/\s/.test(src[pos + 1] ?? "")) return false;
+    const end = src.indexOf("$", pos + 1);
+    if (end === -1) return false;
+    if (/\s/.test(src[end - 1] ?? "")) return false;
+
+    if (!silent) {
+      const token = state.push("math_inline", "", 0);
+      token.content = src.slice(pos + 1, end);
+    }
+    state.pos = end + 1;
+    return true;
+  });
+  md.renderer.rules.math_inline = (tokens, idx) => renderMath(tokens[idx].content, false);
+}
+
+// `> [!type] Title` followed by more `>`-prefixed lines becomes a callout
+// div. This is a block rule (not a post-process of parsed blockquote
+// tokens) specifically so multi-line callout bodies work: markdown-it joins
+// consecutive `>` lines into one paragraph, and a title regex anchored with
+// `$` can't span that embedded newline. Body content is parsed with
+// block.parse() (a fresh, self-contained parse — no shared-offset bookkeeping
+// needed) and its tokens spliced into the main stream, so lists, code
+// blocks, nested callouts etc. all work inside a callout, not just text.
+function calloutsPlugin(md: MDInstance) {
+  md.block.ruler.before(
+    "blockquote",
+    "callout",
+    (state, startLine, endLine, silent) => {
+      const startPos = state.bMarks[startLine] + state.tShift[startLine];
+      const max = state.eMarks[startLine];
+      const firstLine = state.src.slice(startPos, max);
+      const match = /^>\s?\[!(\w+)\][+-]?\s*(.*)$/.exec(firstLine);
+      if (!match) return false;
+      if (silent) return true;
+
+      const calloutType = match[1].toLowerCase();
+      const title = match[2].trim() || match[1];
+
+      let nextLine = startLine + 1;
+      const innerLines: string[] = [];
+      while (nextLine < endLine) {
+        const pos = state.bMarks[nextLine] + state.tShift[nextLine];
+        const text = state.src.slice(pos, state.eMarks[nextLine]);
+        if (!/^>\s?/.test(text)) break;
+        innerLines.push(text.replace(/^>\s?/, ""));
+        nextLine++;
+      }
+
+      const openToken = state.push("callout_open", "div", 1);
+      openToken.attrSet("class", `callout callout-${calloutType}`);
+      openToken.attrSet("data-callout", calloutType);
+      openToken.map = [startLine, nextLine];
+      openToken.block = true;
+
+      state.push("callout_title_open", "div", 1).attrSet("class", "callout-title");
+      const titleToken = state.push("inline", "", 0);
+      titleToken.content = title;
+      titleToken.children = [];
+      state.push("callout_title_close", "div", -1);
+
+      state.push("callout_body_open", "div", 1).attrSet("class", "callout-content");
+      const bodyTokens: InstanceType<typeof MarkdownIt.Token>[] = [];
+      state.md.block.parse(innerLines.join("\n"), state.md, state.env, bodyTokens);
+      state.tokens.push(...bodyTokens);
+      state.push("callout_body_close", "div", -1);
+
+      state.push("callout_close", "div", -1);
+
+      state.line = nextLine;
+      return true;
+    },
+    { alt: ["paragraph", "reference", "blockquote", "list"] }
+  );
+}
+
+function stripFrontmatter(raw: string): string {
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
+  return m ? raw.slice(m[0].length) : raw;
+}
+
+// [[ref]] / [[ref|alias]] links, and ![[ref]] whole-note transclusion.
+function wikilinksPlugin(md: MDInstance) {
+  md.inline.ruler.before("link", "wikilink", (state, silent) => {
+    const src = state.src;
+    const pos = state.pos;
+    const isEmbed = src[pos] === "!" && src[pos + 1] === "[" && src[pos + 2] === "[";
+    const isLink = !isEmbed && src[pos] === "[" && src[pos + 1] === "[";
+    if (!isEmbed && !isLink) return false;
+
+    const start = isEmbed ? pos + 3 : pos + 2;
+    const end = src.indexOf("]]", start);
+    if (end === -1) return false;
+
+    if (!silent) {
+      const raw = src.slice(start, end);
+      const [refPart, aliasPart] = raw.split("|");
+      const token = state.push(isEmbed ? "wikiembed" : "wikilink", "", 0);
+      token.meta = { ref: refPart.trim(), alias: aliasPart?.trim() };
+    }
+    state.pos = end + 2;
+    return true;
+  });
+
+  md.renderer.rules.wikilink = (tokens, idx, _opts, envIn) => {
+    const env = envIn as unknown as RenderEnv;
+    const { ref, alias } = tokens[idx].meta as { ref: string; alias?: string };
+    const resolved = env.resolver.resolve(ref);
+    const label = md.utils.escapeHtml(alias || resolved?.title || ref);
+    if (!resolved) {
+      return `<a class="wikilink wikilink-broken" data-missing-ref="${md.utils.escapeHtml(ref)}">${label}</a>`;
+    }
+    return `<a class="wikilink" data-note-path="${md.utils.escapeHtml(resolved.path)}" href="javascript:void(0)">${label}</a>`;
+  };
+
+  md.renderer.rules.wikiembed = (tokens, idx, _opts, envIn) => {
+    const env = envIn as unknown as RenderEnv;
+    const { ref } = tokens[idx].meta as { ref: string };
+    const resolved = env.resolver.resolve(ref);
+    if (!resolved) {
+      return `<div class="transclusion transclusion-missing">Missing note: ${md.utils.escapeHtml(ref)}</div>`;
+    }
+    if (env.pathStack.has(resolved.path)) {
+      return `<div class="transclusion transclusion-circular">Circular embed: ${md.utils.escapeHtml(resolved.title)}</div>`;
+    }
+    const body = env.bodies.get(resolved.path);
+    if (body === undefined) {
+      return `<div class="transclusion transclusion-loading" data-transclude-path="${md.utils.escapeHtml(
+        resolved.path
+      )}">Loading "${md.utils.escapeHtml(resolved.title)}"…</div>`;
+    }
+    const nextEnv: RenderEnv = { ...env, pathStack: new Set(env.pathStack).add(resolved.path) };
+    const inner = md.render(stripFrontmatter(body), nextEnv);
+    return `<div class="transclusion" data-transclude-path="${md.utils.escapeHtml(resolved.path)}">
+      <div class="transclusion-title">${md.utils.escapeHtml(resolved.title)}</div>
+      <div class="transclusion-body">${inner}</div>
+    </div>`;
+  };
+}
+
+export const md = new MarkdownIt({
+  html: false, // never trust raw HTML from note content — see security note in README
+  linkify: true,
+  breaks: false,
+  highlight(str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(str, { language: lang }).value;
+      } catch {
+        // fall through to escaped default
+      }
+    }
+    return "";
+  },
+});
+
+md.use(mathPlugin);
+md.use(calloutsPlugin);
+md.use(wikilinksPlugin);
+
+export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {
+  const body = stripFrontmatter(raw);
+  const re = /(!)?\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+  const results: { ref: string; embed: boolean }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    results.push({ ref: m[2].trim(), embed: Boolean(m[1]) });
+  }
+  return results;
+}
+
+export function renderNoteBody(raw: string, env: RenderEnv): string {
+  return md.render(stripFrontmatter(raw), env);
+}

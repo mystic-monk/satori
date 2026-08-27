@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 import { listNoteFiles, readNoteRaw, parseNote } from "./vault.js";
+import { extractWikilinkRefs } from "./links.js";
 
 const INDEX_DIR = path.resolve(process.cwd(), ".pkm");
 const INDEX_PATH = path.join(INDEX_DIR, "index.sqlite");
@@ -18,6 +19,8 @@ db.exec(`
     path TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     tags TEXT NOT NULL,
+    type TEXT,
+    properties TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
 
@@ -27,6 +30,14 @@ db.exec(`
     body,
     tokenize = 'porter unicode61'
   );
+
+  CREATE TABLE IF NOT EXISTS links (
+    source TEXT NOT NULL,
+    target TEXT NOT NULL,
+    embed INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS links_source ON links(source);
+  CREATE INDEX IF NOT EXISTS links_target ON links(target);
 `);
 
 function deleteFromIndex(relPath: string) {
@@ -38,13 +49,47 @@ function insertIntoIndex(relPath: string) {
   const raw = readNoteRaw(relPath);
   const { meta, body } = parseNote(relPath, raw);
   db.prepare(
-    "INSERT INTO notes (path, title, tags, updated_at) VALUES (?, ?, ?, ?)"
-  ).run(meta.path, meta.title, JSON.stringify(meta.tags), meta.updatedAt);
+    "INSERT INTO notes (path, title, tags, type, properties, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(meta.path, meta.title, JSON.stringify(meta.tags), meta.type, JSON.stringify(meta.properties), meta.updatedAt);
   db.prepare("INSERT INTO notes_fts (path, title, body) VALUES (?, ?, ?)").run(
     meta.path,
     meta.title,
     body
   );
+}
+
+// Link resolution needs the full note set (a ref can be a title, resolved
+// against every other note), so it's always recomputed for the whole vault
+// rather than incrementally — cheap at personal-vault scale, and it keeps
+// this cache trivially correct instead of subtly stale.
+function rebuildLinks(): void {
+  const all = listNotesFromIndex();
+  const byCleanPath = new Map(all.map((n) => [n.path.replace(/\.md$/, ""), n]));
+  const byTitle = new Map(all.map((n) => [n.title.toLowerCase(), n]));
+
+  function resolveRef(ref: string): string | null {
+    const clean = ref.replace(/\.md$/, "");
+    return byCleanPath.get(clean)?.path ?? byTitle.get(ref.toLowerCase())?.path ?? null;
+  }
+
+  const tx = db.transaction(() => {
+    db.exec("DELETE FROM links");
+    const insert = db.prepare("INSERT INTO links (source, target, embed) VALUES (?, ?, ?)");
+    for (const note of all) {
+      let raw: string;
+      try {
+        raw = readNoteRaw(note.path);
+      } catch {
+        continue;
+      }
+      const { body } = parseNote(note.path, raw);
+      for (const { ref, embed } of extractWikilinkRefs(body)) {
+        const target = resolveRef(ref);
+        if (target && target !== note.path) insert.run(note.path, target, embed ? 1 : 0);
+      }
+    }
+  });
+  tx();
 }
 
 export function upsertNoteIndex(relPath: string): void {
@@ -53,10 +98,12 @@ export function upsertNoteIndex(relPath: string): void {
     insertIntoIndex(relPath);
   });
   tx();
+  rebuildLinks();
 }
 
 export function removeNoteIndex(relPath: string): void {
   deleteFromIndex(relPath);
+  rebuildLinks();
 }
 
 export function rebuildIndex(): { count: number } {
@@ -66,6 +113,7 @@ export function rebuildIndex(): { count: number } {
     for (const f of files) insertIntoIndex(f);
   });
   tx();
+  rebuildLinks();
   return { count: files.length };
 }
 
@@ -73,16 +121,78 @@ export interface NoteListItem {
   path: string;
   title: string;
   tags: string[];
+  type: string | null;
   updatedAt: number;
 }
 
-export function listNotesFromIndex(): NoteListItem[] {
+interface NoteRow {
+  path: string;
+  title: string;
+  tags: string;
+  type: string | null;
+  updatedAt: number;
+}
+
+export function listNotesFromIndex(type?: string): NoteListItem[] {
+  const rows = (
+    type
+      ? db
+          .prepare(
+            "SELECT path, title, tags, type, updated_at as updatedAt FROM notes WHERE type = ? ORDER BY updated_at DESC"
+          )
+          .all(type)
+      : db
+          .prepare(
+            "SELECT path, title, tags, type, updated_at as updatedAt FROM notes ORDER BY updated_at DESC"
+          )
+          .all()
+  ) as NoteRow[];
+  return rows.map((r) => ({ ...r, tags: JSON.parse(r.tags) }));
+}
+
+export function listTypes(): { type: string; count: number }[] {
+  return db
+    .prepare("SELECT type, COUNT(*) as count FROM notes WHERE type IS NOT NULL GROUP BY type ORDER BY type")
+    .all() as { type: string; count: number }[];
+}
+
+export function getProperties(relPath: string): Record<string, unknown> | null {
+  const row = db.prepare("SELECT properties FROM notes WHERE path = ?").get(relPath) as
+    | { properties: string }
+    | undefined;
+  return row ? JSON.parse(row.properties) : null;
+}
+
+export interface BacklinkItem {
+  path: string;
+  title: string;
+  embed: boolean;
+}
+
+export function getBacklinks(relPath: string): BacklinkItem[] {
   const rows = db
     .prepare(
-      "SELECT path, title, tags, updated_at as updatedAt FROM notes ORDER BY updated_at DESC"
+      `SELECT DISTINCT n.path as path, n.title as title, l.embed as embed
+       FROM links l JOIN notes n ON n.path = l.source
+       WHERE l.target = ?`
     )
-    .all() as { path: string; title: string; tags: string; updatedAt: number }[];
-  return rows.map((r) => ({ ...r, tags: JSON.parse(r.tags) }));
+    .all(relPath) as { path: string; title: string; embed: number }[];
+  return rows.map((r) => ({ path: r.path, title: r.title, embed: Boolean(r.embed) }));
+}
+
+export interface LinkEdge {
+  source: string;
+  target: string;
+  embed: boolean;
+}
+
+export function getAllLinks(): LinkEdge[] {
+  const rows = db.prepare("SELECT source, target, embed FROM links").all() as {
+    source: string;
+    target: string;
+    embed: number;
+  }[];
+  return rows.map((r) => ({ source: r.source, target: r.target, embed: Boolean(r.embed) }));
 }
 
 export interface SearchResult {

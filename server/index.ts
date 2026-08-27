@@ -12,6 +12,9 @@ import {
   removeNoteIndex,
   listNotesFromIndex,
   searchNotes,
+  listTypes,
+  getBacklinks,
+  getAllLinks,
 } from "./db.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
@@ -25,8 +28,22 @@ if (listNotesFromIndex().length === 0 && listNoteFiles().length > 0) {
   rebuildIndex();
 }
 
-app.get("/api/notes", (_req, res) => {
-  res.json(listNotesFromIndex());
+app.get("/api/notes", (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
+  res.json(listNotesFromIndex(type));
+});
+
+app.get("/api/types", (_req, res) => {
+  res.json(listTypes());
+});
+
+app.get("/api/links", (_req, res) => {
+  res.json(getAllLinks());
+});
+
+app.get("/api/backlinks/*", (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  res.json(getBacklinks(relPath));
 });
 
 app.get("/api/notes/*", (req, res) => {

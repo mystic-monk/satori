@@ -1,18 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
 import {
   createNote,
   deleteNoteApi,
   fetchNotes,
+  fetchTypes,
   reindex,
   search,
   type NoteListItem,
   type SearchResult,
 } from "./api";
-import { bindTextareaToYText, openLocalCollab } from "./collab";
+import { openLocalCollab, type CollabSession } from "./collab";
 import { openCloudCollab, type CloudStatus } from "./cloud-collab";
+import Editor from "./Editor";
+import Preview, { buildResolver } from "./Preview";
+import Backlinks from "./Backlinks";
+import PropertiesPanel from "./PropertiesPanel";
+import GraphView from "./GraphView";
+import { renderNoteBody, type RenderEnv } from "./markdown";
+import { exportHtml, exportMarkdown, exportPdf } from "./export";
 
-const EDIT_ORIGIN = "local-editor";
 const BRIDGE_ORIGIN = "bridge";
 
 // Local mode (server/collab.ts) and cloud mode (server/relay.ts) are two
@@ -37,15 +44,22 @@ function bridgeDocs(a: Y.Doc, b: Y.Doc): () => void {
   };
 }
 
+type ViewMode = "source" | "preview" | "split";
+
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
+  const [types, setTypes] = useState<{ type: string; count: number }[]>([]);
+  const [typeFilter, setTypeFilter] = useState("");
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [status, setStatus] = useState("");
   const [peerCount, setPeerCount] = useState(0);
-  const editorRef = useRef<HTMLTextAreaElement | null>(null);
-  const localDocRef = useRef<Y.Doc | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("split");
+
+  const [localSession, setLocalSession] = useState<CollabSession | null>(null);
+  const [raw, setRaw] = useState("");
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
@@ -53,11 +67,12 @@ export default function App() {
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | "">("");
 
   const loadNotes = useCallback(async () => {
-    setNotes(await fetchNotes());
-  }, []);
+    setNotes(await fetchNotes(typeFilter || undefined));
+  }, [typeFilter]);
 
   useEffect(() => {
     loadNotes();
+    fetchTypes().then(setTypes);
   }, [loadNotes]);
 
   useEffect(() => {
@@ -71,17 +86,19 @@ export default function App() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Runs whenever a note is opened *and* the editor <textarea> is mounted —
-  // both are needed before the Yjs <-> DOM binding can be created.
+  // Opens the local Yjs session for the active note and mirrors its live
+  // text into `raw` state for the preview/properties panel/export to read.
   useEffect(() => {
-    if (!activePath || !editorRef.current) return;
+    if (!activePath) return;
 
     const session = openLocalCollab(activePath);
-    localDocRef.current = session.doc;
+    setLocalSession(session);
     setStatus("connecting…");
     setPeerCount(0);
 
-    const unbind = bindTextareaToYText(editorRef.current, session.ytext, EDIT_ORIGIN);
+    const onTextChange = () => setRaw(session.ytext.toString());
+    onTextChange();
+    session.ytext.observe(onTextChange);
 
     session.provider.on("status", ({ status: s }: { status: string }) => {
       setStatus(s === "connected" ? "connected" : s);
@@ -92,14 +109,13 @@ export default function App() {
     session.provider.awareness.on("change", () => {
       setPeerCount(Math.max(0, session.provider.awareness.getStates().size - 1));
     });
-    session.doc.on("update", (_u: Uint8Array, origin: unknown) => {
-      if (origin === EDIT_ORIGIN) loadNotes();
-    });
+    session.doc.on("update", () => loadNotes());
 
     return () => {
-      unbind();
+      session.ytext.unobserve(onTextChange);
       session.destroy();
-      localDocRef.current = null;
+      setLocalSession(null);
+      setRaw("");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath]);
@@ -108,7 +124,7 @@ export default function App() {
   // relay under a room name (defaults to the note's path) and bridges it
   // into the local doc so edits flow both ways.
   useEffect(() => {
-    if (!cloudConnected || !activePath) return;
+    if (!cloudConnected || !activePath || !localSession) return;
     let cancelled = false;
     let destroy: (() => void) | null = null;
     let unbridge: (() => void) | null = null;
@@ -120,7 +136,7 @@ export default function App() {
         return;
       }
       destroy = session.destroy;
-      if (localDocRef.current) unbridge = bridgeDocs(localDocRef.current, session.doc);
+      unbridge = bridgeDocs(localSession.doc, session.doc);
     });
 
     return () => {
@@ -129,9 +145,10 @@ export default function App() {
       destroy?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudConnected, activePath]);
+  }, [cloudConnected, activePath, localSession]);
 
-  async function openNote(p: string) {
+  function openNote(p: string) {
+    setShowGraph(false);
     if (p === activePath) return;
     setActivePath(p);
   }
@@ -145,7 +162,7 @@ export default function App() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
     const p = `${slug || "untitled"}-${Date.now()}.md`;
-    const template = `---\ntitle: ${title}\ntags: []\ncreated: ${new Date().toISOString()}\n---\n\n`;
+    const template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
     await createNote(p, template);
     await loadNotes();
     openNote(p);
@@ -165,6 +182,14 @@ export default function App() {
     const r = await reindex();
     setStatus(`reindexed ${r.count} notes`);
     await loadNotes();
+    fetchTypes().then(setTypes);
+  }
+
+  const resolver = useMemo(() => buildResolver(notes), [notes]);
+  const activeNote = notes.find((n) => n.path === activePath);
+
+  function exportEnv(): RenderEnv {
+    return { resolver, bodies: new Map(), pathStack: new Set() };
   }
 
   return (
@@ -177,48 +202,44 @@ export default function App() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {types.length > 0 && (
+            <select className="type-filter" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">All types</option>
+              {types.map((t) => (
+                <option key={t.type} value={t.type}>
+                  {t.type} ({t.count})
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <ul className="note-list">
           {results
             ? results.map((r) => (
-                <li
-                  key={r.path}
-                  className={r.path === activePath ? "active" : ""}
-                  onClick={() => openNote(r.path)}
-                >
+                <li key={r.path} className={r.path === activePath ? "active" : ""} onClick={() => openNote(r.path)}>
                   <div className="note-title">{r.title}</div>
-                  <div
-                    className="note-snippet"
-                    dangerouslySetInnerHTML={{ __html: r.snippet }}
-                  />
+                  <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
                 </li>
               ))
             : notes.map((n) => (
-                <li
-                  key={n.path}
-                  className={n.path === activePath ? "active" : ""}
-                  onClick={() => openNote(n.path)}
-                >
+                <li key={n.path} className={n.path === activePath ? "active" : ""} onClick={() => openNote(n.path)}>
                   <div className="note-title">{n.title}</div>
-                  {n.tags.length > 0 && (
-                    <div className="note-tags">{n.tags.join(", ")}</div>
-                  )}
+                  {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
                 </li>
               ))}
-          {results && results.length === 0 && (
-            <li className="empty-hint">No matches.</li>
-          )}
-          {!results && notes.length === 0 && (
-            <li className="empty-hint">No notes yet.</li>
-          )}
+          {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
+          {!results && notes.length === 0 && <li className="empty-hint">No notes yet.</li>}
         </ul>
         <div className="sidebar-footer">
           <button onClick={onNewNote}>+ New note</button>
+          <button onClick={() => setShowGraph((g) => !g)}>{showGraph ? "Editor" : "Graph"}</button>
           <button onClick={onReindex}>Reindex</button>
         </div>
       </aside>
       <main className="editor-pane">
-        {activePath ? (
+        {showGraph ? (
+          <GraphView activePath={activePath} onNavigate={openNote} />
+        ) : activePath && localSession ? (
           <>
             <div className="editor-toolbar">
               <span className="editor-path">{activePath}</span>
@@ -226,6 +247,20 @@ export default function App() {
                 {status}
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>
+              <div className="view-mode-toggle">
+                {(["source", "split", "preview"] as ViewMode[]).map((m) => (
+                  <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => exportMarkdown(activePath, raw)}>MD</button>
+              <button onClick={() => exportHtml(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
+                HTML
+              </button>
+              <button onClick={() => exportPdf(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
+                PDF
+              </button>
               <button onClick={onDelete}>Delete</button>
             </div>
             <div className="cloud-bar">
@@ -244,10 +279,7 @@ export default function App() {
                 onChange={(e) => setCloudPassphrase(e.target.value)}
                 disabled={cloudConnected}
               />
-              <button
-                onClick={() => setCloudConnected((c) => !c)}
-                disabled={!cloudConnected && !cloudPassphrase}
-              >
+              <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
                 {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
               </button>
               {cloudConnected && (
@@ -256,12 +288,23 @@ export default function App() {
                 </span>
               )}
             </div>
-            <textarea
-              key={activePath}
-              ref={editorRef}
-              className="editor"
-              spellCheck={false}
-            />
+            <PropertiesPanel raw={raw} ytext={localSession.ytext} />
+            <div className={`editor-body view-${viewMode}`}>
+              {viewMode !== "preview" && (
+                <div className="editor-source">
+                  <Editor key={activePath} ytext={localSession.ytext} awareness={localSession.provider.awareness} />
+                </div>
+              )}
+              {viewMode !== "source" && (
+                <div className="editor-preview">
+                  <Preview raw={raw} notes={notes} onNavigate={openNote} />
+                </div>
+              )}
+            </div>
+            <div className="backlinks-panel">
+              <div className="backlinks-header">Backlinks</div>
+              <Backlinks path={activePath} onNavigate={openNote} />
+            </div>
           </>
         ) : (
           <div className="empty-state">Select a note or create a new one.</div>

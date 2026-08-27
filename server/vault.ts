@@ -8,6 +8,8 @@ export interface NoteMeta {
   path: string;
   title: string;
   tags: string[];
+  type: string | null;
+  properties: Record<string, unknown>;
   updatedAt: number;
 }
 
@@ -59,11 +61,14 @@ export function parseNote(relPath: string, raw: string): { meta: NoteMeta; body:
   const fmTitle = typeof parsed.data.title === "string" ? parsed.data.title : undefined;
   const fallbackTitle = path.basename(relPath, ".md");
   const tags = Array.isArray(parsed.data.tags) ? parsed.data.tags.map(String) : [];
+  const type = typeof parsed.data.type === "string" ? parsed.data.type : null;
   return {
     meta: {
       path: relPath,
       title: fmTitle || fallbackTitle,
       tags,
+      type,
+      properties: parsed.data,
       updatedAt: stat.mtimeMs,
     },
     body: parsed.content,
