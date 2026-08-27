@@ -149,6 +149,33 @@ button:hover {
   flex: 1;
 }
 
+.cloud-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.cloud-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 7px;
+  font-size: 12px;
+  width: 180px;
+}
+
+.cloud-status {
+  color: var(--text-dim);
+}
+
+.cloud-status-error {
+  color: #ff6b6b;
+}
+
 .editor {
   flex: 1;
   border: none;

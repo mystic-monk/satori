@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "node:http";
 import {
   listNoteFiles,
   readNoteRaw,
@@ -12,6 +13,8 @@ import {
   listNotesFromIndex,
   searchNotes,
 } from "./db.js";
+import { setupCollabServer, closeRoom } from "./collab.js";
+import { setupRelayServer } from "./relay.js";
 
 const app = express();
 app.use(express.json());
@@ -55,6 +58,7 @@ app.delete("/api/notes/*", (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
   deleteNote(relPath);
   removeNoteIndex(relPath);
+  closeRoom(relPath);
   res.json({ ok: true });
 });
 
@@ -68,6 +72,9 @@ app.post("/api/reindex", (_req, res) => {
 });
 
 const PORT = 3001;
-app.listen(PORT, () => {
+const httpServer = createServer(app);
+setupCollabServer(httpServer);
+setupRelayServer(httpServer);
+httpServer.listen(PORT, () => {
   console.log(`pkm server listening on http://localhost:${PORT}`);
 });
