@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import {
   createNote,
   deleteNoteApi,
+  fetchNote,
   fetchNotes,
   fetchRole,
   fetchTypes,
@@ -25,7 +26,7 @@ import HistoryPanel from "./HistoryPanel";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter } from "./frontmatter";
-import { getDisplayName } from "./identity";
+import { getDisplayName, getCursorColor } from "./identity";
 
 const BRIDGE_ORIGIN = "bridge";
 
@@ -116,7 +117,12 @@ export default function App() {
     setRole("owner");
     fetchRole(activePath, shareToken).then(setRole);
 
-    const session = openLocalCollab(activePath, { token: shareToken, name: getDisplayName() });
+    const displayName = getDisplayName();
+    const session = openLocalCollab(activePath, { token: shareToken, name: displayName });
+    session.provider.awareness.setLocalStateField("user", {
+      name: displayName,
+      color: getCursorColor(),
+    });
     setLocalSession(session);
     setStatus("connecting…");
     setPeerCount(0);
@@ -212,6 +218,20 @@ export default function App() {
     openNote(p);
   }
 
+  async function onDailyNote() {
+    const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const p = `daily/${date}.md`;
+    try {
+      await fetchNote(p); // already exists — just open it
+    } catch {
+      const template = `---\ntitle: ${date}\ntype: daily\n---\n\n`;
+      await createNote(p, template);
+      await loadNotes();
+      fetchTypes().then(setTypes);
+    }
+    openNote(p);
+  }
+
   async function onDelete() {
     if (!activePath) return;
     if (!window.confirm(`Delete ${activePath}?`)) return;
@@ -282,6 +302,7 @@ export default function App() {
         <div className="sidebar-footer">
           <button onClick={onNewNote}>+ New note</button>
           <button onClick={onNewCanvas}>+ Canvas</button>
+          <button onClick={onDailyNote}>Today</button>
           <button
             onClick={() => {
               setShowGraph((g) => !g);

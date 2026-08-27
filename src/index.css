@@ -543,6 +543,17 @@ button:hover {
   padding: 8px;
 }
 
+.share-new-link-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.share-new-link-row input {
+  flex: 1;
+  margin-top: 0;
+}
+
 .share-new-link input {
   width: 100%;
   margin-top: 4px;

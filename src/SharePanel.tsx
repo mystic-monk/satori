@@ -18,6 +18,7 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
   const [role, setRole] = useState<ShareRole>("view");
   const [label, setLabel] = useState("");
   const [justCreated, setJustCreated] = useState<Share | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (open) fetchShares(path).then(setShares);
@@ -29,7 +30,19 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
     const share = await createShare(path, role, label);
     setJustCreated(share);
     setLabel("");
+    setCopied(false);
     setShares(await fetchShares(path));
+  }
+
+  async function onCopy(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard permission denied or unavailable — the input is still
+      // selectable/focusable as a fallback, nothing more to do here.
+    }
   }
 
   async function onRevoke(token: string) {
@@ -64,7 +77,10 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
           {justCreated && (
             <div className="share-new-link">
               <div>Share link created — copy it now:</div>
-              <input readOnly value={linkFor(justCreated)} onFocus={(e) => e.currentTarget.select()} />
+              <div className="share-new-link-row">
+                <input readOnly value={linkFor(justCreated)} onFocus={(e) => e.currentTarget.select()} />
+                <button onClick={() => onCopy(linkFor(justCreated))}>{copied ? "Copied!" : "Copy"}</button>
+              </div>
             </div>
           )}
           <ul className="share-list">
