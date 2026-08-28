@@ -30,7 +30,7 @@ import HistoryPanel from "./HistoryPanel";
 import ConfirmDialog from "./ConfirmDialog";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
-import { parseFrontmatter } from "./frontmatter";
+import { parseFrontmatter } from "../shared/frontmatter";
 import { getDisplayName, getCursorColor } from "./identity";
 import { THEMES, getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";

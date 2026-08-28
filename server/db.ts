@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 import { listNoteFiles, readNoteRaw, parseNote } from "./vault.js";
-import { extractWikilinkRefs } from "./links.js";
+import { extractWikilinkRefs } from "../shared/wikilinks.js";
 
 const INDEX_DIR = path.resolve(process.cwd(), ".pkm");
 const INDEX_PATH = path.join(INDEX_DIR, "index.sqlite");

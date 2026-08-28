@@ -4,7 +4,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 import * as Y from "yjs";
 import { applyTextDiff } from "./collab";
-import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
+import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import "@excalidraw/excalidraw/index.css";
 
 const ORIGIN = "canvas-editor";

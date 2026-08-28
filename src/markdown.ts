@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { extractWikilinkRefs as extractWikilinkRefsFromBody } from "../shared/wikilinks.js";
 
 type MDInstance = InstanceType<typeof MarkdownIt>;
 // The full "highlight.js" package bundles ~190 languages (~1MB+) eagerly;
@@ -329,14 +330,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 };
 
 export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {
-  const body = stripFrontmatter(raw);
-  const re = /(!)?\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
-  const results: { ref: string; embed: boolean }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body))) {
-    results.push({ ref: m[2].trim(), embed: Boolean(m[1]) });
-  }
-  return results;
+  return extractWikilinkRefsFromBody(stripFrontmatter(raw));
 }
 
 export function renderNoteBody(raw: string, env: RenderEnv): string {

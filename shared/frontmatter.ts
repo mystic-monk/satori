@@ -1,9 +1,13 @@
 import * as yaml from "js-yaml";
 
-// gray-matter (used server-side) pulls in Node's Buffer global under the
-// hood, which doesn't exist in the browser — so the client parses/writes
-// frontmatter itself, directly with js-yaml, against the same `---` block
-// convention.
+// Shared between the Node server and the browser client — the one thing
+// gray-matter (the original server-side choice) can't be, since it pulls
+// in Node's Buffer global under the hood and crashed the moment
+// PropertiesPanel tried to use it client-side. js-yaml has no such
+// dependency, so this single implementation replaces both. (Not shared
+// with the Rust/Tauri side — src-tauri/src/frontmatter.rs is a separate
+// implementation by necessity of the language boundary; three
+// implementations becomes two.)
 
 export interface ParsedFrontmatter {
   data: Record<string, unknown>;
@@ -21,7 +25,7 @@ export function parseFrontmatter(raw: string): ParsedFrontmatter {
     if (loaded && typeof loaded === "object") data = loaded as Record<string, unknown>;
   } catch {
     // Malformed YAML in the frontmatter block — treat as no properties
-    // rather than crashing the editor.
+    // rather than crashing.
   }
   return { data, body: raw.slice(match[0].length) };
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import * as Y from "yjs";
 import { applyTextDiff } from "./collab";
-import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter";
+import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 
 const ORIGIN = "properties-panel";
 

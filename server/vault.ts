@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import { parseFrontmatter } from "../shared/frontmatter.js";
 
 export const VAULT_DIR = path.resolve(process.cwd(), "vault");
 
@@ -56,7 +56,7 @@ export function deleteNote(relPath: string): void {
 }
 
 export function parseNote(relPath: string, raw: string): { meta: NoteMeta; body: string } {
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const stat = fs.statSync(toAbsPath(relPath));
   const fmTitle = typeof parsed.data.title === "string" ? parsed.data.title : undefined;
   const fallbackTitle = path.basename(relPath, ".md");
@@ -71,6 +71,6 @@ export function parseNote(relPath: string, raw: string): { meta: NoteMeta; body:
       properties: parsed.data,
       updatedAt: stat.mtimeMs,
     },
-    body: parsed.content,
+    body: parsed.body,
   };
 }
