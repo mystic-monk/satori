@@ -1,6 +1,6 @@
 use crate::{frontmatter, links, vault::Vault};
 use rusqlite::{params, Connection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
@@ -394,10 +394,19 @@ pub fn revoke_share(conn: &Connection, token: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Unrecognized/absent tokens fall back to "owner" (full access) — matches
-// server/db.ts exactly. The token system is an additive restriction the
-// owner opts into per note, not a primary auth mechanism; the local app
-// itself must always keep working with no token at all.
+// A genuinely absent token means the local app itself is asking (the
+// owner, on their own machine) — that's the only case that defaults to
+// "owner". A token that's present but doesn't resolve (wrong path,
+// mistyped, revoked) fails closed to "denied", matching the P0 fix
+// applied to server/db.ts's resolveShareRole: this used to fall back to
+// "owner" for any unresolvable token too, which — for the Node server's
+// network-facing REST/WS endpoints — meant a wrong or garbage token
+// silently granted full owner access. Tauri's IPC surface only ever
+// receives calls from the app's own local webview, not a network peer,
+// so this specific drift was never remotely exploitable here the way it
+// was in server/db.ts — but it's still wrong, and worth keeping the two
+// implementations in lockstep rather than relying on that being true
+// forever as this app's feature set grows.
 pub fn resolve_share_role(
     conn: &Connection,
     path: &str,
@@ -413,15 +422,60 @@ pub fn resolve_share_role(
     );
     match result {
         Ok(role) => Ok(role),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok("owner".to_string()),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok("denied".to_string()),
         Err(e) => Err(e.to_string()),
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct AuthorRef {
+    pub id: Option<String>,
+    pub name: String,
+}
+
+// Rows written before the identity-id change are a bare string[] (display
+// names only) — this untagged enum accepts either shape on read, same
+// defensive-parse approach as server/db.ts's getHistory(). There's no way
+// to retroactively attach a stable id to a save that already happened.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AuthorRefRaw {
+    Legacy(String),
+    Ref { id: Option<String>, name: String },
+}
+
+impl From<AuthorRefRaw> for AuthorRef {
+    fn from(raw: AuthorRefRaw) -> Self {
+        match raw {
+            AuthorRefRaw::Legacy(name) => AuthorRef { id: None, name },
+            AuthorRefRaw::Ref { id, name } => AuthorRef { id, name },
+        }
     }
 }
 
 #[derive(Serialize)]
 pub struct HistoryEntry {
     pub at: f64,
-    pub authors: Vec<String>,
+    pub authors: Vec<AuthorRef>,
+}
+
+// Approximates "who changed what, when" — same principle as
+// server/collab.ts's Room.persist()/logHistory(), but Tauri mode is
+// single-writer (no room of concurrent connections to aggregate), so this
+// is called directly from write_note with just the local user's identity,
+// no accumulation needed.
+pub fn log_history(conn: &Connection, path: &str, authors: &[AuthorRef]) -> Result<(), String> {
+    if authors.is_empty() {
+        return Ok(());
+    }
+    let at = chrono::Utc::now().timestamp_millis() as f64;
+    let authors_json = serde_json::to_string(authors).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO history (path, at, authors) VALUES (?1, ?2, ?3)",
+        params![path, at, authors_json],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn get_history(conn: &Connection, path: &str) -> Result<Vec<HistoryEntry>, String> {
@@ -431,10 +485,10 @@ pub fn get_history(conn: &Connection, path: &str) -> Result<Vec<HistoryEntry>, S
     let rows = stmt
         .query_map(params![path], |row| {
             let authors_json: String = row.get(1)?;
-            let authors: Vec<String> = serde_json::from_str(&authors_json).unwrap_or_default();
+            let raw: Vec<AuthorRefRaw> = serde_json::from_str(&authors_json).unwrap_or_default();
             Ok(HistoryEntry {
                 at: row.get(0)?,
-                authors,
+                authors: raw.into_iter().map(AuthorRef::from).collect(),
             })
         })
         .map_err(|e| e.to_string())?;

@@ -23,7 +23,7 @@ export default function HistoryPanel({ path, shareToken }: HistoryPanelProps) {
         <ul className="history-list">
           {entries.map((e, i) => (
             <li key={i}>
-              <span className="history-authors">{e.authors.join(", ")}</span>
+              <span className="history-authors">{e.authors.map((a) => a.name).join(", ")}</span>
               <span className="history-time">{new Date(e.at).toLocaleString()}</span>
             </li>
           ))}

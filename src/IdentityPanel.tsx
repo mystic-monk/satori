@@ -1,0 +1,90 @@
+import { useState } from "react";
+import { exportIdentity, getIdentity, importIdentity, setDisplayName, type Identity } from "./identity";
+
+// Vault-wide, not per-note — unlike PropertiesPanel/SharePanel/HistoryPanel
+// (which all render inside the activePath block), this is who *you* are
+// across every note, so it's rendered once near the top of the sidebar.
+export default function IdentityPanel() {
+  const [open, setOpen] = useState(false);
+  const [identity, setIdentity] = useState<Identity>(() => getIdentity());
+  const [nameDraft, setNameDraft] = useState(identity.name);
+  const [importDraft, setImportDraft] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function commitName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === identity.name) {
+      setNameDraft(identity.name);
+      return;
+    }
+    setIdentity(setDisplayName(trimmed));
+  }
+
+  async function onExport() {
+    try {
+      await navigator.clipboard.writeText(exportIdentity());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard permission denied or unavailable — nothing more to do here
+    }
+  }
+
+  function onImport() {
+    try {
+      const next = importIdentity(importDraft.trim());
+      setIdentity(next);
+      setNameDraft(next.name);
+      setImportDraft("");
+      setImportError(null);
+    } catch {
+      setImportError("That doesn't look like a valid identity export.");
+    }
+  }
+
+  return (
+    <div className="identity-panel">
+      <button className="properties-header" onClick={() => setOpen((o) => !o)}>
+        {open ? "▾" : "▸"} You: {identity.name}
+      </button>
+      {open && (
+        <div className="identity-body">
+          <div className="identity-row">
+            <span className="identity-color-dot" style={{ background: identity.color }} aria-hidden="true" />
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              aria-label="Your display name"
+            />
+          </div>
+          <p className="identity-note">
+            Stored only in this browser. Renaming keeps your history attributed to you; switching to a new
+            device or browser doesn't carry it automatically — export it here and import it there to keep the
+            same identity.
+          </p>
+          <div className="identity-portability">
+            <button onClick={onExport}>{copied ? "Copied!" : "Export identity"}</button>
+          </div>
+          <div className="identity-portability">
+            <input
+              placeholder="Paste an exported identity here"
+              aria-label="Import identity"
+              value={importDraft}
+              onChange={(e) => {
+                setImportDraft(e.target.value);
+                setImportError(null);
+              }}
+            />
+            <button onClick={onImport} disabled={!importDraft.trim()}>
+              Import
+            </button>
+          </div>
+          {importError && <p className="identity-error">{importError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}

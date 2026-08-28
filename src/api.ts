@@ -36,9 +36,14 @@ export interface Share {
   createdAt: number;
 }
 
+export interface AuthorRef {
+  id: string | null;
+  name: string;
+}
+
 export interface HistoryEntry {
   at: number;
-  authors: string[];
+  authors: AuthorRef[];
 }
 
 function encodePath(p: string): string {
@@ -82,10 +87,19 @@ export async function fetchNote(p: string, token?: string | null): Promise<{ pat
 
 // Only used by the Tauri-mode local editing session (src/collab.ts) — the
 // browser deployment persists edits through the CRDT collab server instead,
-// never by PUT-ing raw content directly.
-export async function writeNoteApi(p: string, raw: string): Promise<void> {
+// never by PUT-ing raw content directly. `author` is only meaningful on the
+// Tauri path, where write_note also logs it to History (mirroring how
+// server/collab.ts's Room.persist() logs history on every debounced save
+// in browser mode) — Tauri mode is single-writer, so no aggregation is
+// needed the way the WS server's pendingAuthors accumulates concurrent
+// connections.
+export async function writeNoteApi(
+  p: string,
+  raw: string,
+  author: { id: string; name: string }
+): Promise<void> {
   if (IS_TAURI) {
-    await invoke("write_note", { path: p, raw });
+    await invoke("write_note", { path: p, raw, authorId: author.id, authorName: author.name });
     return;
   }
   await fetch(`/api/notes/${encodePath(p)}`, {

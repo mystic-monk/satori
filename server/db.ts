@@ -23,7 +23,7 @@ fs.mkdirSync(STATE_DIR, { recursive: true });
 export const db = new Database(INDEX_PATH);
 db.pragma("journal_mode = WAL");
 
-const stateDb = new Database(STATE_PATH);
+export const stateDb = new Database(STATE_PATH);
 stateDb.pragma("journal_mode = WAL");
 
 // This index is a rebuildable cache over the markdown files in vault/ —
@@ -400,7 +400,13 @@ export function resolveShareRole(notePath: string, token: string | null): ShareR
 // CRDT-level authorship map), but enough to answer "who's been touching
 // this note."
 
-export function logHistory(notePath: string, authors: string[]): void {
+export interface AuthorRef {
+  id: string | null; // stable identity id (src/identity.ts) — null for pre-Phase-A rows, or a
+  // connection that somehow had no id at all
+  name: string;
+}
+
+export function logHistory(notePath: string, authors: AuthorRef[]): void {
   if (authors.length === 0) return;
   stateDb.prepare("INSERT INTO history (path, at, authors) VALUES (?, ?, ?)").run(
     notePath,
@@ -411,12 +417,21 @@ export function logHistory(notePath: string, authors: string[]): void {
 
 export interface HistoryEntry {
   at: number;
-  authors: string[];
+  authors: AuthorRef[];
 }
 
+// `authors` rows written before the identity-id change are a bare
+// string[] (display names only) — parsed defensively here rather than
+// migrated, since there's no way to retroactively attach a stable id to a
+// save that already happened. New rows are AuthorRef[].
 export function getHistory(notePath: string): HistoryEntry[] {
   const rows = stateDb
     .prepare("SELECT at, authors FROM history WHERE path = ? ORDER BY at DESC LIMIT 50")
     .all(notePath) as { at: number; authors: string }[];
-  return rows.map((r) => ({ at: r.at, authors: JSON.parse(r.authors) }));
+  return rows.map((r) => ({
+    at: r.at,
+    authors: (JSON.parse(r.authors) as (string | AuthorRef)[]).map((a) =>
+      typeof a === "string" ? { id: null, name: a } : a
+    ),
+  }));
 }

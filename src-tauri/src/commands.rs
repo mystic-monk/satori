@@ -49,10 +49,22 @@ pub fn read_note(state: State<AppState>, path: String) -> Result<NoteContent, St
 }
 
 #[tauri::command]
-pub fn write_note(state: State<AppState>, path: String, raw: String) -> Result<(), String> {
+pub fn write_note(
+    state: State<AppState>,
+    path: String,
+    raw: String,
+    author_id: Option<String>,
+    author_name: String,
+) -> Result<(), String> {
     state.vault.write_raw(&path, &raw)?;
     let conn = state.conn.lock().map_err(lock_err)?;
-    db::upsert_note_index(&conn, &state.vault, &path)
+    db::upsert_note_index(&conn, &state.vault, &path)?;
+    let state_conn = state.state_conn.lock().map_err(lock_err)?;
+    db::log_history(
+        &state_conn,
+        &path,
+        &[db::AuthorRef { id: author_id, name: author_name }],
+    )
 }
 
 #[tauri::command]

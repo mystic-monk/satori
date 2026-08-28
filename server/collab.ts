@@ -39,6 +39,7 @@ interface ConnInfo {
   ids: Set<number>; // awareness clientIDs this connection controls
   role: ShareRole | "owner";
   name: string;
+  id: string | null; // stable per-person identity id (src/identity.ts)
 }
 
 class Room {
@@ -46,7 +47,11 @@ class Room {
   awareness = new awarenessProtocol.Awareness(this.doc);
   conns = new Map<WebSocket, ConnInfo>();
   saveTimer: ReturnType<typeof setTimeout> | null = null;
-  pendingAuthors = new Set<string>();
+  // Keyed by identity id (not name) so a rename mid-session still
+  // attributes to the same history entry — falls back to a name-derived
+  // key only for a connection with no id at all (an old cached client
+  // bundle, or a guest whose browser somehow skipped src/identity.ts).
+  pendingAuthors = new Map<string, string>();
 
   constructor(public notePath: string) {
     const statePath = crdtStatePath(notePath);
@@ -94,7 +99,10 @@ class Room {
     writeNoteRaw(this.notePath, text);
     upsertNoteIndex(this.notePath);
     if (this.pendingAuthors.size > 0) {
-      logHistory(this.notePath, Array.from(this.pendingAuthors));
+      logHistory(
+        this.notePath,
+        Array.from(this.pendingAuthors, ([id, name]) => ({ id: id.startsWith("name:") ? null : id, name }))
+      );
       this.pendingAuthors.clear();
     }
   }
@@ -118,8 +126,8 @@ class Room {
     for (const conn of this.conns.keys()) if (conn.readyState === WebSocket.OPEN) conn.send(buf);
   }
 
-  addConn(ws: WebSocket, role: ShareRole | "owner", name: string) {
-    this.conns.set(ws, { ids: new Set(), role, name });
+  addConn(ws: WebSocket, role: ShareRole | "owner", name: string, id: string | null) {
+    this.conns.set(ws, { ids: new Set(), role, name, id });
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MSG_SYNC);
@@ -177,7 +185,7 @@ class Room {
       encoding.writeVarUint(encoder, MSG_SYNC);
       syncProtocol.readSyncMessage(decoder, encoder, this.doc, ws);
       if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
-      if (info) this.pendingAuthors.add(info.name);
+      if (info) this.pendingAuthors.set(info.id ?? `name:${info.name}`, info.name);
     } else if (type === MSG_AWARENESS) {
       // Presence (cursor position, display name) isn't content — fine for
       // read-only connections to broadcast.
@@ -225,6 +233,7 @@ export function setupCollabServer(server: HttpServer) {
     const notePath = decodeURIComponent(url.pathname.replace("/collab/", ""));
     const token = url.searchParams.get("token");
     const name = url.searchParams.get("name")?.trim() || "Anonymous";
+    const id = url.searchParams.get("id")?.trim() || null;
     const role = resolveShareRole(notePath, token);
     if (role === "denied") {
       ws.close(4403, "invalid or revoked share token");
@@ -232,7 +241,7 @@ export function setupCollabServer(server: HttpServer) {
     }
 
     const room = getRoom(notePath);
-    room.addConn(ws, role, name);
+    room.addConn(ws, role, name, id);
 
     ws.on("message", (data: Buffer) => room.handleMessage(ws, new Uint8Array(data)));
     ws.on("close", () => room.removeConn(ws));

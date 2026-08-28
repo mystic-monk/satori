@@ -37,7 +37,8 @@ import ConfirmDialog from "./ConfirmDialog";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter } from "../shared/frontmatter";
-import { getDisplayName, getCursorColor } from "./identity";
+import { getIdentity } from "./identity";
+import IdentityPanel from "./IdentityPanel";
 import { THEMES, getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";
 
@@ -165,19 +166,20 @@ export default function App() {
     setRole("owner");
     fetchRole(activePath, shareToken).then(setRole);
 
-    const displayName = getDisplayName();
+    const identity = getIdentity();
 
     async function open(path: string) {
       if (IS_TAURI) {
         setStatus("loading…");
         const note = await fetchNote(path);
         if (cancelled) return;
-        session = openTauriLocalSession(path, note.raw);
+        session = openTauriLocalSession(path, note.raw, { id: identity.id, name: identity.name });
         setStatus("local");
       } else {
         session = openLocalCollab(path, {
           token: shareToken,
-          name: displayName,
+          name: identity.name,
+          id: identity.id,
           onDenied: () => {
             if (cancelled) return;
             setRole("denied");
@@ -187,7 +189,7 @@ export default function App() {
         setStatus("connecting…");
       }
 
-      session.awareness.setLocalStateField("user", { name: displayName, color: getCursorColor() });
+      session.awareness.setLocalStateField("user", { name: identity.name, color: identity.color, id: identity.id });
       setLocalSession(session);
       setPeerCount(0);
 
@@ -351,6 +353,7 @@ export default function App() {
       </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+        <IdentityPanel />
         <div className="sidebar-header">
           {!shareToken && (
             <input

@@ -20,6 +20,7 @@ export interface CollabHandle {
 export interface LocalCollabOptions {
   token?: string | null; // a share token — see server/collab.ts's role enforcement
   name?: string; // display name, used for presence and change history
+  id?: string; // stable per-person identity id (src/identity.ts) — see server/collab.ts's pendingAuthors
   onDenied?: () => void; // called if the server rejects the token (WS close code 4403)
 }
 
@@ -33,6 +34,7 @@ export function openLocalCollab(notePath: string, opts: LocalCollabOptions = {})
   const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:3001`;
   const params: Record<string, string> = { name: opts.name || "Anonymous" };
   if (opts.token) params.token = opts.token;
+  if (opts.id) params.id = opts.id;
   const provider = new WebsocketProvider(wsUrl, `collab/${notePath}`, doc, { connect: true, params });
   // An invalid/revoked token gets the connection closed with 4403 by the
   // server (server/collab.ts) rather than accepted read-only — without this,
@@ -65,7 +67,11 @@ export function openLocalCollab(notePath: string, opts: LocalCollabOptions = {})
 // plain string) so Editor.tsx's yCollab binding, and the cloud-sync doc
 // bridge in App.tsx, work completely unchanged — cloud sync still works in
 // Tauri mode even without local real-time collab.
-export function openTauriLocalSession(notePath: string, initialRaw: string): CollabHandle {
+export function openTauriLocalSession(
+  notePath: string,
+  initialRaw: string,
+  author: { id: string; name: string }
+): CollabHandle {
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
   if (initialRaw) ytext.insert(0, initialRaw);
@@ -76,7 +82,7 @@ export function openTauriLocalSession(notePath: string, initialRaw: string): Col
     if (origin === "tauri-seed") return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      writeNoteApi(notePath, ytext.toString());
+      writeNoteApi(notePath, ytext.toString(), author);
     }, 400);
   };
   doc.on("update", onUpdate);
@@ -90,7 +96,7 @@ export function openTauriLocalSession(notePath: string, initialRaw: string): Col
       doc.off("update", onUpdate);
       if (saveTimer) {
         clearTimeout(saveTimer);
-        writeNoteApi(notePath, ytext.toString()); // flush on close, don't lose the last debounce window
+        writeNoteApi(notePath, ytext.toString(), author); // flush on close, don't lose the last debounce window
       }
       awareness.destroy();
       doc.destroy();

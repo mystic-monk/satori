@@ -82,3 +82,39 @@ describe("resolveShareRole (P0 regression: must fail closed, not open)", () => {
     expect(db.resolveShareRole("secret.md", null)).toBe("owner");
   });
 });
+
+// Regression test for the persistent-identity change: history rows written
+// before it are a bare string[] of display names; rows written after it are
+// {id, name}[]. getHistory() must read both without crashing, since there's
+// no way to retroactively attach an id to a save that already happened.
+describe("getHistory (identity migration: must read both old and new row shapes)", () => {
+  it("parses new-shape rows with a stable id", () => {
+    db.logHistory("mixed.md", [{ id: "user-abc", name: "Ada" }]);
+    const [entry] = db.getHistory("mixed.md");
+    expect(entry.authors).toEqual([{ id: "user-abc", name: "Ada" }]);
+  });
+
+  it("parses old-shape rows (bare string[]) as id: null", () => {
+    db.stateDb
+      .prepare("INSERT INTO history (path, at, authors) VALUES (?, ?, ?)")
+      .run("legacy.md", Date.now(), JSON.stringify(["Grace", "Alan"]));
+    const [entry] = db.getHistory("legacy.md");
+    expect(entry.authors).toEqual([
+      { id: null, name: "Grace" },
+      { id: null, name: "Alan" },
+    ]);
+  });
+
+  it("a rename keeps the same id across two saves", () => {
+    db.logHistory("renamed.md", [{ id: "user-xyz", name: "Bob" }]);
+    db.logHistory("renamed.md", [{ id: "user-xyz", name: "Robert" }]);
+    const entries = db.getHistory("renamed.md");
+    // Both saves share one identity id (the point of this test — a rename
+    // doesn't fragment history into two people) — not asserting row order,
+    // since both calls can land in the same millisecond and SQLite doesn't
+    // guarantee a tie-break order on `at DESC` alone.
+    expect(entries).toHaveLength(2);
+    expect(entries.every((e) => e.authors[0].id === "user-xyz")).toBe(true);
+    expect(new Set(entries.map((e) => e.authors[0].name))).toEqual(new Set(["Bob", "Robert"]));
+  });
+});
