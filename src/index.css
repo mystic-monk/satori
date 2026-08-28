@@ -555,6 +555,14 @@ button:hover {
   min-height: 0;
 }
 
+.canvas-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
 .role-badge {
   border: 1px solid var(--accent);
   color: var(--accent);

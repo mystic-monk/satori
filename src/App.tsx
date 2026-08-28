@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
 import {
   createNote,
@@ -20,7 +20,10 @@ import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
-import CanvasNote from "./CanvasNote";
+// Excalidraw is a large dependency (shapes, its own UI, export logic) that
+// most notes never touch — lazy-loaded so it's not part of the bundle
+// every user pays for on first load, only the ones who open a canvas note.
+const CanvasNote = lazy(() => import("./CanvasNote"));
 import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
 import { renderNoteBody, type RenderEnv } from "./markdown";
@@ -416,7 +419,9 @@ export default function App() {
             <SharePanel path={activePath} isOwner={role === "owner"} />
             <HistoryPanel path={activePath} />
             {isCanvas ? (
-              <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
+              <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
+                <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
+              </Suspense>
             ) : (
               <>
                 <div className={`editor-body view-${viewMode}`}>
