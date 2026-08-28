@@ -77,18 +77,27 @@ fn resolve_vault_dir(app: &tauri::App) -> std::path::PathBuf {
     }
 
     // Genuine first run: block on a native folder picker before the
-    // window renders. The OS picker already supports creating a new
-    // folder, so this one dialog covers both "open my existing notes" and
-    // "start a new vault" — no need for two separate flows.
+    // window renders. The picked folder is a *location*, not the vault
+    // itself — the vault is always a dedicated "Satori Vault" subfolder
+    // inside it, never the picked folder directly. Earlier this used the
+    // picked folder as-is, which meant picking somewhere general like
+    // ~/Desktop silently swept every unrelated .md file already there
+    // (WalkDir walks recursively) into the vault — surprising and unsafe.
+    // A dedicated subfolder also collapses "create new" vs. "open
+    // existing" into one flow for free: if it doesn't exist yet, Vault::new
+    // creates it empty (fresh); if it already exists (picking the same
+    // location again), whatever's already in *that* subfolder is opened —
+    // never anything else sitting alongside it.
     match rfd::FileDialog::new()
-        .set_title("Choose or create your Satori vault folder")
+        .set_title("Choose a location for your Satori vault")
         .pick_folder()
     {
-        Some(path) => {
-            save_vault_config(&config_path, &path);
-            path
+        Some(location) => {
+            let vault_path = location.join("Satori Vault");
+            save_vault_config(&config_path, &vault_path);
+            vault_path
         }
-        None => fatal_setup_error("start", "no vault folder was chosen"),
+        None => fatal_setup_error("start", "no vault location was chosen"),
     }
 }
 
@@ -199,15 +208,19 @@ pub fn run() {
 
             app.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                 "switch_vault" => {
-                    let Some(path) = rfd::FileDialog::new()
-                        .set_title("Choose a vault folder")
+                    // Same "picked folder is a location, not the vault
+                    // itself" rule as resolve_vault_dir's first-run path —
+                    // see that function's comment for why.
+                    let Some(location) = rfd::FileDialog::new()
+                        .set_title("Choose a location for your Satori vault")
                         .pick_folder()
                     else {
                         return;
                     };
+                    let vault_path = location.join("Satori Vault");
                     if let Ok(config_dir) = app_handle.path().app_config_dir() {
                         let _ = std::fs::create_dir_all(&config_dir);
-                        save_vault_config(&config_dir.join("vault-config.json"), &path);
+                        save_vault_config(&config_dir.join("vault-config.json"), &vault_path);
                     }
                     app_handle.restart();
                 }
