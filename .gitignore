@@ -4,6 +4,7 @@ dist/
 .pkm-state/
 *.log
 *.tsbuildinfo
+.claude/
 
 # Personal notes, not app source — kept out of this repo on purpose.
 # See vault/.git for its own independent history.

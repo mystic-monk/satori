@@ -288,6 +288,17 @@ pub struct NoteListItem {
     pub note_type: Option<String>,
     #[serde(rename = "updatedAt")]
     pub updated_at: f64,
+    pub favorite: bool,
+}
+
+// `favorite` isn't its own column — it's an ordinary frontmatter property
+// already captured in the `properties` JSON column every note row has —
+// same derivation as server/db.ts's deriveFavorite().
+fn derive_favorite(properties_json: &str) -> bool {
+    serde_json::from_str::<Value>(properties_json)
+        .ok()
+        .and_then(|v| v.get("favorite").and_then(|f| f.as_bool()))
+        .unwrap_or(false)
 }
 
 pub fn list_notes_from_index(
@@ -296,7 +307,7 @@ pub fn list_notes_from_index(
 ) -> Result<Vec<NoteListItem>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT path, title, tags, type, updated_at FROM notes \
+            "SELECT path, title, tags, type, updated_at, properties FROM notes \
              WHERE (?1 IS NULL OR type = ?1) ORDER BY updated_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -304,12 +315,14 @@ pub fn list_notes_from_index(
         .query_map(params![type_filter], |row| {
             let tags_json: String = row.get(2)?;
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let properties_json: String = row.get(5)?;
             Ok(NoteListItem {
                 path: row.get(0)?,
                 title: row.get(1)?,
                 tags,
                 note_type: row.get(3)?,
                 updated_at: row.get(4)?,
+                favorite: derive_favorite(&properties_json),
             })
         })
         .map_err(|e| e.to_string())?;

@@ -22,6 +22,26 @@ fn save_vault_config(config_path: &std::path::Path, vault_path: &std::path::Path
     }
 }
 
+// Shared by the "Open a Different Vault…" menu item and the switch_vault
+// command (commands.rs) — the sidebar's vault header can trigger this
+// directly instead of only being reachable through the native menu. Same
+// "picked folder is a location, not the vault itself" rule as
+// resolve_vault_dir's first-run path — see that function's comment for why.
+pub(crate) fn switch_vault_dialog(app_handle: &tauri::AppHandle) {
+    let Some(location) = rfd::FileDialog::new()
+        .set_title("Choose a location for your Satori vault")
+        .pick_folder()
+    else {
+        return;
+    };
+    let vault_path = location.join("Satori Vault");
+    if let Ok(config_dir) = app_handle.path().app_config_dir() {
+        let _ = std::fs::create_dir_all(&config_dir);
+        save_vault_config(&config_dir.join("vault-config.json"), &vault_path);
+    }
+    app_handle.restart();
+}
+
 // A setup failure (can't resolve the app data dir, can't create its
 // subdirectories, can't open either SQLite file — disk full, permissions,
 // a corrupted db file left over from a bad shutdown) used to panic via
@@ -207,23 +227,7 @@ pub fn run() {
             app.set_menu(menu)?;
 
             app.on_menu_event(move |app_handle, event| match event.id().as_ref() {
-                "switch_vault" => {
-                    // Same "picked folder is a location, not the vault
-                    // itself" rule as resolve_vault_dir's first-run path —
-                    // see that function's comment for why.
-                    let Some(location) = rfd::FileDialog::new()
-                        .set_title("Choose a location for your Satori vault")
-                        .pick_folder()
-                    else {
-                        return;
-                    };
-                    let vault_path = location.join("Satori Vault");
-                    if let Ok(config_dir) = app_handle.path().app_config_dir() {
-                        let _ = std::fs::create_dir_all(&config_dir);
-                        save_vault_config(&config_dir.join("vault-config.json"), &vault_path);
-                    }
-                    app_handle.restart();
-                }
+                "switch_vault" => switch_vault_dialog(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
                 | "view_source" | "view_split" | "view_preview") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
@@ -249,6 +253,8 @@ pub fn run() {
             commands::revoke_share,
             commands::resolve_role,
             commands::get_history,
+            commands::get_vault_info,
+            commands::switch_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

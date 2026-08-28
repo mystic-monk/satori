@@ -210,6 +210,7 @@ export interface NoteListItem {
   tags: string[];
   type: string | null;
   updatedAt: number;
+  favorite: boolean;
 }
 
 interface NoteRow {
@@ -218,6 +219,21 @@ interface NoteRow {
   tags: string;
   type: string | null;
   updatedAt: number;
+  properties: string;
+}
+
+// `favorite` isn't its own column — it's an ordinary frontmatter property
+// (same as any other, e.g. `favorite: true` in the note's YAML block),
+// already captured in the `properties` JSON column every note row has.
+// Deriving it here at query time rather than adding a dedicated column
+// means starring a note is just a normal frontmatter edit (see
+// PropertiesPanel.tsx) with nothing else to keep in sync.
+function deriveFavorite(propertiesJson: string): boolean {
+  try {
+    return JSON.parse(propertiesJson).favorite === true;
+  } catch {
+    return false;
+  }
 }
 
 export function listNotesFromIndex(type?: string): NoteListItem[] {
@@ -225,16 +241,23 @@ export function listNotesFromIndex(type?: string): NoteListItem[] {
     type
       ? db
           .prepare(
-            "SELECT path, title, tags, type, updated_at as updatedAt FROM notes WHERE type = ? ORDER BY updated_at DESC"
+            "SELECT path, title, tags, type, updated_at as updatedAt, properties FROM notes WHERE type = ? ORDER BY updated_at DESC"
           )
           .all(type)
       : db
           .prepare(
-            "SELECT path, title, tags, type, updated_at as updatedAt FROM notes ORDER BY updated_at DESC"
+            "SELECT path, title, tags, type, updated_at as updatedAt, properties FROM notes ORDER BY updated_at DESC"
           )
           .all()
   ) as NoteRow[];
-  return rows.map((r) => ({ ...r, tags: JSON.parse(r.tags) }));
+  return rows.map((r) => ({
+    path: r.path,
+    title: r.title,
+    tags: JSON.parse(r.tags),
+    type: r.type,
+    updatedAt: r.updatedAt,
+    favorite: deriveFavorite(r.properties),
+  }));
 }
 
 export function listTypes(): { type: string; count: number }[] {

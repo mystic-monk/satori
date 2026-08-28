@@ -7,13 +7,16 @@ import {
   fetchNotes,
   fetchRole,
   fetchTypes,
+  fetchVaultInfo,
   reindex,
   search,
+  switchVault,
+  writeNoteApi,
   type NoteListItem,
   type SearchResult,
   type ShareRole,
 } from "./api";
-import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
+import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
 // cloud-collab.ts pulls in crypto.ts -> libsodium-wrappers-sumo (~550KB of
 // WASM) — most users never touch cloud sync, so this is a dynamic import
 // (see the effect below) rather than a static one, same reasoning as the
@@ -37,10 +40,11 @@ import HistoryPanel from "./HistoryPanel";
 import ConfirmDialog from "./ConfirmDialog";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
-import { parseFrontmatter } from "../shared/frontmatter";
+import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { getIdentity } from "./identity";
 import IdentityPanel from "./IdentityPanel";
-import { THEMES, getStoredTheme, applyTheme, isDarkTheme } from "./themes";
+import { getRecent, recordOpened, type RecentNote } from "./recentNotes";
+import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";
 
 const BRIDGE_ORIGIN = "bridge";
@@ -68,11 +72,18 @@ function bridgeDocs(a: Y.Doc, b: Y.Doc): () => void {
 }
 
 type ViewMode = "source" | "preview" | "split";
+// "all"/"journal"/"canvas" drive the existing typeFilter mechanism under
+// the hood (see selectView) — "favorites" is a pure client-side filter
+// over whatever's already loaded, since a favorited note can be any type.
+type SidebarView = "all" | "journal" | "canvas" | "favorites";
 
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
   const [types, setTypes] = useState<{ type: string; count: number }[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
+  const [sidebarView, setSidebarView] = useState<SidebarView>("all");
+  const [recentNotes, setRecentNotes] = useState<RecentNote[]>(() => getRecent());
+  const [vaultName, setVaultName] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -83,6 +94,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
@@ -158,6 +170,11 @@ export default function App() {
       unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    fetchVaultInfo().then((info) => setVaultName(info.name));
   }, []);
 
   useEffect(() => {
@@ -247,7 +264,15 @@ export default function App() {
           setPeerCount(Math.max(0, activeSession.awareness.getStates().size - 1));
         });
       }
-      activeSession.doc.on("update", () => loadNotes());
+      activeSession.doc.on("update", (_update: Uint8Array, origin: unknown) => {
+        // toggleFavorite already does its own synchronous optimistic
+        // setNotes() for this exact edit — an async loadNotes() triggered
+        // by the same update can resolve afterward with the collab room's
+        // not-yet-persisted (stale) data and silently clobber it. Every
+        // other kind of edit still refreshes normally.
+        if (origin === "favorite-toggle") return;
+        loadNotes();
+      });
     }
 
     open(activePath);
@@ -291,12 +316,69 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudConnected, activePath, localSession]);
 
-  function openNote(p: string) {
+  // `knownTitle` lets callers that just created a note (onNewNote etc.)
+  // pass the title directly — right after loadNotes(), the `notes` state
+  // update hasn't landed yet in this render's closure, so looking it up
+  // from `notes`/`results` here would silently fall back to the raw file
+  // path for a note opened immediately after creation.
+  function openNote(p: string, knownTitle?: string) {
     setShowGraph(false);
     setShareToken(null); // navigating from within the app is always as the owner
     setSidebarOpen(false); // closes the mobile drawer after picking a note
+    const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
+    setRecentNotes(recordOpened(p, title));
     if (p === activePath) return;
     setActivePath(p);
+  }
+
+  function selectView(view: SidebarView) {
+    setSidebarView(view);
+    setShowGraph(false);
+    if (view === "journal") setTypeFilter("daily");
+    else if (view === "canvas") setTypeFilter("canvas");
+    else setTypeFilter(""); // "all" and "favorites" both draw from the full set
+  }
+
+  // Toggles the `favorite` frontmatter property directly — not a separate
+  // local-only list — so it's consistent across devices/collaborators on
+  // the same vault, same principle as `type`/`tags`.
+  //
+  // If the target note is the one currently open, this MUST go through
+  // the live Y.Doc (same applyTextDiff pattern PropertiesPanel.tsx uses),
+  // not a direct REST/IPC write: a direct file write races the collab
+  // room's own ~500ms debounced persist (server/collab.ts), which holds
+  // the note's content in memory independently of disk and will silently
+  // overwrite a concurrent external write on its next save — confirmed by
+  // a live browser test where a star toggled this way reverted itself
+  // within a second. Only a note that ISN'T currently open (no live
+  // session fighting over it) is safe to write directly.
+  async function toggleFavorite(path: string) {
+    if (path === activePath && localSession) {
+      const parsed = parseFrontmatter(localSession.ytext.toString());
+      const nextData = { ...parsed.data };
+      const nextFavorite = nextData.favorite !== true;
+      if (nextFavorite) nextData.favorite = true;
+      else delete nextData.favorite;
+      applyTextDiff(localSession.ytext, stringifyFrontmatter(nextData, parsed.body), "favorite-toggle");
+      // Optimistic local update: the doc.on("update") listener already
+      // calls loadNotes() on any local edit, but that refetch can race
+      // ahead of the collab room's own ~500ms debounced persist
+      // (server/collab.ts), which is what actually writes the new
+      // frontmatter into the SQLite index this list reads from — without
+      // this, the star doesn't visibly move to the Favorites section for
+      // up to half a second even though the edit itself already landed.
+      setNotes((prev) => prev.map((n) => (n.path === path ? { ...n, favorite: nextFavorite } : n)));
+      return;
+    }
+    const note = await fetchNote(path, shareToken);
+    const parsed = parseFrontmatter(note.raw);
+    const nextData = { ...parsed.data };
+    if (nextData.favorite === true) delete nextData.favorite;
+    else nextData.favorite = true;
+    const nextRaw = stringifyFrontmatter(nextData, parsed.body);
+    const identity = getIdentity();
+    await writeNoteApi(path, nextRaw, { id: identity.id, name: identity.name }, shareToken);
+    await loadNotes();
   }
 
   async function onNewNote() {
@@ -311,7 +393,7 @@ export default function App() {
     const template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
     await createNote(p, template);
     await loadNotes();
-    openNote(p);
+    openNote(p, title);
   }
 
   async function onNewCanvas() {
@@ -328,7 +410,7 @@ export default function App() {
     await createNote(p, template);
     await loadNotes();
     fetchTypes().then(setTypes);
-    openNote(p);
+    openNote(p, title);
   }
 
   async function onDailyNote() {
@@ -342,7 +424,7 @@ export default function App() {
       await loadNotes();
       fetchTypes().then(setTypes);
     }
-    openNote(p);
+    openNote(p, date);
   }
 
   async function confirmDelete() {
@@ -365,6 +447,9 @@ export default function App() {
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
+  const canWrite = role === "owner" || role === "edit";
+  const favoriteNotes = notes.filter((n) => n.favorite);
+  const displayedNotes = sidebarView === "favorites" ? favoriteNotes : notes;
 
   function exportEnv(): RenderEnv {
     return { resolver, bodies: new Map(), pathStack: new Set() };
@@ -377,7 +462,29 @@ export default function App() {
       </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <IdentityPanel />
+        {IS_TAURI && (
+          <div className="vault-header">
+            <button
+              className="vault-header-name"
+              onClick={() => switchVault()}
+              title="Switch to a different vault"
+            >
+              <span className="vault-icon" aria-hidden="true">
+                🗄
+              </span>
+              {vaultName ?? "Vault"}
+              <span className="vault-switch-caret" aria-hidden="true">
+                ▾
+              </span>
+            </button>
+            {!shareToken && (
+              <button className="vault-reindex" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
+                ↻
+              </button>
+            )}
+          </div>
+        )}
+        <IdentityPanel themeId={themeId} onThemeChange={setThemeId} />
         <div className="sidebar-header">
           {!shareToken && (
             <input
@@ -388,24 +495,109 @@ export default function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
-          {types.length > 0 && (
-            <select className="type-filter" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">All types</option>
-              {types.map((t) => (
-                <option key={t.type} value={t.type}>
-                  {t.type} ({t.count})
-                </option>
-              ))}
-            </select>
-          )}
-          <select className="type-filter" value={themeId} onChange={(e) => setThemeId(e.target.value)}>
-            {THEMES.map((t) => (
-              <option key={t.id} value={t.id}>
-                Theme: {t.label}
-              </option>
-            ))}
-          </select>
         </div>
+        {!results && (
+          <nav className="sidebar-nav">
+            <button
+              className={sidebarView === "all" && !showGraph ? "active" : ""}
+              onClick={() => selectView("all")}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                📄
+              </span>
+              All Notes
+            </button>
+            <button
+              className={sidebarView === "journal" && !showGraph ? "active" : ""}
+              onClick={() => selectView("journal")}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                📅
+              </span>
+              Journal
+            </button>
+            <button
+              className={sidebarView === "canvas" && !showGraph ? "active" : ""}
+              onClick={() => selectView("canvas")}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🖌
+              </span>
+              Canvas
+            </button>
+            {!shareToken && (
+              <button
+                className={showGraph ? "active" : ""}
+                onClick={() => {
+                  setShowGraph((g) => !g);
+                  setSidebarOpen(false);
+                }}
+              >
+                <span className="nav-icon" aria-hidden="true">
+                  🕸
+                </span>
+                Graph
+              </button>
+            )}
+            {types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
+              <select
+                className="type-filter nav-more-types"
+                value={["", "daily", "canvas"].includes(typeFilter) ? "" : typeFilter}
+                onChange={(e) => {
+                  setSidebarView("all");
+                  setTypeFilter(e.target.value);
+                }}
+              >
+                <option value="">More types…</option>
+                {types
+                  .filter((t) => t.type !== "daily" && t.type !== "canvas")
+                  .map((t) => (
+                    <option key={t.type} value={t.type}>
+                      {t.type} ({t.count})
+                    </option>
+                  ))}
+              </select>
+            )}
+          </nav>
+        )}
+        {!results && favoriteNotes.length > 0 && (
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">Favorites</div>
+            <ul className="note-list-compact">
+              {favoriteNotes.map((n) => (
+                <li
+                  key={n.path}
+                  className={n.path === activePath ? "active" : ""}
+                  onClick={() => openNote(n.path)}
+                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="note-title">{n.title}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!results && recentNotes.length > 0 && (
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">Recent</div>
+            <ul className="note-list-compact">
+              {recentNotes.map((n) => (
+                <li
+                  key={n.path}
+                  className={n.path === activePath ? "active" : ""}
+                  onClick={() => openNote(n.path)}
+                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="note-title">{n.title}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <ul className="note-list">
           {results
             ? results.map((r) => (
@@ -421,7 +613,7 @@ export default function App() {
                   <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
                 </li>
               ))
-            : notes.map((n) => (
+            : displayedNotes.map((n) => (
                 <li
                   key={n.path}
                   className={n.path === activePath ? "active" : ""}
@@ -432,31 +624,65 @@ export default function App() {
                 >
                   <div className="note-title">{n.title}</div>
                   {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
+                  {canWrite && (
+                    <button
+                      className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(n.path);
+                      }}
+                      aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
+                      title={n.favorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                      {n.favorite ? "★" : "☆"}
+                    </button>
+                  )}
                 </li>
               ))}
           {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
-          {!results && notes.length === 0 && <li className="empty-hint">No notes yet.</li>}
+          {!results && displayedNotes.length === 0 && (
+            <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
+          )}
         </ul>
-        {/* Vault-wide actions — creating notes, reindexing, browsing the
-            link graph — are for the owner's own vault, not something a
-            share-link recipient should see, so they're hidden in guest
-            (shareToken) mode even though the note list above still shows
-            (needed for wikilink/transclusion resolution — see the
-            requireOwner comment in server/index.ts). */}
+        {/* Vault-wide actions — creating notes — are for the owner's own
+            vault, not something a share-link recipient should see, so
+            they're hidden in guest (shareToken) mode even though the note
+            list above still shows (needed for wikilink/transclusion
+            resolution — see the requireOwner comment in
+            server/index.ts). */}
         {!shareToken && (
-          <div className="sidebar-footer">
-            <button onClick={onNewNote}>+ New note</button>
-            <button onClick={onNewCanvas}>+ Canvas</button>
-            <button onClick={onDailyNote}>Today</button>
-            <button
-              onClick={() => {
-                setShowGraph((g) => !g);
-                setSidebarOpen(false);
-              }}
-            >
-              {showGraph ? "Editor" : "Graph"}
+          <div className="sidebar-create">
+            <button className="create-button" onClick={() => setCreateMenuOpenState((o) => !o)}>
+              + Create
             </button>
-            <button onClick={onReindex}>Reindex</button>
+            {createMenuOpenState && (
+              <div className="create-menu">
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onNewNote();
+                  }}
+                >
+                  New Note
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onNewCanvas();
+                  }}
+                >
+                  New Canvas
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onDailyNote();
+                  }}
+                >
+                  Today's Journal Entry
+                </button>
+              </div>
+            )}
           </div>
         )}
         <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>

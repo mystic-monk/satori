@@ -118,3 +118,24 @@ describe("getHistory (identity migration: must read both old and new row shapes)
     expect(new Set(entries.map((e) => e.authors[0].name))).toEqual(new Set(["Bob", "Robert"]));
   });
 });
+
+// Regression coverage for the sidebar-redesign work: `favorite` isn't its
+// own column, it's derived from the `properties` JSON column at query
+// time (see deriveFavorite in db.ts) — a note with no `favorite` property
+// at all (the common case) must resolve to false, not throw or come back
+// undefined.
+describe("listNotesFromIndex favorite derivation", () => {
+  it("a note with no favorite property resolves to false", () => {
+    vault.writeNoteRaw("plain.md", "---\ntitle: Plain\n---\nBody.");
+    db.upsertNoteIndex("plain.md");
+    const note = db.listNotesFromIndex().find((n) => n.path === "plain.md");
+    expect(note?.favorite).toBe(false);
+  });
+
+  it("a note with favorite: true resolves to true", () => {
+    vault.writeNoteRaw("starred.md", "---\ntitle: Starred\nfavorite: true\n---\nBody.");
+    db.upsertNoteIndex("starred.md");
+    const note = db.listNotesFromIndex().find((n) => n.path === "starred.md");
+    expect(note?.favorite).toBe(true);
+  });
+});

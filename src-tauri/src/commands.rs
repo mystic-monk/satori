@@ -132,3 +132,28 @@ pub fn get_history(state: State<AppState>, path: String) -> Result<Vec<db::Histo
     let conn = state.state_conn.lock().map_err(lock_err)?;
     db::get_history(&conn, &path)
 }
+
+#[derive(Serialize)]
+pub struct VaultInfo {
+    pub name: String,
+}
+
+#[tauri::command]
+pub fn get_vault_info(state: State<AppState>) -> VaultInfo {
+    let name = state
+        .vault
+        .dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Vault".to_string());
+    VaultInfo { name }
+}
+
+// Reuses the exact same picker/save/restart flow as the "Open a Different
+// Vault…" menu item (src-tauri/src/lib.rs) — this lets the sidebar's vault
+// header trigger it directly, so switching vaults doesn't require knowing
+// the native menu exists.
+#[tauri::command]
+pub fn switch_vault(app: tauri::AppHandle) {
+    crate::switch_vault_dialog(&app);
+}

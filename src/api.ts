@@ -6,6 +6,7 @@ export interface NoteListItem {
   tags: string[];
   type: string | null;
   updatedAt: number;
+  favorite: boolean;
 }
 
 export interface SearchResult {
@@ -85,24 +86,31 @@ export async function fetchNote(p: string, token?: string | null): Promise<{ pat
   return res.json();
 }
 
-// Only used by the Tauri-mode local editing session (src/collab.ts) — the
-// browser deployment persists edits through the CRDT collab server instead,
-// never by PUT-ing raw content directly. `author` is only meaningful on the
-// Tauri path, where write_note also logs it to History (mirroring how
-// server/collab.ts's Room.persist() logs history on every debounced save
-// in browser mode) — Tauri mode is single-writer, so no aggregation is
-// needed the way the WS server's pendingAuthors accumulates concurrent
-// connections.
+// Was originally only used by the Tauri-mode local editing session
+// (src/collab.ts) — the browser deployment normally persists edits
+// through the CRDT collab server instead of PUT-ing raw content directly.
+// Now also used by App.tsx's toggleFavorite() for a frontmatter-only edit
+// on a note that isn't necessarily the currently-open one, in either
+// deployment — so `token` has to be forwarded on the browser path (fixed
+// here) rather than always omitted: without it, requireNoteWrite
+// (server/index.ts) sees no token and resolves the request as owner
+// regardless of who's actually calling, exactly the "no token = owner"
+// gap documented in server/db.ts's resolveShareRole — a "view"-only guest
+// couldn't reach this code path today (the UI already hides write actions
+// from them), but the underlying call must still carry a real token so a
+// role check downstream has something to check against. `author` is only
+// meaningful on the Tauri path, where write_note also logs it to History.
 export async function writeNoteApi(
   p: string,
   raw: string,
-  author: { id: string; name: string }
+  author: { id: string; name: string },
+  token?: string | null
 ): Promise<void> {
   if (IS_TAURI) {
     await invoke("write_note", { path: p, raw, authorId: author.id, authorName: author.name });
     return;
   }
-  await fetch(`/api/notes/${encodePath(p)}`, {
+  await fetch(withToken(`/api/notes/${encodePath(p)}`, token), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ raw }),
@@ -176,4 +184,14 @@ export async function fetchHistory(p: string, token?: string | null): Promise<Hi
   if (IS_TAURI) return invoke("get_history", { path: p });
   const res = await fetch(withToken(`/api/history/${encodePath(p)}`, token));
   return res.json();
+}
+
+// Tauri only — browser mode has no multi-vault concept, the vault is fixed
+// to wherever the dev/prod server process runs.
+export async function fetchVaultInfo(): Promise<{ name: string }> {
+  return invoke("get_vault_info");
+}
+
+export async function switchVault(): Promise<void> {
+  await invoke("switch_vault");
 }
