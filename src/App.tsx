@@ -134,16 +134,29 @@ export default function App() {
     setLocalSession(session);
     setStatus("connecting…");
     setPeerCount(0);
+    let hasSyncedOnce = false;
 
     const onTextChange = () => setRaw(session.ytext.toString());
     onTextChange();
     session.ytext.observe(onTextChange);
 
     session.provider.on("status", ({ status: s }: { status: string }) => {
-      setStatus(s === "connected" ? "connected" : s);
+      if (s === "connected") {
+        setStatus("connected");
+      } else if (s === "connecting") {
+        // y-websocket emits "connecting" for the initial connect too, not
+        // just reconnects — only call it "reconnecting" once we know this
+        // session was synced before and then lost that.
+        setStatus(hasSyncedOnce ? "reconnecting…" : "connecting…");
+      } else {
+        setStatus(s);
+      }
     });
     session.provider.on("sync", (synced: boolean) => {
-      if (synced) setStatus("synced");
+      if (synced) {
+        hasSyncedOnce = true;
+        setStatus("synced");
+      }
     });
     session.provider.awareness.on("change", () => {
       setPeerCount(Math.max(0, session.provider.awareness.getStates().size - 1));
@@ -336,7 +349,7 @@ export default function App() {
           <>
             <div className="editor-toolbar">
               <span className="editor-path">{activePath}</span>
-              <span className="editor-status">
+              <span className={`editor-status ${status !== "synced" && status !== "connected" ? "editor-status-offline" : ""}`}>
                 {status}
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>

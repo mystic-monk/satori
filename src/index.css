@@ -194,6 +194,11 @@ button:hover {
   flex: 1;
 }
 
+.editor-status-offline {
+  color: #e0a622;
+  font-weight: 500;
+}
+
 .cloud-bar-wrap {
   border-bottom: 1px solid var(--border);
 }
