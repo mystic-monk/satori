@@ -30,3 +30,4 @@ rand = "0.9.5"
 chrono = { version = "0.4.45", features = ["serde"] }
 serde_yaml = "0.9.34"
 uuid = { version = "1.20.0", features = ["serde", "v4"] }
+rfd = "0.17.2"

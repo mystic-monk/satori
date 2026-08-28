@@ -9,6 +9,25 @@ use state::AppState;
 use tauri::Manager;
 use vault::Vault;
 
+// A setup failure (can't resolve the app data dir, can't create its
+// subdirectories, can't open either SQLite file — disk full, permissions,
+// a corrupted db file left over from a bad shutdown) used to panic via
+// .expect(), which for a bundled GUI app just means the process
+// disappears with no visible explanation: there's no terminal attached
+// for the user to see the panic message in. Show a native dialog with
+// the real error first, so at least there's something actionable to
+// screenshot/report, then exit deliberately rather than let the panic
+// unwind produce a generic OS-level crash report instead.
+fn fatal_setup_error(what: &str, err: impl std::fmt::Display) -> ! {
+    let message = format!("pkm couldn't start: failed to {what}.\n\n{err}");
+    rfd::MessageDialog::new()
+        .set_title("pkm failed to start")
+        .set_description(&message)
+        .set_level(rfd::MessageLevel::Error)
+        .show();
+    std::process::exit(1);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -25,18 +44,26 @@ pub fn run() {
             // macOS) rather than cwd — this app launches from a bundled .app,
             // not a project checkout, so there's no meaningful "cwd" to put a
             // vault/ next to the way the Node deployment does.
-            let app_dir = app.path().app_data_dir()?;
+            let app_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|e| fatal_setup_error("locate the app data directory", e));
             let vault_dir = app_dir.join("vault");
             // Separate directory from the index cache on purpose — see the
             // comment on db::open_state.
             let index_path = app_dir.join("index-cache").join("index.sqlite");
             let state_path = app_dir.join("state").join("state.sqlite");
-            std::fs::create_dir_all(index_path.parent().unwrap())?;
-            std::fs::create_dir_all(state_path.parent().unwrap())?;
+            for dir in [index_path.parent(), state_path.parent()].into_iter().flatten() {
+                if let Err(e) = std::fs::create_dir_all(dir) {
+                    fatal_setup_error(&format!("create {}", dir.display()), e);
+                }
+            }
 
             let vault = Vault::new(vault_dir);
-            let conn = db::open_index(&index_path).expect("failed to open sqlite index");
-            let state_conn = db::open_state(&state_path).expect("failed to open sqlite state db");
+            let conn = db::open_index(&index_path)
+                .unwrap_or_else(|e| fatal_setup_error("open the search index database", e));
+            let state_conn = db::open_state(&state_path)
+                .unwrap_or_else(|e| fatal_setup_error("open the app state database", e));
 
             // Same bootstrap rule as server/index.ts: the SQLite index is a
             // cache, rebuild it if it's empty but the vault has notes.
