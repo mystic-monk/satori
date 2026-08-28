@@ -1,6 +1,6 @@
 {
-  "name": "pkm",
-  "short_name": "pkm",
+  "name": "Satori",
+  "short_name": "Satori",
   "description": "Privacy-first, local-first networked notes",
   "start_url": "/",
   "display": "standalone",

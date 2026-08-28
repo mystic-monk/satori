@@ -6,8 +6,21 @@ mod state;
 mod vault;
 
 use state::AppState;
-use tauri::Manager;
+use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, Manager};
 use vault::Vault;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct VaultConfig {
+    vault_path: std::path::PathBuf,
+}
+
+fn save_vault_config(config_path: &std::path::Path, vault_path: &std::path::Path) {
+    let cfg = VaultConfig { vault_path: vault_path.to_path_buf() };
+    if let Ok(json) = serde_json::to_string_pretty(&cfg) {
+        let _ = std::fs::write(config_path, json);
+    }
+}
 
 // A setup failure (can't resolve the app data dir, can't create its
 // subdirectories, can't open either SQLite file — disk full, permissions,
@@ -19,13 +32,64 @@ use vault::Vault;
 // screenshot/report, then exit deliberately rather than let the panic
 // unwind produce a generic OS-level crash report instead.
 fn fatal_setup_error(what: &str, err: impl std::fmt::Display) -> ! {
-    let message = format!("pkm couldn't start: failed to {what}.\n\n{err}");
+    let message = format!("Satori couldn't start: failed to {what}.\n\n{err}");
     rfd::MessageDialog::new()
-        .set_title("pkm failed to start")
+        .set_title("Satori failed to start")
         .set_description(&message)
         .set_level(rfd::MessageLevel::Error)
         .show();
     std::process::exit(1);
+}
+
+// Resolves which folder on disk is "the vault" — persisted in
+// vault-config.json under app_config_dir() (deliberately separate from
+// app_data_dir(), where the index cache/state/vault content itself live)
+// so the choice survives across launches. Previously this was hardcoded
+// to app_data_dir()/vault with no user control at all.
+fn resolve_vault_dir(app: &tauri::App) -> std::path::PathBuf {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|e| fatal_setup_error("locate the app config directory", e));
+    std::fs::create_dir_all(&config_dir)
+        .unwrap_or_else(|e| fatal_setup_error(&format!("create {}", config_dir.display()), e));
+    let config_path = config_dir.join("vault-config.json");
+
+    if let Ok(raw) = std::fs::read_to_string(&config_path) {
+        if let Ok(cfg) = serde_json::from_str::<VaultConfig>(&raw) {
+            if cfg.vault_path.exists() {
+                return cfg.vault_path;
+            }
+        }
+    }
+
+    // Nothing configured yet — if the pre-this-feature hardcoded location
+    // already has real notes in it, adopt it silently rather than
+    // prompting someone who's already using the app.
+    let legacy = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|e| fatal_setup_error("locate the app data directory", e))
+        .join("vault");
+    if legacy.exists() && !Vault::new(legacy.clone()).list_note_files().is_empty() {
+        save_vault_config(&config_path, &legacy);
+        return legacy;
+    }
+
+    // Genuine first run: block on a native folder picker before the
+    // window renders. The OS picker already supports creating a new
+    // folder, so this one dialog covers both "open my existing notes" and
+    // "start a new vault" — no need for two separate flows.
+    match rfd::FileDialog::new()
+        .set_title("Choose or create your Satori vault folder")
+        .pick_folder()
+    {
+        Some(path) => {
+            save_vault_config(&config_path, &path);
+            path
+        }
+        None => fatal_setup_error("start", "no vault folder was chosen"),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,15 +104,19 @@ pub fn run() {
                 )?;
             }
 
-            // App data dir (e.g. ~/Library/Application Support/dev.pkm.app on
+            // App data dir (e.g. ~/Library/Application Support/dev.satori.app on
             // macOS) rather than cwd — this app launches from a bundled .app,
             // not a project checkout, so there's no meaningful "cwd" to put a
-            // vault/ next to the way the Node deployment does.
+            // vault/ next to the way the Node deployment does. The index
+            // cache/state stay pinned to app_data_dir() regardless of which
+            // vault folder the user picks (see resolve_vault_dir) — they're
+            // this app's own bookkeeping, not something that lives inside a
+            // user's chosen notes folder.
             let app_dir = app
                 .path()
                 .app_data_dir()
                 .unwrap_or_else(|e| fatal_setup_error("locate the app data directory", e));
-            let vault_dir = app_dir.join("vault");
+            let vault_dir = resolve_vault_dir(app);
             // Separate directory from the index cache on purpose — see the
             // comment on db::open_state.
             let index_path = app_dir.join("index-cache").join("index.sqlite");
@@ -78,6 +146,76 @@ pub fn run() {
                 vault,
                 conn: std::sync::Mutex::new(conn),
                 state_conn: std::sync::Mutex::new(state_conn),
+            });
+
+            // Frontend-actionable items (new note, reindex, view toggles —
+            // src/App.tsx already has handler functions for all of these)
+            // are dispatched as events the frontend listens for; vault
+            // switching and About are handled entirely here since they
+            // don't need any frontend involvement.
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&MenuItemBuilder::with_id("new_note", "New Note").accelerator("CmdOrCtrl+N").build(app)?)
+                .item(&MenuItemBuilder::with_id("new_canvas", "New Canvas").build(app)?)
+                .item(&MenuItemBuilder::with_id("today", "Today's Daily Note").build(app)?)
+                .item(&MenuItemBuilder::with_id("reindex", "Reindex").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("switch_vault", "Open a Different Vault…").build(app)?)
+                .separator()
+                .close_window()
+                .build()?;
+
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            let view_menu = SubmenuBuilder::new(app, "View")
+                .item(&MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar").build(app)?)
+                .item(&MenuItemBuilder::with_id("toggle_graph", "Toggle Graph").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("view_source", "Source").build(app)?)
+                .item(&MenuItemBuilder::with_id("view_split", "Split").build(app)?)
+                .item(&MenuItemBuilder::with_id("view_preview", "Preview").build(app)?)
+                .build()?;
+
+            let help_menu = SubmenuBuilder::new(app, "Help")
+                .about(Some(
+                    AboutMetadataBuilder::new()
+                        .name(Some("Satori"))
+                        .version(Some(env!("CARGO_PKG_VERSION")))
+                        .build(),
+                ))
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .items(&[&file_menu, &edit_menu, &view_menu, &help_menu])
+                .build()?;
+            app.set_menu(menu)?;
+
+            app.on_menu_event(move |app_handle, event| match event.id().as_ref() {
+                "switch_vault" => {
+                    let Some(path) = rfd::FileDialog::new()
+                        .set_title("Choose a vault folder")
+                        .pick_folder()
+                    else {
+                        return;
+                    };
+                    if let Ok(config_dir) = app_handle.path().app_config_dir() {
+                        let _ = std::fs::create_dir_all(&config_dir);
+                        save_vault_config(&config_dir.join("vault-config.json"), &path);
+                    }
+                    app_handle.restart();
+                }
+                id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
+                | "view_source" | "view_split" | "view_preview") => {
+                    let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
+                }
+                _ => {}
             });
 
             Ok(())

@@ -20,6 +20,7 @@ import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./col
 // CanvasNote/Excalidraw split above.
 import type { CloudStatus } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
+import { listen } from "@tauri-apps/api/event";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
 import Editor from "./Editor";
@@ -135,6 +136,29 @@ export default function App() {
     applyTheme(themeId);
     setMermaidDark(isDarkTheme(themeId));
   }, [themeId]);
+
+  // Native menu bar (src-tauri/src/lib.rs) dispatches these events for the
+  // items it can't handle entirely on the Rust side (vault switching and
+  // About are handled there directly, no round-trip needed). Browser mode
+  // has no native menu at all, so this is a no-op there.
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    const unlistenPromises = [
+      listen("menu:new-note", () => onNewNote()),
+      listen("menu:new-canvas", () => onNewCanvas()),
+      listen("menu:today", () => onDailyNote()),
+      listen("menu:reindex", () => onReindex()),
+      listen("menu:toggle-sidebar", () => setSidebarOpen((o) => !o)),
+      listen("menu:toggle-graph", () => setShowGraph((g) => !g)),
+      listen("menu:view-source", () => setViewMode("source")),
+      listen("menu:view-split", () => setViewMode("split")),
+      listen("menu:view-preview", () => setViewMode("preview")),
+    ];
+    return () => {
+      unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Vault-wide search is an owner-only operation server-side (a share
@@ -435,7 +459,7 @@ export default function App() {
             <button onClick={onReindex}>Reindex</button>
           </div>
         )}
-        <div className="sidebar-version">pkm v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
+        <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
       <main className="editor-pane">
         {showGraph ? (
