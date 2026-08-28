@@ -110,11 +110,15 @@ export async function writeNoteApi(
     await invoke("write_note", { path: p, raw, authorId: author.id, authorName: author.name });
     return;
   }
-  await fetch(withToken(`/api/notes/${encodePath(p)}`, token), {
+  const res = await fetch(withToken(`/api/notes/${encodePath(p)}`, token), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ raw }),
   });
+  // fetch() only rejects on a network failure, never on a 4xx/5xx status —
+  // without this check, a 403 from requireNoteWrite (server/index.ts)
+  // would resolve as if the write succeeded, silently discarding the edit.
+  if (!res.ok) throw new Error(`failed to save note: ${res.status}`);
 }
 
 export async function createNote(p: string, raw: string): Promise<void> {

@@ -377,7 +377,12 @@ export default function App() {
     else nextData.favorite = true;
     const nextRaw = stringifyFrontmatter(nextData, parsed.body);
     const identity = getIdentity();
-    await writeNoteApi(path, nextRaw, { id: identity.id, name: identity.name }, shareToken);
+    try {
+      await writeNoteApi(path, nextRaw, { id: identity.id, name: identity.name }, shareToken);
+    } catch {
+      setStatus("couldn't update favorite — try again");
+      return;
+    }
     await loadNotes();
   }
 
@@ -447,7 +452,16 @@ export default function App() {
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
-  const canWrite = role === "owner" || role === "edit";
+  // Not gated on the active note's edit/owner role (that reflects only
+  // the currently-open note): the star renders on every row in the list,
+  // so a guest with edit access to their one shared note would otherwise
+  // see a clickable star on every OTHER note in the vault too (the server
+  // correctly 403s that write via requireNoteWrite, but the UI would
+  // silently look broken rather than not offering the affordance at
+  // all). Favoriting is a vault-wide personal-organization feature, same
+  // category as New note/Reindex/Graph/search — all already gated on
+  // !shareToken.
+  const canFavorite = !shareToken;
   const favoriteNotes = notes.filter((n) => n.favorite);
   const displayedNotes = sidebarView === "favorites" ? favoriteNotes : notes;
 
@@ -496,7 +510,16 @@ export default function App() {
             />
           )}
         </div>
-        {!results && (
+        {/* Vault-wide browsing/organization — same category as New note/
+            Reindex/search, all already owner-only — not just Graph (which
+            was the only row gated before this fix): a guest viewing one
+            shared note shouldn't be presented with a full vault-browsing
+            nav, even though the underlying note list they'd filter is
+            already visible to them for wikilink-resolution reasons (see
+            the requireOwner comment in server/index.ts) — showing the
+            affordance anyway is inconsistent with how every other
+            vault-wide action is already hidden from guests. */}
+        {!results && !shareToken && (
           <nav className="sidebar-nav">
             <button
               className={sidebarView === "all" && !showGraph ? "active" : ""}
@@ -525,20 +548,18 @@ export default function App() {
               </span>
               Canvas
             </button>
-            {!shareToken && (
-              <button
-                className={showGraph ? "active" : ""}
-                onClick={() => {
-                  setShowGraph((g) => !g);
-                  setSidebarOpen(false);
-                }}
-              >
-                <span className="nav-icon" aria-hidden="true">
-                  🕸
-                </span>
-                Graph
-              </button>
-            )}
+            <button
+              className={showGraph ? "active" : ""}
+              onClick={() => {
+                setShowGraph((g) => !g);
+                setSidebarOpen(false);
+              }}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🕸
+              </span>
+              Graph
+            </button>
             {types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
               <select
                 className="type-filter nav-more-types"
@@ -624,7 +645,7 @@ export default function App() {
                 >
                   <div className="note-title">{n.title}</div>
                   {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
-                  {canWrite && (
+                  {canFavorite && (
                     <button
                       className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
                       onClick={(e) => {
