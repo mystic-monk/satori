@@ -26,6 +26,7 @@ import GraphView from "./GraphView";
 const CanvasNote = lazy(() => import("./CanvasNote"));
 import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
+import ConfirmDialog from "./ConfirmDialog";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter } from "./frontmatter";
@@ -72,6 +73,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => getStoredTheme());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const [localSession, setLocalSession] = useState<CollabSession | null>(null);
   const [raw, setRaw] = useState("");
@@ -270,9 +272,9 @@ export default function App() {
     openNote(p);
   }
 
-  async function onDelete() {
+  async function confirmDelete() {
+    setDeleteConfirmOpen(false);
     if (!activePath) return;
-    if (!window.confirm(`Delete ${activePath}?`)) return;
     const path = activePath;
     setActivePath(null); // tears down the collab session before the file goes away
     await deleteNoteApi(path);
@@ -393,7 +395,7 @@ export default function App() {
                 </>
               )}
               {role !== "owner" && <span className="role-badge">{role}</span>}
-              {role === "owner" && <button onClick={onDelete}>Delete</button>}
+              {role === "owner" && <button onClick={() => setDeleteConfirmOpen(true)}>Delete</button>}
             </div>
             {role === "owner" && (
               <div className="cloud-bar-wrap">
@@ -467,6 +469,16 @@ export default function App() {
           <div className="empty-state">Select a note or create a new one.</div>
         )}
       </main>
+      {deleteConfirmOpen && activePath && (
+        <ConfirmDialog
+          title="Delete note?"
+          message={`"${activePath}" will be removed from the vault. This can't be undone from here — the file itself is gone, though it may still be recoverable from your own backups or git history if you keep one.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
