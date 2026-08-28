@@ -18,7 +18,17 @@ import { upsertNoteIndex, resolveShareRole, logHistory, type ShareRole } from ".
 const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
 
-const CRDT_DIR = path.resolve(process.cwd(), ".pkm", "crdt");
+// Deliberately NOT under .pkm/ (the disposable search-cache directory the
+// app itself tells users, via the Reindex button and the tutorial note, is
+// safe to delete any time). Deleting this file while a client still holds
+// state synced from before the deletion is genuinely unsafe: the next
+// connection reseeds a *new*, causally-independent Yjs history from the
+// .md file, and when a stale client (e.g. one that never cleanly
+// disconnected) reconnects, Yjs correctly merges both "insert full text"
+// operations as non-conflicting — silently duplicating the note's content.
+// Found exactly this happening to a real file during testing; see the
+// commit that introduced this comment.
+const CRDT_DIR = path.resolve(process.cwd(), ".pkm-state", "crdt");
 fs.mkdirSync(CRDT_DIR, { recursive: true });
 
 function crdtStatePath(notePath: string): string {
