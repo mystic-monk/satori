@@ -66,7 +66,7 @@ pub fn create_note(state: State<AppState>, path: String, raw: String) -> Result<
 pub fn delete_note(state: State<AppState>, path: String) -> Result<(), String> {
     state.vault.delete(&path)?;
     let conn = state.conn.lock().map_err(lock_err)?;
-    db::remove_note_index(&conn, &state.vault, &path)
+    db::remove_note_index(&conn, &path)
 }
 
 #[tauri::command]

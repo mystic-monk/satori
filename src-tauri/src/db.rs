@@ -47,7 +47,8 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
         CREATE TABLE IF NOT EXISTS links (
             source TEXT NOT NULL,
             target TEXT NOT NULL,
-            embed INTEGER NOT NULL
+            embed INTEGER NOT NULL,
+            UNIQUE(source, target, embed)
         );
         CREATE INDEX IF NOT EXISTS links_source ON links(source);
         CREATE INDEX IF NOT EXISTS links_target ON links(target);
@@ -133,17 +134,36 @@ fn insert_into_index(conn: &Connection, vault: &Vault, rel_path: &str) -> Result
     Ok(())
 }
 
-// Link resolution needs the full note set (a ref can be a title, resolved
-// against every other note), so — same as the Node version — it's always
-// recomputed for the whole vault rather than incrementally.
+fn build_resolution_maps(all: &[NoteListItem]) -> (HashMap<String, String>, HashMap<String, String>) {
+    let mut by_clean_path = HashMap::new();
+    let mut by_title = HashMap::new();
+    for n in all {
+        by_clean_path.insert(n.path.trim_end_matches(".md").to_string(), n.path.clone());
+        by_title.insert(n.title.to_lowercase(), n.path.clone());
+    }
+    (by_clean_path, by_title)
+}
+
+fn resolve_ref(
+    reference: &str,
+    by_clean_path: &HashMap<String, String>,
+    by_title: &HashMap<String, String>,
+) -> Option<String> {
+    let clean = reference.trim_end_matches(".md");
+    by_clean_path
+        .get(clean)
+        .or_else(|| by_title.get(&reference.to_lowercase()))
+        .cloned()
+}
+
+// Full rebuild: every note's [[refs]] can resolve by title, so a title
+// change anywhere can change how OTHER notes' links resolve — this is the
+// only case that genuinely needs the whole vault re-read. Same tradeoff as
+// server/db.ts: O(n) in note count and vault size, only called on note
+// creation or rename, not on every save.
 fn rebuild_links(conn: &Connection, vault: &Vault) -> Result<(), String> {
     let all = list_notes_from_index(conn, None)?;
-    let mut by_clean_path: HashMap<String, &NoteListItem> = HashMap::new();
-    let mut by_title: HashMap<String, &NoteListItem> = HashMap::new();
-    for n in &all {
-        by_clean_path.insert(n.path.trim_end_matches(".md").to_string(), n);
-        by_title.insert(n.title.to_lowercase(), n);
-    }
+    let (by_clean_path, by_title) = build_resolution_maps(&all);
 
     conn.execute("DELETE FROM links", [])
         .map_err(|e| e.to_string())?;
@@ -154,15 +174,11 @@ fn rebuild_links(conn: &Connection, vault: &Vault) -> Result<(), String> {
         };
         let parsed = frontmatter::parse(&raw);
         for link_ref in links::extract_wikilink_refs(&parsed.body) {
-            let clean = link_ref.reference.trim_end_matches(".md");
-            let target = by_clean_path
-                .get(clean)
-                .or_else(|| by_title.get(&link_ref.reference.to_lowercase()));
-            if let Some(target_note) = target {
-                if target_note.path != note.path {
+            if let Some(target_path) = resolve_ref(&link_ref.reference, &by_clean_path, &by_title) {
+                if target_path != note.path {
                     conn.execute(
-                        "INSERT INTO links (source, target, embed) VALUES (?1, ?2, ?3)",
-                        params![note.path, target_note.path, link_ref.embed as i32],
+                        "INSERT OR IGNORE INTO links (source, target, embed) VALUES (?1, ?2, ?3)",
+                        params![note.path, target_path, link_ref.embed as i32],
                     )
                     .map_err(|e| e.to_string())?;
                 }
@@ -172,16 +188,70 @@ fn rebuild_links(conn: &Connection, vault: &Vault) -> Result<(), String> {
     Ok(())
 }
 
-pub fn upsert_note_index(conn: &Connection, vault: &Vault, rel_path: &str) -> Result<(), String> {
-    delete_from_index(conn, rel_path)?;
-    insert_into_index(conn, vault, rel_path)?;
-    rebuild_links(conn, vault)?;
+// Common case: only this note's body changed, title didn't. Only its own
+// outgoing links can have changed, so this reads exactly one file
+// regardless of vault size, instead of rebuild_links()'s full rescan.
+fn update_outgoing_links(conn: &Connection, vault: &Vault, rel_path: &str) -> Result<(), String> {
+    let all = list_notes_from_index(conn, None)?;
+    let (by_clean_path, by_title) = build_resolution_maps(&all);
+    let raw = match vault.read_raw(rel_path) {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+    let parsed = frontmatter::parse(&raw);
+
+    conn.execute("DELETE FROM links WHERE source = ?1", params![rel_path])
+        .map_err(|e| e.to_string())?;
+    for link_ref in links::extract_wikilink_refs(&parsed.body) {
+        if let Some(target_path) = resolve_ref(&link_ref.reference, &by_clean_path, &by_title) {
+            if target_path != rel_path {
+                conn.execute(
+                    "INSERT OR IGNORE INTO links (source, target, embed) VALUES (?1, ?2, ?3)",
+                    params![rel_path, target_path, link_ref.embed as i32],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
     Ok(())
 }
 
-pub fn remove_note_index(conn: &Connection, vault: &Vault, rel_path: &str) -> Result<(), String> {
+fn get_title(conn: &Connection, rel_path: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT title FROM notes WHERE path = ?1",
+        params![rel_path],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+pub fn upsert_note_index(conn: &Connection, vault: &Vault, rel_path: &str) -> Result<(), String> {
+    let old_title = get_title(conn, rel_path);
     delete_from_index(conn, rel_path)?;
-    rebuild_links(conn, vault)?;
+    insert_into_index(conn, vault, rel_path)?;
+    // A brand-new note (old_title is None) needs the full rebuild too: it
+    // may be the resolution target for [[refs]] in notes that already
+    // exist and previously pointed at nothing.
+    if old_title != get_title(conn, rel_path) {
+        rebuild_links(conn, vault)?;
+    } else {
+        update_outgoing_links(conn, vault, rel_path)?;
+    }
+    Ok(())
+}
+
+pub fn remove_note_index(conn: &Connection, rel_path: &str) -> Result<(), String> {
+    delete_from_index(conn, rel_path)?;
+    // This note's own outgoing links disappear with it; any other note's
+    // link that targeted it becomes a dangling row pointing at a path no
+    // longer in `notes` — harmless for get_backlinks() (joins against
+    // notes), but get_all_links() (the graph) returns raw rows, so clean
+    // up both directions explicitly rather than leaving stale edges.
+    conn.execute(
+        "DELETE FROM links WHERE source = ?1 OR target = ?1",
+        params![rel_path],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

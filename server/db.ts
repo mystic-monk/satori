@@ -57,7 +57,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS links (
     source TEXT NOT NULL,
     target TEXT NOT NULL,
-    embed INTEGER NOT NULL
+    embed INTEGER NOT NULL,
+    UNIQUE(source, target, embed)
   );
   CREATE INDEX IF NOT EXISTS links_source ON links(source);
   CREATE INDEX IF NOT EXISTS links_target ON links(target);
@@ -81,23 +82,33 @@ function insertIntoIndex(relPath: string) {
   );
 }
 
-// Link resolution needs the full note set (a ref can be a title, resolved
-// against every other note), so it's always recomputed for the whole vault
-// rather than incrementally — cheap at personal-vault scale, and it keeps
-// this cache trivially correct instead of subtly stale.
-function rebuildLinks(): void {
+function buildResolutionMaps() {
   const all = listNotesFromIndex();
-  const byCleanPath = new Map(all.map((n) => [n.path.replace(/\.md$/, ""), n]));
-  const byTitle = new Map(all.map((n) => [n.title.toLowerCase(), n]));
+  return {
+    byCleanPath: new Map(all.map((n) => [n.path.replace(/\.md$/, ""), n])),
+    byTitle: new Map(all.map((n) => [n.title.toLowerCase(), n])),
+  };
+}
 
-  function resolveRef(ref: string): string | null {
-    const clean = ref.replace(/\.md$/, "");
-    return byCleanPath.get(clean)?.path ?? byTitle.get(ref.toLowerCase())?.path ?? null;
-  }
+function resolveRefAgainst(
+  ref: string,
+  maps: ReturnType<typeof buildResolutionMaps>
+): string | null {
+  const clean = ref.replace(/\.md$/, "");
+  return maps.byCleanPath.get(clean)?.path ?? maps.byTitle.get(ref.toLowerCase())?.path ?? null;
+}
 
+// Full rebuild: every note's [[refs]] can resolve by title, so a title
+// change anywhere can change how OTHER notes' links resolve — this is the
+// only case that genuinely needs the whole vault re-read. O(n) in note
+// count and total vault size; only called on note creation or rename, not
+// on every save.
+function rebuildLinks(): void {
+  const maps = buildResolutionMaps();
+  const all = listNotesFromIndex();
   const tx = db.transaction(() => {
     db.exec("DELETE FROM links");
-    const insert = db.prepare("INSERT INTO links (source, target, embed) VALUES (?, ?, ?)");
+    const insert = db.prepare("INSERT OR IGNORE INTO links (source, target, embed) VALUES (?, ?, ?)");
     for (const note of all) {
       let raw: string;
       try {
@@ -107,7 +118,7 @@ function rebuildLinks(): void {
       }
       const { body } = parseNote(note.path, raw);
       for (const { ref, embed } of extractWikilinkRefs(body)) {
-        const target = resolveRef(ref);
+        const target = resolveRefAgainst(ref, maps);
         if (target && target !== note.path) insert.run(note.path, target, embed ? 1 : 0);
       }
     }
@@ -115,18 +126,62 @@ function rebuildLinks(): void {
   tx();
 }
 
+// Common case: only this note's body changed, title didn't. Only this
+// note's own outgoing links can have changed — nothing else in the vault
+// depends on this note's body — so this reads exactly one file regardless
+// of how large the vault is, instead of rebuildLinks()'s full rescan.
+function updateOutgoingLinks(relPath: string): void {
+  const maps = buildResolutionMaps();
+  let raw: string;
+  try {
+    raw = readNoteRaw(relPath);
+  } catch {
+    return;
+  }
+  const { body } = parseNote(relPath, raw);
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM links WHERE source = ?").run(relPath);
+    const insert = db.prepare("INSERT OR IGNORE INTO links (source, target, embed) VALUES (?, ?, ?)");
+    for (const { ref, embed } of extractWikilinkRefs(body)) {
+      const target = resolveRefAgainst(ref, maps);
+      if (target && target !== relPath) insert.run(relPath, target, embed ? 1 : 0);
+    }
+  });
+  tx();
+}
+
+function getTitle(relPath: string): string | undefined {
+  const row = db.prepare("SELECT title FROM notes WHERE path = ?").get(relPath) as
+    | { title: string }
+    | undefined;
+  return row?.title;
+}
+
 export function upsertNoteIndex(relPath: string): void {
+  const oldTitle = getTitle(relPath);
   const tx = db.transaction(() => {
     deleteFromIndex(relPath);
     insertIntoIndex(relPath);
   });
   tx();
-  rebuildLinks();
+  // A brand-new note (oldTitle undefined) needs the full rebuild too: it
+  // may be the resolution target for [[refs]] in notes that already exist
+  // and previously pointed at nothing.
+  if (oldTitle !== getTitle(relPath)) {
+    rebuildLinks();
+  } else {
+    updateOutgoingLinks(relPath);
+  }
 }
 
 export function removeNoteIndex(relPath: string): void {
   deleteFromIndex(relPath);
-  rebuildLinks();
+  // This note's own outgoing links disappear with it; any other note's
+  // link that targeted it becomes a dangling row pointing at a path no
+  // longer in `notes` — harmless for getBacklinks() (joins against
+  // notes), but getAllLinks() (the graph) returns raw rows, so clean up
+  // both directions explicitly rather than leaving stale edges.
+  db.prepare("DELETE FROM links WHERE source = ? OR target = ?").run(relPath, relPath);
 }
 
 export function rebuildIndex(): { count: number } {
