@@ -366,30 +366,37 @@ export default function App() {
               {role === "owner" && <button onClick={onDelete}>Delete</button>}
             </div>
             {role === "owner" && (
-              <div className="cloud-bar">
-                <input
-                  className="cloud-input"
-                  placeholder={`Room (default: ${activePath})`}
-                  value={cloudRoom}
-                  onChange={(e) => setCloudRoom(e.target.value)}
-                  disabled={cloudConnected}
-                />
-                <input
-                  className="cloud-input"
-                  type="password"
-                  placeholder="Shared passphrase"
-                  value={cloudPassphrase}
-                  onChange={(e) => setCloudPassphrase(e.target.value)}
-                  disabled={cloudConnected}
-                />
-                <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
-                  {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
-                </button>
-                {cloudConnected && (
-                  <span className={`cloud-status ${cloudStatus === "decrypt-failed" ? "cloud-status-error" : ""}`}>
-                    {cloudStatus === "decrypt-failed" ? "wrong passphrase — can't decrypt peer data" : cloudStatus}
-                  </span>
-                )}
+              <div className="cloud-bar-wrap">
+                <div className="cloud-bar">
+                  <input
+                    className="cloud-input"
+                    placeholder={`Room (default: ${activePath})`}
+                    value={cloudRoom}
+                    onChange={(e) => setCloudRoom(e.target.value)}
+                    disabled={cloudConnected}
+                  />
+                  <input
+                    className="cloud-input"
+                    type="password"
+                    placeholder="Shared passphrase"
+                    value={cloudPassphrase}
+                    onChange={(e) => setCloudPassphrase(e.target.value)}
+                    disabled={cloudConnected}
+                  />
+                  <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
+                    {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
+                  </button>
+                  {cloudConnected && (
+                    <span className={`cloud-status ${cloudStatus === "decrypt-failed" ? "cloud-status-error" : ""}`}>
+                      {cloudStatus === "decrypt-failed" ? "wrong passphrase — can't decrypt peer data" : cloudStatus}
+                    </span>
+                  )}
+                </div>
+                <p className="cloud-warning">
+                  ⚠ Cloud sync has no view/edit separation yet — anyone with this passphrase can read <em>and
+                  write</em>, unlike the Share panel's local roles below. Only share it with people you'd trust to
+                  edit.
+                </p>
               </div>
             )}
             <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
