@@ -104,6 +104,20 @@ export default function App() {
     }
   }, []);
 
+  // First-run onboarding: open the Tutorial note automatically once, so a
+  // new user doesn't have to already know it's there to find it. Skipped
+  // if something else already claimed activePath (e.g. a share link from
+  // the effect above), and only fires once per browser (localStorage flag).
+  useEffect(() => {
+    if (activePath || notes.length === 0) return;
+    const key = "pkm-onboarded";
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, "1");
+    const tutorial = notes.find((n) => n.path === "tutorial.md");
+    if (tutorial) openNote(tutorial.path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, activePath]);
+
   useEffect(() => {
     applyTheme(themeId);
     setMermaidDark(isDarkTheme(themeId));
