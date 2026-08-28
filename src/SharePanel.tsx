@@ -69,11 +69,16 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
       {open && (
         <div className="share-body">
           <div className="share-create">
-            <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)}>
+            <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)} aria-label="New share link role">
               <option value="view">Can view</option>
               <option value="edit">Can edit</option>
             </select>
-            <input placeholder="Label (optional)" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <input
+              placeholder="Label (optional)"
+              aria-label="New share link label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
             <button onClick={onCreate}>Create link</button>
           </div>
           {justCreated && (
@@ -90,7 +95,11 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
               <li key={s.token}>
                 <span className="share-label">{s.label}</span>
                 <span className="share-role">{ROLE_LABEL[s.role]}</span>
-                <button className="share-revoke" onClick={() => onRevoke(s.token)}>
+                <button
+                  className="share-revoke"
+                  onClick={() => onRevoke(s.token)}
+                  aria-label={`Revoke share "${s.label}"`}
+                >
                   Revoke
                 </button>
               </li>

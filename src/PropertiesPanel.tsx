@@ -106,7 +106,7 @@ function PropertyRow({
       <label className="property-key">{propKey}</label>
       {control}
       {!readOnly && (
-        <button className="property-remove" onClick={onRemove} title="Remove property">
+        <button className="property-remove" onClick={onRemove} title="Remove property" aria-label={`Remove property ${propKey}`}>
           ×
         </button>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchBacklinks, type BacklinkItem } from "./api";
+import { activateOnEnterOrSpace } from "./a11y";
 
 interface BacklinksProps {
   path: string;
@@ -27,7 +28,13 @@ export default function Backlinks({ path, onNavigate, shareToken }: BacklinksPro
   return (
     <ul className="backlinks-list">
       {items.map((item) => (
-        <li key={item.path} onClick={() => onNavigate(item.path)}>
+        <li
+          key={item.path}
+          onClick={() => onNavigate(item.path)}
+          onKeyDown={(e) => activateOnEnterOrSpace(e, () => onNavigate(item.path))}
+          role="button"
+          tabIndex={0}
+        >
           <span className="backlink-title">{item.title}</span>
           {item.embed && <span className="backlink-embed-tag">embed</span>}
         </li>

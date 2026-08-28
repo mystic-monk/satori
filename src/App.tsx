@@ -20,6 +20,7 @@ import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./col
 // CanvasNote/Excalidraw split above.
 import type { CloudStatus } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
+import { activateOnEnterOrSpace } from "./a11y";
 import Editor from "./Editor";
 import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
@@ -354,6 +355,7 @@ export default function App() {
             <input
               className="search-input"
               placeholder="Search notes…"
+              aria-label="Search notes"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -379,13 +381,27 @@ export default function App() {
         <ul className="note-list">
           {results
             ? results.map((r) => (
-                <li key={r.path} className={r.path === activePath ? "active" : ""} onClick={() => openNote(r.path)}>
+                <li
+                  key={r.path}
+                  className={r.path === activePath ? "active" : ""}
+                  onClick={() => openNote(r.path)}
+                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(r.path))}
+                  role="button"
+                  tabIndex={0}
+                >
                   <div className="note-title">{r.title}</div>
                   <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
                 </li>
               ))
             : notes.map((n) => (
-                <li key={n.path} className={n.path === activePath ? "active" : ""} onClick={() => openNote(n.path)}>
+                <li
+                  key={n.path}
+                  className={n.path === activePath ? "active" : ""}
+                  onClick={() => openNote(n.path)}
+                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                  role="button"
+                  tabIndex={0}
+                >
                   <div className="note-title">{n.title}</div>
                   {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
                 </li>
@@ -462,6 +478,7 @@ export default function App() {
                   <input
                     className="cloud-input"
                     placeholder="Relay server (ws://host:port)"
+                    aria-label="Cloud sync relay server address"
                     value={relayUrl}
                     onChange={(e) => {
                       setRelayUrl(e.target.value);
@@ -472,6 +489,7 @@ export default function App() {
                   <input
                     className="cloud-input"
                     placeholder={`Room (default: ${activePath})`}
+                    aria-label="Cloud sync room name"
                     value={cloudRoom}
                     onChange={(e) => setCloudRoom(e.target.value)}
                     disabled={cloudConnected}
@@ -480,6 +498,7 @@ export default function App() {
                     className="cloud-input"
                     type="password"
                     placeholder="Shared passphrase"
+                    aria-label="Cloud sync shared passphrase"
                     value={cloudPassphrase}
                     onChange={(e) => setCloudPassphrase(e.target.value)}
                     disabled={cloudConnected}

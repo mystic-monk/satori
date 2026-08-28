@@ -30,9 +30,20 @@ export default function ConfirmDialog({
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
-        <h3 className="modal-title">{title}</h3>
-        <p className="modal-message">{message}</p>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
+      >
+        <h3 className="modal-title" id="confirm-dialog-title">
+          {title}
+        </h3>
+        <p className="modal-message" id="confirm-dialog-message">
+          {message}
+        </p>
         <div className="modal-actions">
           <button onClick={onCancel}>{cancelLabel}</button>
           <button className={danger ? "modal-danger" : ""} onClick={onConfirm} autoFocus>
