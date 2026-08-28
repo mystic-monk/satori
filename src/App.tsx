@@ -21,6 +21,7 @@ import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./col
 import type { CloudStatus } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
 import { activateOnEnterOrSpace } from "./a11y";
+import { APP_VERSION } from "./version";
 import Editor from "./Editor";
 import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
@@ -431,6 +432,7 @@ export default function App() {
             <button onClick={onReindex}>Reindex</button>
           </div>
         )}
+        <div className="sidebar-version">pkm v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
       <main className="editor-pane">
         {showGraph ? (
