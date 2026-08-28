@@ -1,3 +1,5 @@
+import { IS_TAURI, invoke } from "./platform";
+
 export interface NoteListItem {
   path: string;
   title: string;
@@ -44,32 +46,56 @@ function encodePath(p: string): string {
 }
 
 export async function fetchNotes(type?: string): Promise<NoteListItem[]> {
+  if (IS_TAURI) return invoke("list_notes", { typeFilter: type ?? null });
   const res = await fetch(type ? `/api/notes?type=${encodeURIComponent(type)}` : "/api/notes");
   return res.json();
 }
 
 export async function fetchTypes(): Promise<{ type: string; count: number }[]> {
+  if (IS_TAURI) return invoke("list_types");
   const res = await fetch("/api/types");
   return res.json();
 }
 
 export async function fetchBacklinks(p: string): Promise<BacklinkItem[]> {
+  if (IS_TAURI) return invoke("get_backlinks", { path: p });
   const res = await fetch(`/api/backlinks/${encodePath(p)}`);
   return res.json();
 }
 
 export async function fetchLinks(): Promise<LinkEdge[]> {
+  if (IS_TAURI) return invoke("get_links");
   const res = await fetch("/api/links");
   return res.json();
 }
 
 export async function fetchNote(p: string): Promise<{ path: string; raw: string }> {
+  if (IS_TAURI) return invoke("read_note", { path: p });
   const res = await fetch(`/api/notes/${encodePath(p)}`);
   if (!res.ok) throw new Error("not found");
   return res.json();
 }
 
+// Only used by the Tauri-mode local editing session (src/collab.ts) — the
+// browser deployment persists edits through the CRDT collab server instead,
+// never by PUT-ing raw content directly.
+export async function writeNoteApi(p: string, raw: string): Promise<void> {
+  if (IS_TAURI) {
+    await invoke("write_note", { path: p, raw });
+    return;
+  }
+  await fetch(`/api/notes/${encodePath(p)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+}
+
 export async function createNote(p: string, raw: string): Promise<void> {
+  if (IS_TAURI) {
+    await invoke("create_note", { path: p, raw });
+    return;
+  }
   await fetch("/api/notes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -78,26 +104,34 @@ export async function createNote(p: string, raw: string): Promise<void> {
 }
 
 export async function deleteNoteApi(p: string): Promise<void> {
+  if (IS_TAURI) {
+    await invoke("delete_note", { path: p });
+    return;
+  }
   await fetch(`/api/notes/${encodePath(p)}`, { method: "DELETE" });
 }
 
 export async function search(q: string): Promise<SearchResult[]> {
+  if (IS_TAURI) return invoke("search_notes", { query: q });
   const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
   return res.json();
 }
 
 export async function reindex(): Promise<{ count: number }> {
+  if (IS_TAURI) return invoke("reindex");
   const res = await fetch("/api/reindex", { method: "POST" });
   return res.json();
 }
 
 export async function fetchRole(p: string, token: string | null): Promise<ShareRole | "owner"> {
+  if (IS_TAURI) return invoke("resolve_role", { path: p, token });
   const res = await fetch(`/api/role/${encodePath(p)}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
   const data = await res.json();
   return data.role;
 }
 
 export async function createShare(p: string, role: ShareRole, label: string): Promise<Share> {
+  if (IS_TAURI) return invoke("create_share", { path: p, role, label });
   const res = await fetch("/api/share", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -107,15 +141,21 @@ export async function createShare(p: string, role: ShareRole, label: string): Pr
 }
 
 export async function fetchShares(p: string): Promise<Share[]> {
+  if (IS_TAURI) return invoke("list_shares", { path: p });
   const res = await fetch(`/api/shares/${encodePath(p)}`);
   return res.json();
 }
 
 export async function revokeShareApi(token: string): Promise<void> {
+  if (IS_TAURI) {
+    await invoke("revoke_share", { token });
+    return;
+  }
   await fetch(`/api/share/${encodeURIComponent(token)}`, { method: "DELETE" });
 }
 
 export async function fetchHistory(p: string): Promise<HistoryEntry[]> {
+  if (IS_TAURI) return invoke("get_history", { path: p });
   const res = await fetch(`/api/history/${encodePath(p)}`);
   return res.json();
 }

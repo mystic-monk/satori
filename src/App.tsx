@@ -13,8 +13,9 @@ import {
   type SearchResult,
   type ShareRole,
 } from "./api";
-import { openLocalCollab, type CollabSession } from "./collab";
+import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
 import { openCloudCollab, type CloudStatus } from "./cloud-collab";
+import { IS_TAURI } from "./platform";
 import Editor from "./Editor";
 import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
@@ -75,7 +76,7 @@ export default function App() {
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const [localSession, setLocalSession] = useState<CollabSession | null>(null);
+  const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [role, setRole] = useState<ShareRole | "owner">("owner");
@@ -136,55 +137,78 @@ export default function App() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Opens the local Yjs session for the active note and mirrors its live
-  // text into `raw` state for the preview/properties panel/export to read.
+  // Opens the local editing session for the active note: a real-time
+  // synced Yjs doc over the local collab server in the browser deployment,
+  // or a single local Yjs doc that debounce-persists via Tauri commands in
+  // the native deployment (no local collab server ported to Rust yet — see
+  // collab.ts's openTauriLocalSession). Mirrors the live text into `raw`
+  // state for the preview/properties panel/export to read either way.
   useEffect(() => {
     if (!activePath) return;
+    let cancelled = false;
+    let session: CollabHandle | null = null;
+    let unbindText: (() => void) | null = null;
 
     setRole("owner");
     fetchRole(activePath, shareToken).then(setRole);
 
     const displayName = getDisplayName();
-    const session = openLocalCollab(activePath, { token: shareToken, name: displayName });
-    session.provider.awareness.setLocalStateField("user", {
-      name: displayName,
-      color: getCursorColor(),
-    });
-    setLocalSession(session);
-    setStatus("connecting…");
-    setPeerCount(0);
-    let hasSyncedOnce = false;
 
-    const onTextChange = () => setRaw(session.ytext.toString());
-    onTextChange();
-    session.ytext.observe(onTextChange);
-
-    session.provider.on("status", ({ status: s }: { status: string }) => {
-      if (s === "connected") {
-        setStatus("connected");
-      } else if (s === "connecting") {
-        // y-websocket emits "connecting" for the initial connect too, not
-        // just reconnects — only call it "reconnecting" once we know this
-        // session was synced before and then lost that.
-        setStatus(hasSyncedOnce ? "reconnecting…" : "connecting…");
+    async function open(path: string) {
+      if (IS_TAURI) {
+        setStatus("loading…");
+        const note = await fetchNote(path);
+        if (cancelled) return;
+        session = openTauriLocalSession(path, note.raw);
+        setStatus("local");
       } else {
-        setStatus(s);
+        session = openLocalCollab(path, { token: shareToken, name: displayName });
+        setStatus("connecting…");
       }
-    });
-    session.provider.on("sync", (synced: boolean) => {
-      if (synced) {
-        hasSyncedOnce = true;
-        setStatus("synced");
+
+      session.awareness.setLocalStateField("user", { name: displayName, color: getCursorColor() });
+      setLocalSession(session);
+      setPeerCount(0);
+
+      const activeSession = session;
+      const onTextChange = () => setRaw(activeSession.ytext.toString());
+      onTextChange();
+      activeSession.ytext.observe(onTextChange);
+      unbindText = () => activeSession.ytext.unobserve(onTextChange);
+
+      if (activeSession.provider) {
+        let hasSyncedOnce = false;
+        activeSession.provider.on("status", ({ status: s }: { status: string }) => {
+          if (s === "connected") {
+            setStatus("connected");
+          } else if (s === "connecting") {
+            // y-websocket emits "connecting" for the initial connect too,
+            // not just reconnects — only call it "reconnecting" once we
+            // know this session was synced before and then lost that.
+            setStatus(hasSyncedOnce ? "reconnecting…" : "connecting…");
+          } else {
+            setStatus(s);
+          }
+        });
+        activeSession.provider.on("sync", (synced: boolean) => {
+          if (synced) {
+            hasSyncedOnce = true;
+            setStatus("synced");
+          }
+        });
+        activeSession.awareness.on("change", () => {
+          setPeerCount(Math.max(0, activeSession.awareness.getStates().size - 1));
+        });
       }
-    });
-    session.provider.awareness.on("change", () => {
-      setPeerCount(Math.max(0, session.provider.awareness.getStates().size - 1));
-    });
-    session.doc.on("update", () => loadNotes());
+      activeSession.doc.on("update", () => loadNotes());
+    }
+
+    open(activePath);
 
     return () => {
-      session.ytext.unobserve(onTextChange);
-      session.destroy();
+      cancelled = true;
+      unbindText?.();
+      session?.destroy();
       setLocalSession(null);
       setRaw("");
     };
@@ -446,7 +470,7 @@ export default function App() {
                       <Editor
                         key={activePath}
                         ytext={localSession.ytext}
-                        awareness={localSession.provider.awareness}
+                        awareness={localSession.awareness}
                         readOnly={role === "view" || role === "comment"}
                         dark={isDarkTheme(themeId)}
                       />
