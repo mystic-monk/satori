@@ -27,10 +27,16 @@ pub fn run() {
             // vault/ next to the way the Node deployment does.
             let app_dir = app.path().app_data_dir()?;
             let vault_dir = app_dir.join("vault");
-            let db_path = app_dir.join("index.sqlite");
+            // Separate directory from the index cache on purpose — see the
+            // comment on db::open_state.
+            let index_path = app_dir.join("index-cache").join("index.sqlite");
+            let state_path = app_dir.join("state").join("state.sqlite");
+            std::fs::create_dir_all(index_path.parent().unwrap())?;
+            std::fs::create_dir_all(state_path.parent().unwrap())?;
 
             let vault = Vault::new(vault_dir);
-            let conn = db::open(&db_path).expect("failed to open sqlite index");
+            let conn = db::open_index(&index_path).expect("failed to open sqlite index");
+            let state_conn = db::open_state(&state_path).expect("failed to open sqlite state db");
 
             // Same bootstrap rule as server/index.ts: the SQLite index is a
             // cache, rebuild it if it's empty but the vault has notes.
@@ -44,6 +50,7 @@ pub fn run() {
             app.manage(AppState {
                 vault,
                 conn: std::sync::Mutex::new(conn),
+                state_conn: std::sync::Mutex::new(state_conn),
             });
 
             Ok(())

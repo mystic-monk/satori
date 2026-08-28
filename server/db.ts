@@ -7,10 +7,24 @@ import { extractWikilinkRefs } from "./links.js";
 const INDEX_DIR = path.resolve(process.cwd(), ".pkm");
 const INDEX_PATH = path.join(INDEX_DIR, "index.sqlite");
 
+// Genuine app state — who's been granted access, a log of past saves —
+// with no representation in the plaintext markdown, so it can't be
+// rebuilt the way notes/notes_fts/links can. Deliberately a separate file
+// in a separate, differently-named directory from the .pkm/ cache: the
+// whole point is that deleting .pkm/ (which the app itself invites, both
+// via the Reindex button and the tutorial note's own "delete it any time"
+// text) must never silently discard sharing config or history.
+const STATE_DIR = path.resolve(process.cwd(), ".pkm-state");
+const STATE_PATH = path.join(STATE_DIR, "state.sqlite");
+
 fs.mkdirSync(INDEX_DIR, { recursive: true });
+fs.mkdirSync(STATE_DIR, { recursive: true });
 
 export const db = new Database(INDEX_PATH);
 db.pragma("journal_mode = WAL");
+
+const stateDb = new Database(STATE_PATH);
+stateDb.pragma("journal_mode = WAL");
 
 // This index is a rebuildable cache over the markdown files in vault/ —
 // the markdown files remain the source of truth. See rebuildIndex().
@@ -31,13 +45,17 @@ db.exec(`
     tokenize = 'porter unicode61'
   );
 
-  -- Unlike notes/notes_fts/links above, shares and history are NOT
-  -- rebuildable from the vault files — they're genuine app state (who has
-  -- been granted access, a log of past saves) with no representation in
-  -- plaintext markdown. They currently live in the same .pkm/ cache dir as
-  -- the rebuildable index, which is a known wart: deleting .pkm/ to "rebuild
-  -- the cache" also silently discards sharing config and history. Flagged
-  -- as a v2 cleanup — this should be its own persistent store.
+  CREATE TABLE IF NOT EXISTS links (
+    source TEXT NOT NULL,
+    target TEXT NOT NULL,
+    embed INTEGER NOT NULL,
+    UNIQUE(source, target, embed)
+  );
+  CREATE INDEX IF NOT EXISTS links_source ON links(source);
+  CREATE INDEX IF NOT EXISTS links_target ON links(target);
+`);
+
+stateDb.exec(`
   CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
     path TEXT NOT NULL,
@@ -53,15 +71,6 @@ db.exec(`
     authors TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS history_path ON history(path);
-
-  CREATE TABLE IF NOT EXISTS links (
-    source TEXT NOT NULL,
-    target TEXT NOT NULL,
-    embed INTEGER NOT NULL,
-    UNIQUE(source, target, embed)
-  );
-  CREATE INDEX IF NOT EXISTS links_source ON links(source);
-  CREATE INDEX IF NOT EXISTS links_target ON links(target);
 `);
 
 function deleteFromIndex(relPath: string) {
@@ -346,7 +355,7 @@ function randomToken(): string {
 
 export function createShare(notePath: string, role: ShareRole, label: string): Share {
   const share: Share = { token: randomToken(), path: notePath, role, label, createdAt: Date.now() };
-  db.prepare("INSERT INTO shares (token, path, role, label, created_at) VALUES (?, ?, ?, ?, ?)").run(
+  stateDb.prepare("INSERT INTO shares (token, path, role, label, created_at) VALUES (?, ?, ?, ?, ?)").run(
     share.token,
     share.path,
     share.role,
@@ -357,19 +366,19 @@ export function createShare(notePath: string, role: ShareRole, label: string): S
 }
 
 export function listShares(notePath: string): Share[] {
-  const rows = db
+  const rows = stateDb
     .prepare("SELECT token, path, role, label, created_at as createdAt FROM shares WHERE path = ? ORDER BY created_at DESC")
     .all(notePath) as Share[];
   return rows;
 }
 
 export function revokeShare(token: string): void {
-  db.prepare("DELETE FROM shares WHERE token = ?").run(token);
+  stateDb.prepare("DELETE FROM shares WHERE token = ?").run(token);
 }
 
 export function resolveShareRole(notePath: string, token: string | null): ShareRole | "owner" {
   if (!token) return "owner";
-  const row = db.prepare("SELECT role FROM shares WHERE token = ? AND path = ?").get(token, notePath) as
+  const row = stateDb.prepare("SELECT role FROM shares WHERE token = ? AND path = ?").get(token, notePath) as
     | { role: ShareRole }
     | undefined;
   return row?.role ?? "owner";
@@ -386,7 +395,7 @@ export function resolveShareRole(notePath: string, token: string | null): ShareR
 
 export function logHistory(notePath: string, authors: string[]): void {
   if (authors.length === 0) return;
-  db.prepare("INSERT INTO history (path, at, authors) VALUES (?, ?, ?)").run(
+  stateDb.prepare("INSERT INTO history (path, at, authors) VALUES (?, ?, ?)").run(
     notePath,
     Date.now(),
     JSON.stringify(authors)
@@ -399,7 +408,7 @@ export interface HistoryEntry {
 }
 
 export function getHistory(notePath: string): HistoryEntry[] {
-  const rows = db
+  const rows = stateDb
     .prepare("SELECT at, authors FROM history WHERE path = ? ORDER BY at DESC LIMIT 50")
     .all(notePath) as { at: number; authors: string }[];
   return rows.map((r) => ({ at: r.at, authors: JSON.parse(r.authors) }));

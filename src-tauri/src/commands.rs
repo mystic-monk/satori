@@ -89,19 +89,19 @@ pub fn create_share(
     role: String,
     label: String,
 ) -> Result<db::Share, String> {
-    let conn = state.conn.lock().map_err(lock_err)?;
+    let conn = state.state_conn.lock().map_err(lock_err)?;
     db::create_share(&conn, &path, &role, &label)
 }
 
 #[tauri::command]
 pub fn list_shares(state: State<AppState>, path: String) -> Result<Vec<db::Share>, String> {
-    let conn = state.conn.lock().map_err(lock_err)?;
+    let conn = state.state_conn.lock().map_err(lock_err)?;
     db::list_shares(&conn, &path)
 }
 
 #[tauri::command]
 pub fn revoke_share(state: State<AppState>, token: String) -> Result<(), String> {
-    let conn = state.conn.lock().map_err(lock_err)?;
+    let conn = state.state_conn.lock().map_err(lock_err)?;
     db::revoke_share(&conn, &token)
 }
 
@@ -111,12 +111,12 @@ pub fn resolve_role(
     path: String,
     token: Option<String>,
 ) -> Result<String, String> {
-    let conn = state.conn.lock().map_err(lock_err)?;
+    let conn = state.state_conn.lock().map_err(lock_err)?;
     db::resolve_share_role(&conn, &path, token.as_deref())
 }
 
 #[tauri::command]
 pub fn get_history(state: State<AppState>, path: String) -> Result<Vec<db::HistoryEntry>, String> {
-    let conn = state.conn.lock().map_err(lock_err)?;
+    let conn = state.state_conn.lock().map_err(lock_err)?;
     db::get_history(&conn, &path)
 }

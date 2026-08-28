@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .pkm/
+.pkm-state/
 *.log
 
 # Personal notes, not app source — kept out of this repo on purpose.

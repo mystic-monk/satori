@@ -4,19 +4,13 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
-pub fn open(path: &std::path::Path) -> Result<Connection, String> {
+// Rebuildable cache (notes/notes_fts/links) — the markdown files in the
+// vault remain the source of truth, this can be deleted and rebuilt via
+// the reindex command at any time.
+pub fn open_index(path: &std::path::Path) -> Result<Connection, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|e| e.to_string())?;
-    init_schema(&conn)?;
-    Ok(conn)
-}
-
-// Same schema as server/db.ts. shares/history are real app state (who's
-// been granted access, a log of past saves), not rebuildable from the
-// vault the way notes/notes_fts/links are — see the note in db.ts about
-// this being a known wart shared by both implementations.
-fn init_schema(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS notes (
@@ -30,6 +24,30 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
         CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
             path UNINDEXED, title, body, tokenize = 'porter unicode61'
         );
+        CREATE TABLE IF NOT EXISTS links (
+            source TEXT NOT NULL,
+            target TEXT NOT NULL,
+            embed INTEGER NOT NULL,
+            UNIQUE(source, target, embed)
+        );
+        CREATE INDEX IF NOT EXISTS links_source ON links(source);
+        CREATE INDEX IF NOT EXISTS links_target ON links(target);
+        ",
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(conn)
+}
+
+// Genuine app state (shares/history) — no representation in the plaintext
+// vault, so it can't be rebuilt the way the index can. Deliberately a
+// separate database file from open_index's cache: deleting the index to
+// rebuild it must never silently discard sharing config or history.
+pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS shares (
             token TEXT PRIMARY KEY,
             path TEXT NOT NULL,
@@ -44,17 +62,10 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             authors TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS history_path ON history(path);
-        CREATE TABLE IF NOT EXISTS links (
-            source TEXT NOT NULL,
-            target TEXT NOT NULL,
-            embed INTEGER NOT NULL,
-            UNIQUE(source, target, embed)
-        );
-        CREATE INDEX IF NOT EXISTS links_source ON links(source);
-        CREATE INDEX IF NOT EXISTS links_target ON links(target);
         ",
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    Ok(conn)
 }
 
 struct NoteMeta {
