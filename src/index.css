@@ -103,6 +103,12 @@ body {
   padding: 0;
   overflow-y: auto;
   flex: 1;
+  /* Without this, a flex item's default min-height:auto means it won't
+     shrink below its content's natural height — so a long note list
+     grows the whole sidebar instead of scrolling internally, pushing
+     .sidebar-footer down to wherever the list happens to end instead of
+     staying pinned to the bottom of the actual window. */
+  min-height: 0;
 }
 
 .note-list li {
@@ -213,6 +219,7 @@ button:hover {
 
 .cloud-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
@@ -234,7 +241,9 @@ button:hover {
   color: var(--text);
   padding: 5px 7px;
   font-size: 12px;
-  width: 180px;
+  flex: 1 1 140px;
+  min-width: 100px;
+  max-width: 220px;
 }
 
 .cloud-status {
@@ -260,8 +269,26 @@ button:hover {
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
-  padding: 5px 6px;
+  padding: 5px 26px 5px 8px;
   font-size: 12px;
+  /* Custom chevron replaces the OS-native dropdown chrome, which looked
+     out of place against the app's own styled box around it. */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23888' stroke-width='1.5'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 14px;
+  cursor: pointer;
+}
+
+.type-filter:hover {
+  border-color: var(--accent);
+}
+
+.type-filter:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .view-mode-toggle {
@@ -837,15 +864,6 @@ button:hover {
     flex-wrap: wrap;
     row-gap: 6px;
     padding-left: 52px;
-  }
-
-  .cloud-bar {
-    flex-wrap: wrap;
-  }
-
-  .cloud-input {
-    width: auto;
-    flex: 1 1 120px;
   }
 
   .editor-body.view-split {
