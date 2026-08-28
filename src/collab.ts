@@ -20,6 +20,7 @@ export interface CollabHandle {
 export interface LocalCollabOptions {
   token?: string | null; // a share token — see server/collab.ts's role enforcement
   name?: string; // display name, used for presence and change history
+  onDenied?: () => void; // called if the server rejects the token (WS close code 4403)
 }
 
 // Local-mode session: talks to our own local collab relay (server/collab.ts)
@@ -33,6 +34,17 @@ export function openLocalCollab(notePath: string, opts: LocalCollabOptions = {})
   const params: Record<string, string> = { name: opts.name || "Anonymous" };
   if (opts.token) params.token = opts.token;
   const provider = new WebsocketProvider(wsUrl, `collab/${notePath}`, doc, { connect: true, params });
+  // An invalid/revoked token gets the connection closed with 4403 by the
+  // server (server/collab.ts) rather than accepted read-only — without this,
+  // y-websocket's default auto-reconnect would just retry the same rejected
+  // token forever, leaving the UI stuck on "connecting…".
+  provider.on("connection-close", (event: CloseEvent | null) => {
+    if (event?.code === 4403) {
+      provider.shouldConnect = false;
+      provider.disconnect();
+      opts.onDenied?.();
+    }
+  });
   return {
     doc,
     ytext,

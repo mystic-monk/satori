@@ -226,6 +226,10 @@ export function setupCollabServer(server: HttpServer) {
     const token = url.searchParams.get("token");
     const name = url.searchParams.get("name")?.trim() || "Anonymous";
     const role = resolveShareRole(notePath, token);
+    if (role === "denied") {
+      ws.close(4403, "invalid or revoked share token");
+      return;
+    }
 
     const room = getRoom(notePath);
     room.addConn(ws, role, name);

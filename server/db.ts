@@ -376,12 +376,19 @@ export function revokeShare(token: string): void {
   stateDb.prepare("DELETE FROM shares WHERE token = ?").run(token);
 }
 
-export function resolveShareRole(notePath: string, token: string | null): ShareRole | "owner" {
+// No token at all means the request is the local app itself (the owner
+// browsing their own vault) — that's the only case that defaults to
+// "owner". A token that's present but doesn't resolve (wrong path,
+// mistyped, revoked) must fail closed to "denied", never fall back to
+// "owner" — the previous `row?.role ?? "owner"` fallback treated any
+// unresolvable token as full owner access, silently defeating the entire
+// share-role system for anyone who guessed or mistyped a token.
+export function resolveShareRole(notePath: string, token: string | null): ShareRole | "owner" | "denied" {
   if (!token) return "owner";
   const row = stateDb.prepare("SELECT role FROM shares WHERE token = ? AND path = ?").get(token, notePath) as
     | { role: ShareRole }
     | undefined;
-  return row?.role ?? "owner";
+  return row?.role ?? "denied";
 }
 
 // ---- Change history ----

@@ -4,20 +4,21 @@ import { fetchBacklinks, type BacklinkItem } from "./api";
 interface BacklinksProps {
   path: string;
   onNavigate: (path: string) => void;
+  shareToken?: string | null;
 }
 
-export default function Backlinks({ path, onNavigate }: BacklinksProps) {
+export default function Backlinks({ path, onNavigate, shareToken }: BacklinksProps) {
   const [items, setItems] = useState<BacklinkItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    fetchBacklinks(path).then((r) => {
+    fetchBacklinks(path, shareToken).then((r) => {
       if (!cancelled) setItems(r);
     });
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, shareToken]);
 
   if (items.length === 0) {
     return <div className="backlinks-empty">No backlinks yet.</div>;

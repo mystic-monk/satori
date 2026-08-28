@@ -14,8 +14,12 @@ import {
   type ShareRole,
 } from "./api";
 import { openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
-import { openCloudCollab, type CloudStatus } from "./cloud-collab";
-import { IS_TAURI } from "./platform";
+// cloud-collab.ts pulls in crypto.ts -> libsodium-wrappers-sumo (~550KB of
+// WASM) — most users never touch cloud sync, so this is a dynamic import
+// (see the effect below) rather than a static one, same reasoning as the
+// CanvasNote/Excalidraw split above.
+import type { CloudStatus } from "./cloud-collab";
+import { IS_TAURI, defaultRelayUrl } from "./platform";
 import Editor from "./Editor";
 import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
@@ -79,12 +83,15 @@ export default function App() {
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
   const [shareToken, setShareToken] = useState<string | null>(null);
-  const [role, setRole] = useState<ShareRole | "owner">("owner");
+  const [role, setRole] = useState<ShareRole | "owner" | "denied">("owner");
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
   const [cloudConnected, setCloudConnected] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | "">("");
+  // Not a secret — just an address — so localStorage is fine (unlike the
+  // passphrase above, which deliberately stays in-memory only).
+  const [relayUrl, setRelayUrl] = useState(() => localStorage.getItem("pkm-relay-url") || defaultRelayUrl());
 
   const loadNotes = useCallback(async () => {
     setNotes(await fetchNotes(typeFilter || undefined));
@@ -127,7 +134,11 @@ export default function App() {
   }, [themeId]);
 
   useEffect(() => {
-    if (!query.trim()) {
+    // Vault-wide search is an owner-only operation server-side (a share
+    // token only grants access to specific notes, not a search index over
+    // the whole vault) — skip the call entirely for a guest session rather
+    // than let them type into a box that always comes back empty/403.
+    if (!query.trim() || shareToken) {
       setResults(null);
       return;
     }
@@ -135,7 +146,7 @@ export default function App() {
       search(query).then(setResults);
     }, 150);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, shareToken]);
 
   // Opens the local editing session for the active note: a real-time
   // synced Yjs doc over the local collab server in the browser deployment,
@@ -162,7 +173,15 @@ export default function App() {
         session = openTauriLocalSession(path, note.raw);
         setStatus("local");
       } else {
-        session = openLocalCollab(path, { token: shareToken, name: displayName });
+        session = openLocalCollab(path, {
+          token: shareToken,
+          name: displayName,
+          onDenied: () => {
+            if (cancelled) return;
+            setRole("denied");
+            setStatus("access denied");
+          },
+        });
         setStatus("connecting…");
       }
 
@@ -225,7 +244,9 @@ export default function App() {
     let unbridge: (() => void) | null = null;
 
     setCloudStatus("connecting");
-    openCloudCollab(cloudRoom.trim() || activePath, cloudPassphrase, setCloudStatus).then((session) => {
+    import("./cloud-collab").then(({ openCloudCollab }) =>
+      openCloudCollab(cloudRoom.trim() || activePath, cloudPassphrase, relayUrl, setCloudStatus)
+    ).then((session) => {
       if (cancelled) {
         session.destroy();
         return;
@@ -329,12 +350,14 @@ export default function App() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <input
-            className="search-input"
-            placeholder="Search notes…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          {!shareToken && (
+            <input
+              className="search-input"
+              placeholder="Search notes…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
           {types.length > 0 && (
             <select className="type-filter" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option value="">All types</option>
@@ -370,24 +393,36 @@ export default function App() {
           {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
           {!results && notes.length === 0 && <li className="empty-hint">No notes yet.</li>}
         </ul>
-        <div className="sidebar-footer">
-          <button onClick={onNewNote}>+ New note</button>
-          <button onClick={onNewCanvas}>+ Canvas</button>
-          <button onClick={onDailyNote}>Today</button>
-          <button
-            onClick={() => {
-              setShowGraph((g) => !g);
-              setSidebarOpen(false);
-            }}
-          >
-            {showGraph ? "Editor" : "Graph"}
-          </button>
-          <button onClick={onReindex}>Reindex</button>
-        </div>
+        {/* Vault-wide actions — creating notes, reindexing, browsing the
+            link graph — are for the owner's own vault, not something a
+            share-link recipient should see, so they're hidden in guest
+            (shareToken) mode even though the note list above still shows
+            (needed for wikilink/transclusion resolution — see the
+            requireOwner comment in server/index.ts). */}
+        {!shareToken && (
+          <div className="sidebar-footer">
+            <button onClick={onNewNote}>+ New note</button>
+            <button onClick={onNewCanvas}>+ Canvas</button>
+            <button onClick={onDailyNote}>Today</button>
+            <button
+              onClick={() => {
+                setShowGraph((g) => !g);
+                setSidebarOpen(false);
+              }}
+            >
+              {showGraph ? "Editor" : "Graph"}
+            </button>
+            <button onClick={onReindex}>Reindex</button>
+          </div>
+        )}
       </aside>
       <main className="editor-pane">
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} />
+        ) : role === "denied" ? (
+          <div className="access-denied">
+            This share link is invalid or has been revoked — you don't have access to this note.
+          </div>
         ) : activePath && localSession ? (
           <>
             <div className="editor-toolbar">
@@ -426,6 +461,16 @@ export default function App() {
                 <div className="cloud-bar">
                   <input
                     className="cloud-input"
+                    placeholder="Relay server (ws://host:port)"
+                    value={relayUrl}
+                    onChange={(e) => {
+                      setRelayUrl(e.target.value);
+                      localStorage.setItem("pkm-relay-url", e.target.value);
+                    }}
+                    disabled={cloudConnected}
+                  />
+                  <input
+                    className="cloud-input"
                     placeholder={`Room (default: ${activePath})`}
                     value={cloudRoom}
                     onChange={(e) => setCloudRoom(e.target.value)}
@@ -439,7 +484,10 @@ export default function App() {
                     onChange={(e) => setCloudPassphrase(e.target.value)}
                     disabled={cloudConnected}
                   />
-                  <button onClick={() => setCloudConnected((c) => !c)} disabled={!cloudConnected && !cloudPassphrase}>
+                  <button
+                    onClick={() => setCloudConnected((c) => !c)}
+                    disabled={!cloudConnected && (!cloudPassphrase || !relayUrl.trim())}
+                  >
                     {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
                   </button>
                   {cloudConnected && (
@@ -457,7 +505,7 @@ export default function App() {
             )}
             <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
             <SharePanel path={activePath} isOwner={role === "owner"} />
-            <HistoryPanel path={activePath} />
+            <HistoryPanel path={activePath} shareToken={shareToken} />
             {isCanvas ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
                 <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
@@ -478,13 +526,13 @@ export default function App() {
                   )}
                   {viewMode !== "source" && (
                     <div className="editor-preview">
-                      <Preview raw={raw} notes={notes} onNavigate={openNote} />
+                      <Preview raw={raw} notes={notes} onNavigate={openNote} shareToken={shareToken} />
                     </div>
                   )}
                 </div>
                 <div className="backlinks-panel">
                   <div className="backlinks-header">Backlinks</div>
-                  <Backlinks path={activePath} onNavigate={openNote} />
+                  <Backlinks path={activePath} onNavigate={openNote} shareToken={shareToken} />
                 </div>
               </>
             )}

@@ -45,6 +45,10 @@ function encodePath(p: string): string {
   return p.split("/").map(encodeURIComponent).join("/");
 }
 
+function withToken(url: string, token: string | null | undefined): string {
+  return token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url;
+}
+
 export async function fetchNotes(type?: string): Promise<NoteListItem[]> {
   if (IS_TAURI) return invoke("list_notes", { typeFilter: type ?? null });
   const res = await fetch(type ? `/api/notes?type=${encodeURIComponent(type)}` : "/api/notes");
@@ -57,9 +61,9 @@ export async function fetchTypes(): Promise<{ type: string; count: number }[]> {
   return res.json();
 }
 
-export async function fetchBacklinks(p: string): Promise<BacklinkItem[]> {
+export async function fetchBacklinks(p: string, token?: string | null): Promise<BacklinkItem[]> {
   if (IS_TAURI) return invoke("get_backlinks", { path: p });
-  const res = await fetch(`/api/backlinks/${encodePath(p)}`);
+  const res = await fetch(withToken(`/api/backlinks/${encodePath(p)}`, token));
   return res.json();
 }
 
@@ -69,9 +73,9 @@ export async function fetchLinks(): Promise<LinkEdge[]> {
   return res.json();
 }
 
-export async function fetchNote(p: string): Promise<{ path: string; raw: string }> {
+export async function fetchNote(p: string, token?: string | null): Promise<{ path: string; raw: string }> {
   if (IS_TAURI) return invoke("read_note", { path: p });
-  const res = await fetch(`/api/notes/${encodePath(p)}`);
+  const res = await fetch(withToken(`/api/notes/${encodePath(p)}`, token));
   if (!res.ok) throw new Error("not found");
   return res.json();
 }
@@ -123,7 +127,7 @@ export async function reindex(): Promise<{ count: number }> {
   return res.json();
 }
 
-export async function fetchRole(p: string, token: string | null): Promise<ShareRole | "owner"> {
+export async function fetchRole(p: string, token: string | null): Promise<ShareRole | "owner" | "denied"> {
   if (IS_TAURI) return invoke("resolve_role", { path: p, token });
   const res = await fetch(`/api/role/${encodePath(p)}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
   const data = await res.json();
@@ -154,8 +158,8 @@ export async function revokeShareApi(token: string): Promise<void> {
   await fetch(`/api/share/${encodeURIComponent(token)}`, { method: "DELETE" });
 }
 
-export async function fetchHistory(p: string): Promise<HistoryEntry[]> {
+export async function fetchHistory(p: string, token?: string | null): Promise<HistoryEntry[]> {
   if (IS_TAURI) return invoke("get_history", { path: p });
-  const res = await fetch(`/api/history/${encodePath(p)}`);
+  const res = await fetch(withToken(`/api/history/${encodePath(p)}`, token));
   return res.json();
 }

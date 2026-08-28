@@ -21,9 +21,19 @@ export interface CloudSession {
 // Cloud-mode session: same Yjs sync/awareness protocol as local mode
 // (server/collab.ts), but every message is encrypted client-side before it
 // reaches the relay, which only ever forwards ciphertext (server/relay.ts).
+//
+// `relayBase` is the ws(s)://host[:port] the relay is reachable at — it
+// must be passed in, not derived from location.hostname:3001, because that
+// derivation is only ever right in local dev (frontend and API on the same
+// host, API hardcoded to 3001). It breaks for: a packaged Tauri build
+// (no bundled relay process at all — see the long-term "no sidecar"
+// architecture decision), and a production web deploy reverse-proxied
+// behind a different port/host. See relayUrlDefault() below for the one
+// case where the old derivation is still a reasonable guess.
 export async function openCloudCollab(
   room: string,
   passphrase: string,
+  relayBase: string,
   onStatus: (s: CloudStatus) => void
 ): Promise<CloudSession> {
   const key = await deriveKey(passphrase, room);
@@ -31,7 +41,7 @@ export async function openCloudCollab(
   const ytext = doc.getText("content");
   const awareness = new awarenessProtocol.Awareness(doc);
 
-  const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:3001/relay/${encodeURIComponent(room)}`;
+  const wsUrl = `${relayBase.replace(/\/$/, "")}/relay/${encodeURIComponent(room)}`;
   const ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
   let destroyed = false;

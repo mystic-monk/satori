@@ -3,15 +3,16 @@ import { fetchHistory, type HistoryEntry } from "./api";
 
 interface HistoryPanelProps {
   path: string;
+  shareToken?: string | null;
 }
 
-export default function HistoryPanel({ path }: HistoryPanelProps) {
+export default function HistoryPanel({ path, shareToken }: HistoryPanelProps) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
-    if (open) fetchHistory(path).then(setEntries);
-  }, [path, open]);
+    if (open) fetchHistory(path, shareToken).then(setEntries);
+  }, [path, open, shareToken]);
 
   return (
     <div className="history-panel">

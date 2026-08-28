@@ -563,6 +563,17 @@ button:hover {
   color: var(--text-dim);
 }
 
+.access-denied {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
 .role-badge {
   border: 1px solid var(--accent);
   color: var(--accent);

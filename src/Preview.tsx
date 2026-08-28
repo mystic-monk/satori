@@ -22,9 +22,10 @@ interface PreviewProps {
   raw: string;
   notes: NoteListItem[];
   onNavigate: (path: string) => void;
+  shareToken?: string | null;
 }
 
-export default function Preview({ raw, notes, onNavigate }: PreviewProps) {
+export default function Preview({ raw, notes, onNavigate, shareToken }: PreviewProps) {
   const [bodies, setBodies] = useState<Map<string, string>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const resolver = useMemo(() => buildResolver(notes), [notes]);
@@ -39,7 +40,7 @@ export default function Preview({ raw, notes, onNavigate }: PreviewProps) {
     Promise.all(
       missing.map(async (m) => {
         try {
-          const note = await fetchNote(m.path);
+          const note = await fetchNote(m.path, shareToken);
           return [m.path, note.raw] as const;
         } catch {
           return null;
@@ -56,7 +57,7 @@ export default function Preview({ raw, notes, onNavigate }: PreviewProps) {
     return () => {
       cancelled = true;
     };
-  }, [embedRefs, resolver, bodies]);
+  }, [embedRefs, resolver, bodies, shareToken]);
 
   const html = useMemo(() => {
     const env: RenderEnv = { resolver, bodies, pathStack: new Set() };
