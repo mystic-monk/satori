@@ -1211,3 +1211,74 @@ button:hover {
 .modal-danger:hover {
   background: #c73f32;
 }
+
+.command-palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.command-palette {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.command-palette-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.command-palette-input:focus {
+  outline: none;
+}
+
+.command-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.command-palette-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.command-palette-list li.active {
+  background: var(--bg-active);
+}
+
+.command-palette-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.command-palette-empty {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+}

@@ -39,6 +39,7 @@ import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
 import ConfirmDialog from "./ConfirmDialog";
 import PromptDialog from "./PromptDialog";
+import CommandPalette, { type Command } from "./CommandPalette";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
@@ -97,6 +98,7 @@ export default function App() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
   const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
@@ -177,6 +179,17 @@ export default function App() {
   useEffect(() => {
     if (!IS_TAURI) return;
     fetchVaultInfo().then((info) => setVaultName(info.name));
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   useEffect(() => {
@@ -476,6 +489,23 @@ export default function App() {
   function exportEnv(): RenderEnv {
     return { resolver, bodies: new Map(), pathStack: new Set() };
   }
+
+  // Same owner-only scoping as everything else vault-wide (search/nav/
+  // create/reindex) — a guest viewing one shared note shouldn't get a
+  // command list either, and most of these actions would 403 anyway.
+  const paletteCommands: Command[] = shareToken
+    ? []
+    : [
+        { id: "new-note", label: "New Note", action: onNewNote },
+        { id: "new-canvas", label: "New Canvas", action: onNewCanvas },
+        { id: "today", label: "Today's Journal Entry", action: onDailyNote },
+        { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => setShowGraph((g) => !g) },
+        { id: "view-source", label: "View: Source", action: () => setViewMode("source") },
+        { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
+        { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
+        { id: "reindex", label: "Reindex Vault", action: onReindex },
+        ...(IS_TAURI ? [{ id: "switch-vault", label: "Switch Vault…", action: () => switchVault() }] : []),
+      ];
 
   return (
     <div className="app">
@@ -861,6 +891,14 @@ export default function App() {
           confirmLabel="Create"
           onSubmit={submitCreatePrompt}
           onCancel={() => setCreatePromptMode(null)}
+        />
+      )}
+      {commandPaletteOpen && !shareToken && (
+        <CommandPalette
+          commands={paletteCommands}
+          notes={notes}
+          onOpenNote={(path, title) => openNote(path, title)}
+          onClose={() => setCommandPaletteOpen(false)}
         />
       )}
     </div>
