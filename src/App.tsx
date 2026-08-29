@@ -31,6 +31,7 @@ import Preview, { buildResolver } from "./Preview";
 import Backlinks from "./Backlinks";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
+import TableView from "./TableView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
@@ -94,6 +95,7 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [peerCount, setPeerCount] = useState(0);
   const [showGraph, setShowGraph] = useState(false);
+  const [showTable, setShowTable] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => getStoredTheme());
@@ -342,6 +344,7 @@ export default function App() {
   // path for a note opened immediately after creation.
   function openNote(p: string, knownTitle?: string) {
     setShowGraph(false);
+    setShowTable(false);
     setShareToken(null); // navigating from within the app is always as the owner
     setSidebarOpen(false); // closes the mobile drawer after picking a note
     const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
@@ -353,6 +356,7 @@ export default function App() {
   function selectView(view: SidebarView) {
     setSidebarView(view);
     setShowGraph(false);
+    setShowTable(false);
     if (view === "journal") setTypeFilter("daily");
     else if (view === "canvas") setTypeFilter("canvas");
     else setTypeFilter(""); // "all" and "favorites" both draw from the full set
@@ -531,6 +535,7 @@ export default function App() {
         { id: "new-canvas", label: "New Canvas", action: onNewCanvas },
         { id: "today", label: "Today's Journal Entry", action: onDailyNote },
         { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => setShowGraph((g) => !g) },
+        { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => setShowTable((t) => !t) },
         { id: "view-source", label: "View: Source", action: () => setViewMode("source") },
         { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
@@ -591,7 +596,7 @@ export default function App() {
         {!results && !shareToken && (
           <nav className="sidebar-nav">
             <button
-              className={sidebarView === "all" && !showGraph ? "active" : ""}
+              className={sidebarView === "all" && !showGraph && !showTable ? "active" : ""}
               onClick={() => selectView("all")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -600,7 +605,7 @@ export default function App() {
               All Notes
             </button>
             <button
-              className={sidebarView === "journal" && !showGraph ? "active" : ""}
+              className={sidebarView === "journal" && !showGraph && !showTable ? "active" : ""}
               onClick={() => selectView("journal")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -609,7 +614,7 @@ export default function App() {
               Journal
             </button>
             <button
-              className={sidebarView === "canvas" && !showGraph ? "active" : ""}
+              className={sidebarView === "canvas" && !showGraph && !showTable ? "active" : ""}
               onClick={() => selectView("canvas")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -621,6 +626,7 @@ export default function App() {
               className={showGraph ? "active" : ""}
               onClick={() => {
                 setShowGraph((g) => !g);
+                setShowTable(false);
                 setSidebarOpen(false);
               }}
             >
@@ -628,6 +634,19 @@ export default function App() {
                 🕸
               </span>
               Graph
+            </button>
+            <button
+              className={showTable ? "active" : ""}
+              onClick={() => {
+                setShowTable((t) => !t);
+                setShowGraph(false);
+                setSidebarOpen(false);
+              }}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🗂
+              </span>
+              Table
             </button>
             {types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
               <select
@@ -790,6 +809,8 @@ export default function App() {
       <main className="editor-pane">
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} />
+        ) : showTable ? (
+          <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.

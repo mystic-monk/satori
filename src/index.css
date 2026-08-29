@@ -440,6 +440,78 @@ button:hover {
   color: var(--text-dim);
 }
 
+.table-view {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+
+.table-view table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.table-view th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.table-view th:hover {
+  color: var(--text);
+}
+
+.table-sort-arrow {
+  color: var(--accent);
+}
+
+.table-view td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-cell-title {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.table-cell-title:hover {
+  text-decoration: underline;
+}
+
+.table-cell-empty {
+  color: var(--text-dim);
+}
+
+.table-view td input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 13px;
+}
+
+.table-empty {
+  padding: 20px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
 .type-filter {
   width: 100%;
   margin-top: 6px;
