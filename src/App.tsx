@@ -46,6 +46,8 @@ import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { getIdentity } from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, type RecentNote } from "./recentNotes";
+import { queryNotes } from "./noteQuery";
+import TemplatePickerDialog from "./TemplatePickerDialog";
 import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";
 
@@ -98,6 +100,8 @@ export default function App() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
   const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templatePath, setTemplatePath] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
@@ -406,6 +410,7 @@ export default function App() {
   // instead of blocking synchronously; submitCreatePrompt does the actual
   // creation once the title comes back from it.
   function onNewNote() {
+    setTemplatePath(null);
     setCreatePromptMode("note");
   }
 
@@ -413,9 +418,21 @@ export default function App() {
     setCreatePromptMode("canvas");
   }
 
+  function onNewFromTemplate() {
+    setTemplatePickerOpen(true);
+  }
+
+  function pickTemplate(path: string) {
+    setTemplatePickerOpen(false);
+    setTemplatePath(path);
+    setCreatePromptMode("note");
+  }
+
   async function submitCreatePrompt(title: string) {
     const mode = createPromptMode;
+    const chosenTemplatePath = templatePath;
     setCreatePromptMode(null);
+    setTemplatePath(null);
     if (!mode) return;
     const slug = title
       .trim()
@@ -424,7 +441,20 @@ export default function App() {
       .replace(/(^-|-$)/g, "");
     if (mode === "note") {
       const p = `${slug || "untitled"}-${Date.now()}.md`;
-      const template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
+      let template: string;
+      if (chosenTemplatePath) {
+        const templateNote = await fetchNote(chosenTemplatePath, shareToken);
+        const parsed = parseFrontmatter(templateNote.raw);
+        const date = new Date().toISOString().slice(0, 10);
+        const body = parsed.body.replaceAll("{{date}}", date).replaceAll("{{title}}", title);
+        // `type` isn't carried over — otherwise a note created from a
+        // template would itself show up as a template next time (since
+        // "is this a template" is just `type === "template"`).
+        const { type: _templateType, ...rest } = parsed.data;
+        template = stringifyFrontmatter({ ...rest, title }, body);
+      } else {
+        template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
+      }
       await createNote(p, template);
       await loadNotes();
       openNote(p, title);
@@ -485,6 +515,7 @@ export default function App() {
   const canFavorite = !shareToken;
   const favoriteNotes = notes.filter((n) => n.favorite);
   const displayedNotes = sidebarView === "favorites" ? favoriteNotes : notes;
+  const templateNotes = queryNotes(notes, { type: "template" });
 
   function exportEnv(): RenderEnv {
     return { resolver, bodies: new Map(), pathStack: new Set() };
@@ -740,6 +771,16 @@ export default function App() {
                 >
                   Today's Journal Entry
                 </button>
+                {templateNotes.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setCreateMenuOpenState(false);
+                      onNewFromTemplate();
+                    }}
+                  >
+                    New From Template
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -899,6 +940,13 @@ export default function App() {
           notes={notes}
           onOpenNote={(path, title) => openNote(path, title)}
           onClose={() => setCommandPaletteOpen(false)}
+        />
+      )}
+      {templatePickerOpen && (
+        <TemplatePickerDialog
+          templates={templateNotes}
+          onSelect={pickTemplate}
+          onCancel={() => setTemplatePickerOpen(false)}
         />
       )}
     </div>
