@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod frontmatter;
+mod import;
 mod links;
 mod state;
 mod vault;
@@ -40,6 +41,21 @@ pub(crate) fn switch_vault_dialog(app_handle: &tauri::AppHandle) {
         save_vault_config(&config_dir.join("vault-config.json"), &vault_path);
     }
     app_handle.restart();
+}
+
+// Shared by the import_folder command (commands.rs) — kept here rather
+// than in import.rs since it needs the native picker (rfd) plus
+// AppState's index connection to reindex afterward, the same shape of
+// dependency switch_vault_dialog above already has.
+pub(crate) fn run_import_dialog(state: &state::AppState) -> import::ImportSummary {
+    let Some(source) = rfd::FileDialog::new().set_title("Choose a folder to import").pick_folder() else {
+        return import::ImportSummary::default();
+    };
+    let summary = import::import_folder(&state.vault, &source);
+    if let Ok(conn) = state.conn.lock() {
+        let _ = db::rebuild_index(&conn, &state.vault);
+    }
+    summary
 }
 
 // A setup failure (can't resolve the app data dir, can't create its
@@ -255,6 +271,7 @@ pub fn run() {
             commands::get_history,
             commands::get_vault_info,
             commands::switch_vault,
+            commands::import_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

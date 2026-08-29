@@ -157,3 +157,13 @@ pub fn get_vault_info(state: State<AppState>) -> VaultInfo {
 pub fn switch_vault(app: tauri::AppHandle) {
     crate::switch_vault_dialog(&app);
 }
+
+// Copies (never moves — originals stay untouched) recognized files from a
+// picked folder into this vault's imported/ subfolder. See
+// src-tauri/src/import.rs for exactly what's handled (.md/.txt/.json) and
+// why. Reindexes afterward so the frontend's next fetchNotes() picks up
+// the new notes without a manual Reindex click.
+#[tauri::command]
+pub fn import_folder(state: State<AppState>) -> crate::import::ImportSummary {
+    crate::run_import_dialog(&state)
+}

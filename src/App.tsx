@@ -8,6 +8,7 @@ import {
   fetchRole,
   fetchTypes,
   fetchVaultInfo,
+  importFolder,
   reindex,
   search,
   switchVault,
@@ -504,6 +505,16 @@ export default function App() {
     fetchTypes().then(setTypes);
   }
 
+  async function onImportFolder() {
+    setStatus("importing…");
+    const result = await importFolder();
+    const parts = [`imported ${result.imported}`, `skipped ${result.skipped}`];
+    if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length > 1 ? "s" : ""}`);
+    setStatus(parts.join(", "));
+    await loadNotes();
+    fetchTypes().then(setTypes);
+  }
+
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
@@ -540,7 +551,12 @@ export default function App() {
         { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
         { id: "reindex", label: "Reindex Vault", action: onReindex },
-        ...(IS_TAURI ? [{ id: "switch-vault", label: "Switch Vault…", action: () => switchVault() }] : []),
+        ...(IS_TAURI
+          ? [
+              { id: "switch-vault", label: "Switch Vault…", action: () => switchVault() },
+              { id: "import-folder", label: "Import Folder…", action: onImportFolder },
+            ]
+          : []),
       ];
 
   return (
@@ -566,9 +582,19 @@ export default function App() {
               </span>
             </button>
             {!shareToken && (
-              <button className="vault-reindex" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
-                ↻
-              </button>
+              <>
+                <button
+                  className="vault-reindex"
+                  onClick={onImportFolder}
+                  title="Import a folder (.md/.txt/.json)"
+                  aria-label="Import a folder"
+                >
+                  ⇩
+                </button>
+                <button className="vault-reindex" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
+                  ↻
+                </button>
+              </>
             )}
           </div>
         )}

@@ -200,3 +200,17 @@ export async function fetchVaultInfo(): Promise<{ name: string }> {
 export async function switchVault(): Promise<void> {
   await invoke("switch_vault");
 }
+
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+// Tauri only, same reason as fetchVaultInfo/switchVault — native folder
+// picking has no browser equivalent here. Copies recognized files
+// (.md/.txt/.json — see src-tauri/src/import.rs) from a picked folder
+// into this vault's imported/ subfolder; never touches the source.
+export async function importFolder(): Promise<ImportSummary> {
+  return invoke("import_folder");
+}
