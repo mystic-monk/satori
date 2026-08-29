@@ -211,6 +211,12 @@ export interface NoteListItem {
   type: string | null;
   updatedAt: number;
   favorite: boolean;
+  // Full frontmatter, not just the fields broken out above — powers
+  // client-side filtering (src/noteQuery.ts: query blocks, table views,
+  // template discovery) against arbitrary properties without a new
+  // endpoint per feature. Already fetched for `favorite`'s derivation
+  // below; exposing the rest costs nothing new.
+  properties: Record<string, unknown>;
 }
 
 interface NoteRow {
@@ -222,17 +228,12 @@ interface NoteRow {
   properties: string;
 }
 
-// `favorite` isn't its own column — it's an ordinary frontmatter property
-// (same as any other, e.g. `favorite: true` in the note's YAML block),
-// already captured in the `properties` JSON column every note row has.
-// Deriving it here at query time rather than adding a dedicated column
-// means starring a note is just a normal frontmatter edit (see
-// PropertiesPanel.tsx) with nothing else to keep in sync.
-function deriveFavorite(propertiesJson: string): boolean {
+function parseProperties(propertiesJson: string): Record<string, unknown> {
   try {
-    return JSON.parse(propertiesJson).favorite === true;
+    const parsed = JSON.parse(propertiesJson);
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
-    return false;
+    return {};
   }
 }
 
@@ -250,14 +251,21 @@ export function listNotesFromIndex(type?: string): NoteListItem[] {
           )
           .all()
   ) as NoteRow[];
-  return rows.map((r) => ({
-    path: r.path,
-    title: r.title,
-    tags: JSON.parse(r.tags),
-    type: r.type,
-    updatedAt: r.updatedAt,
-    favorite: deriveFavorite(r.properties),
-  }));
+  return rows.map((r) => {
+    const properties = parseProperties(r.properties);
+    return {
+      path: r.path,
+      title: r.title,
+      tags: JSON.parse(r.tags),
+      type: r.type,
+      updatedAt: r.updatedAt,
+      // `favorite` isn't its own column — it's an ordinary frontmatter
+      // property (see PropertiesPanel.tsx) — derived here rather than
+      // requiring anything else to stay in sync with it.
+      favorite: properties.favorite === true,
+      properties,
+    };
+  });
 }
 
 export function listTypes(): { type: string; count: number }[] {

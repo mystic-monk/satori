@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchNote, type NoteListItem } from "./api";
 import { extractWikilinkRefs, renderNoteBody, type RenderEnv, type ResolvedNote } from "./markdown";
 import { renderMermaidBlocks } from "./mermaid-render";
+import { parseFilterText, queryNotes } from "./noteQuery";
+
+function escapeHtml(s: string): string {
+  const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+  return s.replace(/[&<>"]/g, (c) => map[c]);
+}
 
 export function buildResolver(notes: NoteListItem[]) {
   const byPath = new Map(notes.map((n) => [n.path.replace(/\.md$/, ""), n]));
@@ -67,6 +73,32 @@ export default function Preview({ raw, notes, onNavigate, shareToken }: PreviewP
   useEffect(() => {
     if (containerRef.current) renderMermaidBlocks(containerRef.current);
   }, [html]);
+
+  // Same reasoning as the mermaid effect above: a query block's results
+  // depend on live note data markdown-it's synchronous renderer can't see,
+  // so the fence rule (src/markdown.ts) emits a placeholder and this fills
+  // it in — reruns whenever `notes` changes, so a query block updates
+  // without needing to reopen the note. Results are rendered as the same
+  // [data-note-path] anchors wikilinks already use, so the existing
+  // handleClick below navigates them with no extra wiring.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    for (const el of Array.from(container.querySelectorAll<HTMLElement>(".query-block"))) {
+      const filterText = el.dataset.queryFilter ?? "";
+      const filter = parseFilterText(filterText);
+      const results = queryNotes(notes, filter);
+      el.innerHTML =
+        results.length === 0
+          ? `<div class="query-block-empty">No matching notes.</div>`
+          : `<ul class="query-block-results">${results
+              .map(
+                (n) =>
+                  `<li><a class="wikilink" data-note-path="${escapeHtml(n.path)}" href="javascript:void(0)">${escapeHtml(n.title)}</a></li>`
+              )
+              .join("")}</ul>`;
+    }
+  }, [html, notes]);
 
   function handleClick(e: React.MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");

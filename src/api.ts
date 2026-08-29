@@ -7,6 +7,7 @@ export interface NoteListItem {
   type: string | null;
   updatedAt: number;
   favorite: boolean;
+  properties: Record<string, unknown>;
 }
 
 export interface SearchResult {

@@ -326,6 +326,15 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const source = md.utils.escapeHtml(token.content);
     return `<div class="mermaid-block" data-mermaid-source="${source}"><pre class="mermaid-fallback">${source}</pre></div>`;
   }
+  if (lang === "query") {
+    // Same reasoning as mermaid above: rendering a live, filtered list of
+    // notes needs the current `notes` array, which markdown-it's
+    // synchronous renderer has no access to — so this emits a placeholder
+    // carrying the raw filter text; Preview.tsx's effect finds
+    // .query-block elements and fills them in, same pattern.
+    const source = md.utils.escapeHtml(token.content);
+    return `<div class="query-block" data-query-filter="${source}"><pre class="query-fallback">${source}</pre></div>`;
+  }
   return defaultFenceRule(tokens, idx, options, env, self);
 };
 

@@ -289,16 +289,16 @@ pub struct NoteListItem {
     #[serde(rename = "updatedAt")]
     pub updated_at: f64,
     pub favorite: bool,
+    // Full frontmatter — see server/db.ts's NoteListItem.properties for
+    // why this is exposed in full rather than just deriving `favorite`.
+    pub properties: Map<String, Value>,
 }
 
-// `favorite` isn't its own column — it's an ordinary frontmatter property
-// already captured in the `properties` JSON column every note row has —
-// same derivation as server/db.ts's deriveFavorite().
-fn derive_favorite(properties_json: &str) -> bool {
+fn parse_properties(properties_json: &str) -> Map<String, Value> {
     serde_json::from_str::<Value>(properties_json)
         .ok()
-        .and_then(|v| v.get("favorite").and_then(|f| f.as_bool()))
-        .unwrap_or(false)
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default()
 }
 
 pub fn list_notes_from_index(
@@ -316,13 +316,19 @@ pub fn list_notes_from_index(
             let tags_json: String = row.get(2)?;
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
             let properties_json: String = row.get(5)?;
+            let properties = parse_properties(&properties_json);
+            // `favorite` isn't its own column — it's an ordinary
+            // frontmatter property (see PropertiesPanel.tsx) — derived
+            // here rather than requiring anything else to stay in sync.
+            let favorite = properties.get("favorite").and_then(|f| f.as_bool()).unwrap_or(false);
             Ok(NoteListItem {
                 path: row.get(0)?,
                 title: row.get(1)?,
                 tags,
                 note_type: row.get(3)?,
                 updated_at: row.get(4)?,
-                favorite: derive_favorite(&properties_json),
+                favorite,
+                properties,
             })
         })
         .map_err(|e| e.to_string())?;
