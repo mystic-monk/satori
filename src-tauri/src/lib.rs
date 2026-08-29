@@ -272,6 +272,8 @@ pub fn run() {
             commands::get_vault_info,
             commands::switch_vault,
             commands::import_folder,
+            commands::save_export_file,
+            commands::print_current_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

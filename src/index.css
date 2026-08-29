@@ -1403,3 +1403,22 @@ button:hover {
   color: var(--text-dim);
   font-size: 13px;
 }
+
+/* PDF export in the native app (src/export.ts) — a persistent container
+   holding the formatted export content, invisible except during an
+   actual print (triggered via WebviewWindow::print(), the OS's real print
+   dialog, which already has "Save as PDF" built in on macOS). Hidden
+   outside of printing so it never affects normal layout. */
+#pkm-print-export {
+  display: none;
+}
+
+@media print {
+  body.pkm-printing > *:not(#pkm-print-export) {
+    display: none !important;
+  }
+
+  body.pkm-printing #pkm-print-export {
+    display: block !important;
+  }
+}

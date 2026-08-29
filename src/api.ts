@@ -214,3 +214,21 @@ export interface ImportSummary {
 export async function importFolder(): Promise<ImportSummary> {
   return invoke("import_folder");
 }
+
+// Tauri-only native equivalents for src/export.ts — see
+// src-tauri/src/commands.rs's save_export_file/print_current_window for
+// why the browser-only <a download> / window.open()+print() tricks don't
+// work in the native app's WebKit runtime. Returns false if the user
+// cancels the save dialog (not an error).
+export async function saveExportFile(
+  defaultName: string,
+  content: string,
+  filterName: string,
+  filterExt: string
+): Promise<boolean> {
+  return invoke("save_export_file", { defaultName, content, filterName, filterExt });
+}
+
+export async function printCurrentWindow(): Promise<void> {
+  await invoke("print_current_window");
+}

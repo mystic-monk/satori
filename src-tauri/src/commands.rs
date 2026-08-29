@@ -167,3 +167,39 @@ pub fn switch_vault(app: tauri::AppHandle) {
 pub fn import_folder(state: State<AppState>) -> crate::import::ImportSummary {
     crate::run_import_dialog(&state)
 }
+
+// MD/HTML export (src/export.ts) used a browser-only <a download> trick
+// that does nothing in Tauri's WKWebView — no download manager to catch
+// it. This is the native equivalent: a real Save dialog, then a direct
+// write. Returns false (not an error) if the user cancels, so the
+// frontend doesn't need to treat "no file chosen" as a failure.
+#[tauri::command]
+pub fn save_export_file(
+    default_name: String,
+    content: String,
+    filter_name: String,
+    filter_ext: String,
+) -> Result<bool, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(&default_name)
+        .add_filter(&filter_name, &[filter_ext.as_str()])
+        .save_file()
+    else {
+        return Ok(false);
+    };
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+// PDF export used window.open() + win.print(), which is equally
+// unreliable in a Tauri webview (no guarantee a new native window opens
+// the way a browser tab would). WebviewWindow::print() triggers the real
+// OS print dialog for the current window instead — on macOS that dialog
+// already has "Save as PDF" built in, so this covers PDF export without
+// a bundled PDF-generation dependency. src/export.ts renders the export
+// content into a hidden-except-when-printing container before calling
+// this, so the dialog shows the formatted export, not the whole app UI.
+#[tauri::command]
+pub fn print_current_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| e.to_string())
+}

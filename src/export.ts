@@ -1,10 +1,16 @@
 import katexCss from "katex/dist/katex.min.css?raw";
 import hljsCss from "highlight.js/styles/github.css?raw";
+import { IS_TAURI } from "./platform";
+import { printCurrentWindow, saveExportFile } from "./api";
 
 function slugify(title: string): string {
   return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "note";
 }
 
+// Browser-only — a Tauri WKWebView has no download manager to catch an
+// <a download> click, so this path is only ever used in the web
+// deployment (see IS_TAURI branches below, which use a real native Save
+// dialog instead).
 function downloadFile(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -17,8 +23,13 @@ function downloadFile(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-export function exportMarkdown(path: string, raw: string): void {
-  downloadFile(path.split("/").pop() || "note.md", raw, "text/markdown");
+export async function exportMarkdown(path: string, raw: string): Promise<void> {
+  const filename = path.split("/").pop() || "note.md";
+  if (IS_TAURI) {
+    await saveExportFile(filename, raw, "Markdown", "md");
+    return;
+  }
+  downloadFile(filename, raw, "text/markdown");
 }
 
 const EXPORT_CSS = `
@@ -60,14 +71,50 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 }
 
-export function exportHtml(title: string, bodyHtml: string): void {
-  downloadFile(`${slugify(title)}.html`, wrapHtmlDocument(title, bodyHtml), "text/html");
+export async function exportHtml(title: string, bodyHtml: string): Promise<void> {
+  const filename = `${slugify(title)}.html`;
+  const content = wrapHtmlDocument(title, bodyHtml);
+  if (IS_TAURI) {
+    await saveExportFile(filename, content, "HTML", "html");
+    return;
+  }
+  downloadFile(filename, content, "text/html");
 }
 
-// PDF export goes through the browser's native print-to-PDF rather than a
-// bundled PDF-generation library — keeps the dependency footprint small and
-// gets correct pagination/fonts for free.
-export function exportPdf(title: string, bodyHtml: string): void {
+// Persistent, normally-invisible container (see .pkm-printing in
+// index.css) rather than create-then-remove per export: WebviewWindow's
+// native print dialog (Tauri) reads the DOM live, so removing the content
+// immediately after calling print() risks a race against however long the
+// OS dialog takes to actually capture it. Left in place and just
+// overwritten on each export instead.
+function printExportContainer(title: string, bodyHtml: string): HTMLElement {
+  let container = document.getElementById("pkm-print-export");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "pkm-print-export";
+    document.body.appendChild(container);
+  }
+  container.innerHTML = `<style>${katexCss}</style><style>${hljsCss}</style><style>${EXPORT_CSS}</style><h1>${escapeHtml(title)}</h1>${bodyHtml}`;
+  return container;
+}
+
+// PDF export goes through the browser's native print-to-PDF in the web
+// deployment (window.open() + print() — works fine in a real browser tab)
+// or the native app's real OS print dialog in Tauri (which already has
+// "Save as PDF" built in on macOS) — window.open() isn't reliable inside
+// a Tauri webview the way it is in a browser, so these two paths are kept
+// deliberately separate rather than trying to unify them.
+export async function exportPdf(title: string, bodyHtml: string): Promise<void> {
+  if (IS_TAURI) {
+    printExportContainer(title, bodyHtml);
+    document.body.classList.add("pkm-printing");
+    try {
+      await printCurrentWindow();
+    } finally {
+      document.body.classList.remove("pkm-printing");
+    }
+    return;
+  }
   const win = window.open("", "_blank", "noopener,noreferrer");
   if (!win) return;
   win.document.open();
