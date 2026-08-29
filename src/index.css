@@ -1180,6 +1180,22 @@ button:hover {
   line-height: 1.5;
 }
 
+.modal-input {
+  width: 100%;
+  margin-bottom: 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

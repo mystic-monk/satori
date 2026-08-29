@@ -38,6 +38,7 @@ const CanvasNote = lazy(() => import("./CanvasNote"));
 import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
 import ConfirmDialog from "./ConfirmDialog";
+import PromptDialog from "./PromptDialog";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
@@ -95,6 +96,7 @@ export default function App() {
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
+  const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | null>(null);
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
@@ -386,36 +388,42 @@ export default function App() {
     await loadNotes();
   }
 
-  async function onNewNote() {
-    const title = window.prompt("New note title:");
-    if (!title) return;
-    const slug = title
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const p = `${slug || "untitled"}-${Date.now()}.md`;
-    const template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
-    await createNote(p, template);
-    await loadNotes();
-    openNote(p, title);
+  // window.prompt() doesn't work in the native app at all — see
+  // PromptDialog.tsx's header comment — so these just open a real modal
+  // instead of blocking synchronously; submitCreatePrompt does the actual
+  // creation once the title comes back from it.
+  function onNewNote() {
+    setCreatePromptMode("note");
   }
 
-  async function onNewCanvas() {
-    const title = window.prompt("New canvas title:");
-    if (!title) return;
+  function onNewCanvas() {
+    setCreatePromptMode("canvas");
+  }
+
+  async function submitCreatePrompt(title: string) {
+    const mode = createPromptMode;
+    setCreatePromptMode(null);
+    if (!mode) return;
     const slug = title
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-    const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
-    const scene = { type: "excalidraw", version: 2, elements: [], appState: {} };
-    const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
-    await createNote(p, template);
-    await loadNotes();
-    fetchTypes().then(setTypes);
-    openNote(p, title);
+    if (mode === "note") {
+      const p = `${slug || "untitled"}-${Date.now()}.md`;
+      const template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
+      await createNote(p, template);
+      await loadNotes();
+      openNote(p, title);
+    } else {
+      const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
+      const scene = { type: "excalidraw", version: 2, elements: [], appState: {} };
+      const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
+      await createNote(p, template);
+      await loadNotes();
+      fetchTypes().then(setTypes);
+      openNote(p, title);
+    }
   }
 
   async function onDailyNote() {
@@ -844,6 +852,15 @@ export default function App() {
           danger
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirmOpen(false)}
+        />
+      )}
+      {createPromptMode && (
+        <PromptDialog
+          title={createPromptMode === "note" ? "New note" : "New canvas"}
+          placeholder={createPromptMode === "note" ? "Note title" : "Canvas title"}
+          confirmLabel="Create"
+          onSubmit={submitCreatePrompt}
+          onCancel={() => setCreatePromptMode(null)}
         />
       )}
     </div>

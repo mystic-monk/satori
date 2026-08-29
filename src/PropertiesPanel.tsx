@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import * as Y from "yjs";
 import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
+import PromptDialog from "./PromptDialog";
 
 const ORIGIN = "properties-panel";
 
@@ -14,6 +15,7 @@ interface PropertiesPanelProps {
 export default function PropertiesPanel({ raw, ytext, readOnly = false }: PropertiesPanelProps) {
   const parsed = useMemo(() => parseFrontmatter(raw), [raw]);
   const [open, setOpen] = useState(false);
+  const [addFieldOpen, setAddFieldOpen] = useState(false);
 
   function writeBack(nextData: Record<string, unknown>) {
     applyTextDiff(ytext, stringifyFrontmatter(nextData, parsed.body), ORIGIN);
@@ -29,9 +31,9 @@ export default function PropertiesPanel({ raw, ytext, readOnly = false }: Proper
     writeBack(next);
   }
 
-  function addField() {
-    const key = window.prompt("Property name:")?.trim();
-    if (!key || key in parsed.data) return;
+  function addField(key: string) {
+    setAddFieldOpen(false);
+    if (key in parsed.data) return;
     writeBack({ ...parsed.data, [key]: "" });
   }
 
@@ -56,11 +58,20 @@ export default function PropertiesPanel({ raw, ytext, readOnly = false }: Proper
             />
           ))}
           {!readOnly && (
-            <button className="properties-add" onClick={addField}>
+            <button className="properties-add" onClick={() => setAddFieldOpen(true)}>
               + Add property
             </button>
           )}
         </div>
+      )}
+      {addFieldOpen && (
+        <PromptDialog
+          title="Add property"
+          placeholder="Property name"
+          confirmLabel="Add"
+          onSubmit={addField}
+          onCancel={() => setAddFieldOpen(false)}
+        />
       )}
     </div>
   );

@@ -43,11 +43,14 @@ function isIdentity(v: unknown): v is Identity {
   return !!o && typeof o.id === "string" && typeof o.name === "string" && typeof o.color === "string";
 }
 
+// No window.prompt() here — it doesn't work at all in the native app (see
+// PromptDialog.tsx). Defaults straight to "Anonymous"; IdentityPanel.tsx
+// already has a normal, working text input for changing it whenever the
+// user wants, so there's no need for a blocking first-run dialog here.
 function createIdentity(): Identity {
   const legacyName = localStorage.getItem(LEGACY_NAME_KEY);
   const legacyColor = localStorage.getItem(LEGACY_COLOR_KEY);
-  const name = legacyName ?? window.prompt("Your display name (shown to collaborators):", "Anonymous")?.trim() ?? "Anonymous";
-  return { id: crypto.randomUUID(), name: name || "Anonymous", color: legacyColor ?? randomColor() };
+  return { id: crypto.randomUUID(), name: legacyName || "Anonymous", color: legacyColor ?? randomColor() };
 }
 
 function save(identity: Identity): Identity {
