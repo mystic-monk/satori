@@ -1,10 +1,10 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+description = "Satori — a privacy-first, local-first, end-to-end encrypted networked notes app"
+authors = ["Ankush"]
+license = "MIT"
+repository = "https://github.com/mystic-monk/satori"
 edition = "2021"
 rust-version = "1.77.2"
 
