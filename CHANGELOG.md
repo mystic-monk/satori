@@ -32,13 +32,14 @@ Initial release.
 - Real-time multi-cursor collaborative editing (Yjs CRDT) over the local network
 - End-to-end encrypted cloud sync (XSalsa20-Poly1305, Argon2id key derivation) through a relay server that only ever handles ciphertext
 - Per-note sharing with view / comment / edit roles, enforced server-side on both the REST API and the real-time sync protocol
-- A portable, exportable identity so edit history stays attributed to one person across devices and renames
+- A portable, exportable identity so edit history stays attributed to one person across devices and renames — optionally backed by an email address (hashed, never sent anywhere) instead of an export/import file, with anonymous still the default
 - Per-note change history
 
 **Native app**
 - A Tauri (Rust) native desktop shell — small, fast, no Electron
 - A native menu bar (File/Edit/View/Help) with real commands, not the bare OS default
 - A first-run vault picker: choose or create your notes folder instead of a hidden app-data location, with the ability to switch vaults later
+- Folder import: bring in `.md`/`.txt`/`.json` (Excalidraw scenes) files from anywhere on disk, copied into the vault without touching the originals
 - Native crash/setup-error dialogs instead of silent failures
 
 **Deployment**
