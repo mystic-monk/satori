@@ -13,6 +13,14 @@ export interface Identity {
   id: string;
   name: string;
   color: string;
+  // Present only when identity was set up via email (setIdentityFromEmail)
+  // rather than the anonymous default. Stored locally so the panel can
+  // show "signed in as ___" and so switching back to anonymous is a
+  // deliberate action — never sent to a collaborator or a server; only
+  // its SHA-256 hash (the `id` field) is ever broadcast. Typing the same
+  // email on a different device deterministically reproduces the same
+  // `id`, which is the actual point: portability without an export file.
+  email?: string;
 }
 
 const IDENTITY_KEY = "pkm-identity";
@@ -86,4 +94,48 @@ export function importIdentity(blob: string): Identity {
   const parsed = JSON.parse(blob);
   if (!isIdentity(parsed)) throw new Error("invalid identity blob");
   return save(parsed);
+}
+
+// SHA-256 via the Web Crypto API (built into every browser/Node runtime,
+// no dependency) rather than libsodium's Argon2id — this doesn't need to
+// be slow-and-memory-hard the way a *secret* passphrase derivation does
+// (src/crypto.ts's deriveKey): an email isn't a secret being protected
+// against brute-force, it's a portable label being turned into a stable
+// opaque id. Pulling in libsodium here would also undo the earlier fix
+// that made it a lazy, cloud-sync-only import (~550KB of WASM every user
+// would otherwise pay for on load).
+async function hashEmail(email: string): Promise<string> {
+  const normalized = email.trim().toLowerCase();
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  return Array.from(new Uint8Array(bytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Opt-in only — anonymous (the createIdentity() default) stays the
+// zero-friction path. Typing the same email again later, on this device
+// or a different one, reproduces the exact same `id`, so history stays
+// attributed to one person without needing to export/import a blob.
+// Not verified identity: nothing confirms the caller actually owns this
+// email (no confirmation link is sent) — it's a portability improvement,
+// not an authentication mechanism. See the identity-scoping plan's Phase
+// B for what actual verification (signed contributions, an unspoofable
+// key) would take.
+export async function setIdentityFromEmail(email: string): Promise<Identity> {
+  const trimmed = email.trim();
+  if (!EMAIL_RE.test(trimmed)) throw new Error("not a valid email address");
+  const id = await hashEmail(trimmed);
+  return save({ ...getIdentity(), id, email: trimmed.toLowerCase() });
+}
+
+// Switching back to anonymous is a deliberate, separate action, not just
+// clearing the email field — it needs a fresh random id (the email-derived
+// id must not linger once its owner has opted out of using it), which
+// means this intentionally does NOT carry over history continuity, same
+// "can't fix the past" tradeoff as any other identity-basis change.
+export function clearEmailIdentity(): Identity {
+  const current = getIdentity();
+  return save({ id: crypto.randomUUID(), name: current.name, color: current.color });
 }

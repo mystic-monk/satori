@@ -1,6 +1,15 @@
 import { useState } from "react";
-import { exportIdentity, getIdentity, importIdentity, setDisplayName, type Identity } from "./identity";
+import {
+  clearEmailIdentity,
+  exportIdentity,
+  getIdentity,
+  importIdentity,
+  setDisplayName,
+  setIdentityFromEmail,
+  type Identity,
+} from "./identity";
 import { THEMES } from "./themes";
+import PromptDialog from "./PromptDialog";
 
 interface IdentityPanelProps {
   themeId: string;
@@ -21,6 +30,8 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [emailPromptOpen, setEmailPromptOpen] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   function commitName() {
     const trimmed = nameDraft.trim();
@@ -53,6 +64,21 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
     }
   }
 
+  async function onSubmitEmail(email: string) {
+    try {
+      const next = await setIdentityFromEmail(email);
+      setIdentity(next);
+      setEmailPromptOpen(false);
+      setEmailError(null);
+    } catch {
+      setEmailError("That doesn't look like a valid email address.");
+    }
+  }
+
+  function onUseAnonymous() {
+    setIdentity(clearEmailIdentity());
+  }
+
   return (
     <div className="identity-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
@@ -72,9 +98,25 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
           </div>
           <p className="identity-note">
             Stored only in this browser. Renaming keeps your history attributed to you; switching to a new
-            device or browser doesn't carry it automatically — export it here and import it there to keep the
-            same identity.
+            device or browser doesn't carry it automatically unless you use email or export/import below.
           </p>
+          <div className="identity-email">
+            {identity.email ? (
+              <>
+                <span className="identity-email-status">Identified as {identity.email}</span>
+                <button onClick={onUseAnonymous}>Use anonymous instead</button>
+              </>
+            ) : (
+              <button onClick={() => setEmailPromptOpen(true)}>Use email instead of anonymous</button>
+            )}
+          </div>
+          <p className="identity-note">
+            Typing the same email again on any device gives you back this exact identity — no export file
+            needed. Your email itself is never sent to collaborators or a server, only stored on this device;
+            what others see is the same opaque id anonymous identities already use. This isn't verified —
+            nothing confirms you actually own the address, it's just a more convenient way to stay portable.
+          </p>
+          {emailError && <p className="identity-error">{emailError}</p>}
           <div className="identity-portability">
             <button onClick={onExport}>{copied ? "Copied!" : "Export identity"}</button>
           </div>
@@ -106,6 +148,19 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
             ))}
           </select>
         </div>
+      )}
+      {emailPromptOpen && (
+        <PromptDialog
+          title="Use email instead of anonymous"
+          message="Typing the same email again on any device restores this identity. It's never sent anywhere — only stored on this browser."
+          placeholder="you@example.com"
+          confirmLabel="Use this email"
+          onSubmit={onSubmitEmail}
+          onCancel={() => {
+            setEmailPromptOpen(false);
+            setEmailError(null);
+          }}
+        />
       )}
     </div>
   );
