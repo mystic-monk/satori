@@ -31,6 +31,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [tick, setTick] = useState(0);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const simRef = useRef<Simulation<GraphNode, undefined> | null>(null);
 
   useEffect(() => {
@@ -69,30 +70,57 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     return <div className="graph-empty">No notes to graph yet.</div>;
   }
 
+  // A node only "connects" to another once one note links to the other
+  // with a [[wikilink]] — that's the one fact this view exists to show,
+  // so it's spelled out directly rather than left for someone to guess.
+  const connectedIds = new Set<string>();
+  if (hoveredId) {
+    for (const l of links) {
+      if (l.source.id === hoveredId) connectedIds.add(l.target.id);
+      else if (l.target.id === hoveredId) connectedIds.add(l.source.id);
+    }
+  }
+
   return (
-    <svg
-      className="graph-svg"
-      data-tick={tick}
-      viewBox={`${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`}
-    >
-      <g className="graph-links">
-        {links.map((l, i) => (
-          <line key={i} x1={l.source.x ?? 0} y1={l.source.y ?? 0} x2={l.target.x ?? 0} y2={l.target.y ?? 0} />
-        ))}
-      </g>
-      <g className="graph-nodes">
-        {nodes.map((n) => (
-          <g
-            key={n.id}
-            transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
-            className={`graph-node ${n.id === activePath ? "graph-node-active" : ""}`}
-            onClick={() => onNavigate(n.id)}
-          >
-            <circle r={n.id === activePath ? 8 : 5} />
-            <text dy={-10}>{n.title}</text>
-          </g>
-        ))}
-      </g>
-    </svg>
+    <div className="graph-view">
+      <div className="graph-caption">
+        Lines connect notes through <code>[[wikilinks]]</code> — hover a note to trace its connections, click to open it.
+      </div>
+      <svg className="graph-svg" data-tick={tick} viewBox={`${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`}>
+        <g className="graph-links">
+          {links.map((l, i) => (
+            <line
+              key={i}
+              x1={l.source.x ?? 0}
+              y1={l.source.y ?? 0}
+              x2={l.target.x ?? 0}
+              y2={l.target.y ?? 0}
+              className={hoveredId && (l.source.id === hoveredId || l.target.id === hoveredId) ? "graph-link-highlight" : ""}
+            />
+          ))}
+        </g>
+        <g className="graph-nodes">
+          {nodes.map((n) => (
+            <g
+              key={n.id}
+              transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
+              className={[
+                "graph-node",
+                n.id === activePath ? "graph-node-active" : "",
+                hoveredId && n.id !== hoveredId && !connectedIds.has(n.id) ? "graph-node-dim" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => onNavigate(n.id)}
+              onMouseEnter={() => setHoveredId(n.id)}
+              onMouseLeave={() => setHoveredId(null)}
+            >
+              <circle r={n.id === activePath ? 8 : 5} />
+              <text dy={-10}>{n.title}</text>
+            </g>
+          ))}
+        </g>
+      </svg>
+    </div>
   );
 }

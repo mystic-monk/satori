@@ -5,6 +5,7 @@
 export interface RecentNote {
   path: string;
   title: string;
+  type: string | null;
 }
 
 const KEY = "pkm-recent-notes";
@@ -15,7 +16,10 @@ export function getRecent(): RecentNote[] {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Entries recorded before `type` existed on this shape don't have it —
+    // default rather than drop them, so old recent-note history isn't lost.
+    return parsed.map((n) => ({ type: null, ...n }));
   } catch {
     return [];
   }
@@ -23,8 +27,8 @@ export function getRecent(): RecentNote[] {
 
 // Moves an already-present entry to the front instead of duplicating it,
 // so reopening a note doesn't leave stale copies of itself in the list.
-export function recordOpened(path: string, title: string): RecentNote[] {
-  const next = [{ path, title }, ...getRecent().filter((n) => n.path !== path)].slice(0, MAX_ENTRIES);
+export function recordOpened(path: string, title: string, type: string | null): RecentNote[] {
+  const next = [{ path, title, type }, ...getRecent().filter((n) => n.path !== path)].slice(0, MAX_ENTRIES);
   localStorage.setItem(KEY, JSON.stringify(next));
   return next;
 }

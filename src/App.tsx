@@ -86,6 +86,50 @@ type ViewMode = "source" | "preview" | "split";
 // over whatever's already loaded, since a favorited note can be any type.
 type SidebarView = "all" | "journal" | "canvas" | "favorites";
 
+// Same icon set as the sidebar nav rows, so a type reads the same way
+// wherever it shows up (nav row, Recent list, etc).
+function noteTypeIcon(type: string | null): string {
+  switch (type) {
+    case "daily":
+      return "📅";
+    case "canvas":
+      return "🖌";
+    case "flashcard":
+      return "🧠";
+    case "template":
+      return "📐";
+    case null:
+      return "📄";
+    default:
+      return "🗂";
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Daily-note titles are just the ISO date ("2026-08-30") — accurate but
+// flat to read in a list. Journal view shows something a person actually
+// scans ("Today", "Yesterday", or a weekday) instead, falling back to the
+// raw title for anything that isn't a plain YYYY-MM-DD (a renamed entry,
+// say) so this only touches the common case.
+function formatJournalTitle(title: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(title)) return title;
+  const [y, m, d] = title.split("-").map(Number);
+  const entryDate = new Date(y, m - 1, d);
+  if (Number.isNaN(entryDate.getTime())) return title;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - entryDate.getTime()) / DAY_MS);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return entryDate.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: entryDate.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
+}
+
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
   const [types, setTypes] = useState<{ type: string; count: number }[]>([]);
@@ -380,14 +424,19 @@ export default function App() {
   // update hasn't landed yet in this render's closure, so looking it up
   // from `notes`/`results` here would silently fall back to the raw file
   // path for a note opened immediately after creation.
-  function openNote(p: string, knownTitle?: string) {
+  function openNote(p: string, knownTitle?: string, knownType?: string | null) {
     setShowGraph(false);
     setShowTable(false);
     setShowFlashcards(false);
     setShareToken(null); // navigating from within the app is always as the owner
     setSidebarOpen(false); // closes the mobile drawer after picking a note
     const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
-    setRecentNotes(recordOpened(p, title));
+    // Same "state update hasn't landed in this closure yet" issue as
+    // title above — callers that just created a note pass the type they
+    // know directly rather than relying on a `notes` lookup that would
+    // still be a render behind right after creation.
+    const type = knownType !== undefined ? knownType : notes.find((n) => n.path === p)?.type ?? null;
+    setRecentNotes(recordOpened(p, title, type));
     if (p === activePath) return;
     setActivePath(p);
   }
@@ -505,15 +554,20 @@ export default function App() {
       }
       await createNote(p, template);
       await loadNotes();
-      openNote(p, title);
+      openNote(p, title, null);
     } else if (mode === "canvas") {
       const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
-      const scene = { type: "excalidraw", version: 2, elements: [], appState: {} };
+      // Left unset, an empty scene inherits the app's dark theme as its
+      // canvas background too — a brand new canvas then reads as a plain
+      // black void with nothing to signal "this is a sketch surface."
+      // A sketch is drawn on paper, not on the app chrome, so it gets its
+      // own light background regardless of which app theme is active.
+      const scene = { type: "excalidraw", version: 2, elements: [], appState: { viewBackgroundColor: "#ffffff" } };
       const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
       await createNote(p, template);
       await loadNotes();
       fetchTypes().then(setTypes);
-      openNote(p, title);
+      openNote(p, title, "canvas");
     } else {
       // Starter content spells out the front/back convention directly in
       // the note, since there's nowhere else a first-time user would
@@ -523,7 +577,7 @@ export default function App() {
       await createNote(p, template);
       await loadNotes();
       fetchTypes().then(setTypes);
-      openNote(p, title);
+      openNote(p, title, "flashcard");
     }
   }
 
@@ -538,7 +592,7 @@ export default function App() {
       await loadNotes();
       fetchTypes().then(setTypes);
     }
-    openNote(p, date);
+    openNote(p, date, "daily");
   }
 
   async function confirmDelete() {
@@ -584,6 +638,7 @@ export default function App() {
   const favoriteNotes = notes.filter((n) => n.favorite);
   const displayedNotes = sidebarView === "favorites" ? favoriteNotes : notes;
   const templateNotes = queryNotes(notes, { type: "template" });
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   function exportEnv(): RenderEnv {
     return { resolver, bodies: new Map(), pathStack: new Set() };
@@ -797,16 +852,27 @@ export default function App() {
                 <li
                   key={n.path}
                   className={n.path === activePath ? "active" : ""}
-                  onClick={() => openNote(n.path)}
-                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                  onClick={() => openNote(n.path, undefined, n.type)}
+                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path, undefined, n.type))}
                   role="button"
                   tabIndex={0}
                 >
+                  <span className="note-type-icon" aria-hidden="true">
+                    {noteTypeIcon(n.type)}
+                  </span>
                   <div className="note-title">{n.title}</div>
                 </li>
               ))}
             </ul>
           </div>
+        )}
+        {!results && sidebarView === "journal" && !displayedNotes.some((n) => n.title === todayIso) && (
+          <button className="journal-today-cta" onClick={onDailyNote}>
+            <span className="nav-icon" aria-hidden="true">
+              ✏️
+            </span>
+            Write today's entry
+          </button>
         )}
         <ul className="note-list">
           {results
@@ -832,7 +898,12 @@ export default function App() {
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="note-title">{n.title}</div>
+                  <div className="note-title">
+                    {sidebarView === "journal" ? formatJournalTitle(n.title) : n.title}
+                  </div>
+                  {sidebarView === "journal" && n.title !== formatJournalTitle(n.title) && (
+                    <div className="note-tags">{n.title}</div>
+                  )}
                   {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
                   {canFavorite && (
                     <button
