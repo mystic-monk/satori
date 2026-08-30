@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
-import { extractWikilinkRefs as extractWikilinkRefsFromBody } from "../shared/wikilinks.js";
+import { extractWikilinkRefs as extractWikilinkRefsFromBody, type WikilinkRef } from "../shared/wikilinks.js";
+import { fragmentLabel, resolveFragment, stripBlockMarker } from "../shared/blockrefs.js";
 
 type MDInstance = InstanceType<typeof MarkdownIt>;
 // The full "highlight.js" package bundles ~190 languages (~1MB+) eagerly;
@@ -282,6 +283,10 @@ function stripFrontmatter(raw: string): string {
 }
 
 // [[ref]] / [[ref|alias]] links, and ![[ref]] whole-note transclusion.
+// [[ref]], [[ref#Heading]], [[ref#^block-id]] links (± |alias), and
+// ![[...]] embeds of the same three forms — a bare embed inlines the
+// whole target note (existing behavior), a #Heading/#^block-id embed
+// inlines just that section/block, resolved via shared/blockrefs.ts.
 function wikilinksPlugin(md: MDInstance) {
   md.inline.ruler.before("link", "wikilink", (state, silent) => {
     const src = state.src;
@@ -296,9 +301,12 @@ function wikilinksPlugin(md: MDInstance) {
 
     if (!silent) {
       const raw = src.slice(start, end);
-      const [refPart, aliasPart] = raw.split("|");
+      const [refAndFragment, aliasPart] = raw.split("|");
+      const hashIdx = refAndFragment.indexOf("#");
+      const ref = (hashIdx === -1 ? refAndFragment : refAndFragment.slice(0, hashIdx)).trim();
+      const fragment = hashIdx === -1 ? undefined : refAndFragment.slice(hashIdx + 1).trim() || undefined;
       const token = state.push(isEmbed ? "wikiembed" : "wikilink", "", 0);
-      token.meta = { ref: refPart.trim(), alias: aliasPart?.trim() };
+      token.meta = { ref, fragment, alias: aliasPart?.trim() };
     }
     state.pos = end + 2;
     return true;
@@ -306,9 +314,14 @@ function wikilinksPlugin(md: MDInstance) {
 
   md.renderer.rules.wikilink = (tokens, idx, _opts, envIn) => {
     const env = envIn as unknown as RenderEnv;
-    const { ref, alias } = tokens[idx].meta as { ref: string; alias?: string };
+    const { ref, fragment, alias } = tokens[idx].meta as { ref: string; fragment?: string; alias?: string };
     const resolved = env.resolver.resolve(ref);
-    const label = md.utils.escapeHtml(alias || resolved?.title || ref);
+    // Whether `fragment` actually exists in the target note isn't checked
+    // here — that needs the target's body, which a plain link (unlike an
+    // embed) never fetches. Same tradeoff a normal [[Note]] link already
+    // has: it doesn't confirm the note is non-empty, either.
+    const defaultLabel = fragment ? `${resolved?.title ?? ref} › ${fragmentLabel(fragment)}` : resolved?.title || ref;
+    const label = md.utils.escapeHtml(alias || defaultLabel);
     if (!resolved) {
       return `<a class="wikilink wikilink-broken" data-missing-ref="${md.utils.escapeHtml(ref)}">${label}</a>`;
     }
@@ -317,7 +330,7 @@ function wikilinksPlugin(md: MDInstance) {
 
   md.renderer.rules.wikiembed = (tokens, idx, _opts, envIn) => {
     const env = envIn as unknown as RenderEnv;
-    const { ref } = tokens[idx].meta as { ref: string };
+    const { ref, fragment } = tokens[idx].meta as { ref: string; fragment?: string };
     const resolved = env.resolver.resolve(ref);
     if (!resolved) {
       return `<div class="transclusion transclusion-missing">Missing note: ${md.utils.escapeHtml(ref)}</div>`;
@@ -331,13 +344,50 @@ function wikilinksPlugin(md: MDInstance) {
         resolved.path
       )}">Loading "${md.utils.escapeHtml(resolved.title)}"…</div>`;
     }
+    const strippedBody = stripFrontmatter(body);
+    let toRender = strippedBody;
+    let titleSuffix = "";
+    if (fragment) {
+      const range = resolveFragment(strippedBody, fragment);
+      if (!range) {
+        return `<div class="transclusion transclusion-missing">No "${md.utils.escapeHtml(
+          fragmentLabel(fragment)
+        )}" ${fragment.startsWith("^") ? "block" : "heading"} in "${md.utils.escapeHtml(resolved.title)}"</div>`;
+      }
+      toRender = stripBlockMarker(strippedBody.slice(range.start, range.end));
+      titleSuffix = ` › ${md.utils.escapeHtml(fragmentLabel(fragment))}`;
+    }
     const nextEnv: RenderEnv = { ...env, pathStack: new Set(env.pathStack).add(resolved.path) };
-    const inner = md.render(stripFrontmatter(body), nextEnv);
+    const inner = md.render(toRender, nextEnv);
     return `<div class="transclusion" data-transclude-path="${md.utils.escapeHtml(resolved.path)}">
-      <div class="transclusion-title">${md.utils.escapeHtml(resolved.title)}</div>
+      <div class="transclusion-title">${md.utils.escapeHtml(resolved.title)}${titleSuffix}</div>
       <div class="transclusion-body">${inner}</div>
     </div>`;
   };
+}
+
+// A trailing ^block-id on its own line (or at the end of a paragraph's
+// last line) marks that line as addressable — dimmed in preview rather
+// than hidden entirely, so it's visible which lines have a stable id
+// without being distracting. Deliberate scope cut alongside
+// resolveBlockFragment above: only matches when it's the very last thing
+// in its containing block, same "a block is one line" boundary.
+function blockIdMarkerPlugin(md: MDInstance) {
+  md.inline.ruler.after("escape", "block_id_marker", (state, silent) => {
+    const src = state.src;
+    const pos = state.pos;
+    if (src[pos] !== "^") return false;
+    const m = /^\^([\w-]+)\s*$/.exec(src.slice(pos));
+    if (!m) return false;
+    if (!silent) {
+      const token = state.push("block_id_marker", "", 0);
+      token.content = m[1];
+    }
+    state.pos = src.length;
+    return true;
+  });
+  md.renderer.rules.block_id_marker = (tokens, idx) =>
+    `<span class="block-id-marker">^${md.utils.escapeHtml(tokens[idx].content)}</span>`;
 }
 
 // "(Author, Year)" from a CitationInfo — falls back to the reference
@@ -407,6 +457,7 @@ export const md = new MarkdownIt({
 md.use(mathPlugin);
 md.use(calloutsPlugin);
 md.use(wikilinksPlugin);
+md.use(blockIdMarkerPlugin);
 md.use(citationsPlugin);
 md.use(highlightsAndCommentsPlugin);
 md.use(taskListsPlugin);
@@ -448,7 +499,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   return `<div class="code-block-wrapper"><button type="button" class="code-copy-btn" data-code="${rawCode}">Copy</button>${defaultFenceRule(tokens, idx, options, env, self)}</div>`;
 };
 
-export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {
+export function extractWikilinkRefs(raw: string): WikilinkRef[] {
   return extractWikilinkRefsFromBody(stripFrontmatter(raw));
 }
 

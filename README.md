@@ -22,6 +22,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Interactive task/checkbox lists (`- [ ]`) — click to toggle, right in preview
 - Excalidraw canvas notes, embedded natively
 - Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections
+- Section and block references: `[[Note#Heading]]` links/embeds just that section, `[[Note#^block-id]]` links/embeds one specific line — not just whole-note transclusion
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)
 - Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table)
@@ -92,7 +93,8 @@ Read `server/relay.ts` and `src/crypto.ts` if you want to verify these claims yo
 Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
-- No block-level references (Logseq's outliner model) — transclusion works at the whole-note level only
+- Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
+- Navigating to a `[[Note#Heading]]` or `[[Note#^block-id]]` *link* opens the note but doesn't yet scroll to or highlight that specific spot — embeds (`![[...]]`) already inline just that section/block correctly
 - Cloud-mode sharing has no role separation yet (see above)
 - Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Comments are a flat per-note thread, not anchored to a specific line or text range
