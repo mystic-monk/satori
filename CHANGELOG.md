@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-08-30
+
+### Fixed
+
+- Release builds now get signed for the auto-updater — the previous release predated the signing key being wired into CI
+
 ## [0.1.0] — 2026-08-29
 
 Initial release.
