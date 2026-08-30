@@ -71,7 +71,18 @@ export function getIdentity(): Identity {
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (isIdentity(parsed)) return parsed;
+      if (isIdentity(parsed)) {
+        // Repairs identities saved by a since-fixed version of
+        // setIdentityFromEmail that only ever set id/email, never name —
+        // anyone who "used email instead of anonymous" before that fix is
+        // stuck with this exact shape (a real email, but name still the
+        // untouched default) until it's read back through here once. Never
+        // touches a name someone actually chose via setDisplayName.
+        if (parsed.email && parsed.name === "Anonymous") {
+          return save({ ...parsed, name: nameFromEmail(parsed.email) });
+        }
+        return parsed;
+      }
     } catch {
       // fall through to (re)create below
     }
@@ -114,6 +125,10 @@ async function hashEmail(email: string): Promise<string> {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function nameFromEmail(email: string): string {
+  return email.split("@")[0];
+}
+
 // Opt-in only — anonymous (the createIdentity() default) stays the
 // zero-friction path. Typing the same email again later, on this device
 // or a different one, reproduces the exact same `id`, so history stays
@@ -134,7 +149,7 @@ export async function setIdentityFromEmail(email: string): Promise<Identity> {
   // expanded panel's own status line, directly contradicting what the user
   // just did. Only overrides the untouched default, never a name someone
   // deliberately chose via setDisplayName.
-  const name = current.name === "Anonymous" ? trimmed.split("@")[0] : current.name;
+  const name = current.name === "Anonymous" ? nameFromEmail(trimmed) : current.name;
   return save({ ...current, id, name, email: trimmed.toLowerCase() });
 }
 

@@ -55,6 +55,31 @@ describe("setIdentityFromEmail", () => {
   });
 });
 
+describe("getIdentity self-heal", () => {
+  it("repairs a stored identity stuck with email set but name still Anonymous", () => {
+    localStorage.setItem(
+      "pkm-identity",
+      JSON.stringify({ id: "old-hash-id", name: "Anonymous", color: "#30bced", email: "arya.ankush@gmail.com" })
+    );
+    const repaired = getIdentity();
+    expect(repaired.name).toBe("arya.ankush");
+    // id/color/email untouched — only the stuck name field is repaired
+    expect(repaired.id).toBe("old-hash-id");
+    expect(repaired.email).toBe("arya.ankush@gmail.com");
+
+    // Repair is persisted, not just returned in-memory
+    expect(getIdentity().name).toBe("arya.ankush");
+  });
+
+  it("never touches a name the user actually chose alongside an email", () => {
+    localStorage.setItem(
+      "pkm-identity",
+      JSON.stringify({ id: "id", name: "Ada Lovelace", color: "#30bced", email: "ada@example.com" })
+    );
+    expect(getIdentity().name).toBe("Ada Lovelace");
+  });
+});
+
 describe("clearEmailIdentity", () => {
   it("drops the email and id but keeps the display name and color", async () => {
     const withEmail = await setIdentityFromEmail("ada@example.com");
