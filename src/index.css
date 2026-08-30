@@ -1053,6 +1053,54 @@ button:disabled:hover {
   color: #fff;
 }
 
+.cloud-role-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: fit-content;
+  margin-bottom: var(--space-2);
+}
+
+.cloud-role-toggle button {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+  font-size: var(--text-sm);
+  padding: 5px 12px;
+}
+
+.cloud-role-toggle button:last-child {
+  border-right: none;
+}
+
+.cloud-role-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.cloud-view-key-share {
+  margin-top: var(--space-2);
+}
+
+.cloud-view-key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.cloud-view-key-value {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: var(--text-xs);
+  word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
 /* ---- Properties panel ---- */
 
 .properties-panel {

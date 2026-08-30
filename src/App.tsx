@@ -24,7 +24,7 @@ import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandl
 // WASM) — most users never touch cloud sync, so this is a dynamic import
 // (see the effect below) rather than a static one, same reasoning as the
 // CanvasNote/Excalidraw split above.
-import type { CloudStatus } from "./cloud-collab";
+import type { CloudStatus, CloudRole, CloudSecret } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
 import { fetchAuthStatus, type AuthStatus } from "./workspaceAuth";
 import LoginScreen from "./LoginScreen";
@@ -219,8 +219,23 @@ export default function App() {
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
+  // Which role to connect *as* — edit derives both contentKey and editToken
+  // from the passphrase (full access, same as cloud sync always granted);
+  // view uses a standalone content key someone with edit access shared,
+  // which can decrypt but was never able to derive editToken. See
+  // deriveRoomSecrets' doc comment in crypto.ts for why that separation
+  // actually holds up cryptographically, not just in the UI.
+  const [cloudRole, setCloudRole] = useState<CloudRole>("edit");
+  const [cloudViewKey, setCloudViewKey] = useState("");
   const [cloudConnected, setCloudConnected] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | "">("");
+  // The connected session's *actual* role (as opposed to cloudRole above,
+  // which is just what was requested) — null until a session actually
+  // opens. Feeds the editor's readOnly prop below so a view-only cloud
+  // connection can't type into the note even if someone edited this
+  // component to skip past the relay's own signature check; defense in
+  // depth, the relay enforcement is what actually matters.
+  const [cloudSessionRole, setCloudSessionRole] = useState<CloudRole | null>(null);
   // Not a secret — just an address — so localStorage is fine (unlike the
   // passphrase above, which deliberately stays in-memory only).
   const [relayUrl, setRelayUrl] = useState(() => localStorage.getItem("pkm-relay-url") || defaultRelayUrl());
@@ -497,14 +512,18 @@ export default function App() {
     let unbridge: (() => void) | null = null;
 
     setCloudStatus("connecting");
+    const room = cloudRoom.trim() || activePath;
+    const secret: CloudSecret =
+      cloudRole === "view" ? { kind: "contentKey", value: cloudViewKey.trim() } : { kind: "passphrase", value: cloudPassphrase };
     import("./cloud-collab").then(({ openCloudCollab }) =>
-      openCloudCollab(cloudRoom.trim() || activePath, cloudPassphrase, relayUrl, setCloudStatus)
+      openCloudCollab(room, secret, relayUrl, setCloudStatus)
     ).then((session) => {
       if (cancelled) {
         session.destroy();
         return;
       }
       destroy = session.destroy;
+      setCloudSessionRole(session.role);
       unbridge = bridgeDocs(localSession.doc, session.doc);
     });
 
@@ -512,6 +531,7 @@ export default function App() {
       cancelled = true;
       unbridge?.();
       destroy?.();
+      setCloudSessionRole(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudConnected, activePath, localSession]);
@@ -839,6 +859,19 @@ export default function App() {
     exportPdf(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes));
   }
 
+  // Computed on demand, not stored in state — the whole point is that only
+  // someone who already has the passphrase (i.e. edit access) can produce
+  // this, and it's cheap enough (one Argon2id + one KDF call) to just
+  // recompute whenever the "get a view-only link" button is pressed rather
+  // than caching a value that'd go stale the moment the room or passphrase
+  // fields change.
+  async function getCloudViewKey(): Promise<string> {
+    const room = cloudRoom.trim() || activePath || "";
+    const { deriveRoomSecrets, encodeContentKey } = await import("./crypto");
+    const { contentKey } = await deriveRoomSecrets(cloudPassphrase, room);
+    return encodeContentKey(contentKey);
+  }
+
   // Same owner-only scoping as everything else vault-wide (search/nav/
   // create/reindex) — a guest viewing one shared note shouldn't get a
   // command list either, and most of these actions would 403 anyway.
@@ -904,6 +937,11 @@ export default function App() {
           onCloudRoomChange={setCloudRoom}
           cloudPassphrase={cloudPassphrase}
           onCloudPassphraseChange={setCloudPassphrase}
+          cloudRole={cloudRole}
+          onCloudRoleChange={setCloudRole}
+          cloudViewKey={cloudViewKey}
+          onCloudViewKeyChange={setCloudViewKey}
+          onGetCloudViewKey={getCloudViewKey}
           cloudConnected={cloudConnected}
           onToggleCloudConnected={() => setCloudConnected((c) => !c)}
           cloudStatus={cloudStatus}
@@ -1339,7 +1377,7 @@ export default function App() {
                         key={activePath}
                         ytext={localSession.ytext}
                         awareness={localSession.awareness}
-                        readOnly={role === "view" || role === "comment"}
+                        readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
                         dark={isDarkTheme(themeId)}
                       />
                     </div>
@@ -1352,7 +1390,7 @@ export default function App() {
                         onNavigate={openNote}
                         shareToken={shareToken}
                         ytext={localSession.ytext}
-                        readOnly={role === "view" || role === "comment"}
+                        readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
                       />
                     </div>
                   )}

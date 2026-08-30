@@ -1,4 +1,5 @@
-import type { CloudStatus } from "./cloud-collab";
+import { useState } from "react";
+import type { CloudStatus, CloudRole } from "./cloud-collab";
 import { THEMES } from "./themes";
 import { TriangleAlert } from "lucide-react";
 
@@ -12,6 +13,11 @@ interface SettingsPanelProps {
   onCloudRoomChange: (room: string) => void;
   cloudPassphrase: string;
   onCloudPassphraseChange: (passphrase: string) => void;
+  cloudRole: CloudRole;
+  onCloudRoleChange: (role: CloudRole) => void;
+  cloudViewKey: string;
+  onCloudViewKeyChange: (key: string) => void;
+  onGetCloudViewKey: () => Promise<string>;
   cloudConnected: boolean;
   onToggleCloudConnected: () => void;
   cloudStatus: CloudStatus | "";
@@ -41,6 +47,11 @@ export default function SettingsPanel({
   onCloudRoomChange,
   cloudPassphrase,
   onCloudPassphraseChange,
+  cloudRole,
+  onCloudRoleChange,
+  cloudViewKey,
+  onCloudViewKeyChange,
+  onGetCloudViewKey,
   cloudConnected,
   onToggleCloudConnected,
   cloudStatus,
@@ -51,6 +62,26 @@ export default function SettingsPanel({
   onExportHtml,
   onExportPdf,
 }: SettingsPanelProps) {
+  const [viewKeyPreview, setViewKeyPreview] = useState<string | null>(null);
+  const [viewKeyCopied, setViewKeyCopied] = useState(false);
+
+  async function onShowViewKey() {
+    const key = await onGetCloudViewKey();
+    setViewKeyPreview(key);
+    setViewKeyCopied(false);
+  }
+
+  async function onCopyViewKey() {
+    if (!viewKeyPreview) return;
+    try {
+      await navigator.clipboard.writeText(viewKeyPreview);
+      setViewKeyCopied(true);
+      setTimeout(() => setViewKeyCopied(false), 2000);
+    } catch {
+      // clipboard permission denied or unavailable — the key is still shown on screen to copy manually
+    }
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal settings-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -76,6 +107,24 @@ export default function SettingsPanel({
           <div className="settings-section-label">Cloud sync</div>
           {canConnectCloud ? (
             <>
+              <div className="cloud-role-toggle" role="radiogroup" aria-label="Connect as">
+                <button
+                  className={cloudRole === "edit" ? "active" : ""}
+                  onClick={() => onCloudRoleChange("edit")}
+                  disabled={cloudConnected}
+                  aria-pressed={cloudRole === "edit"}
+                >
+                  Edit
+                </button>
+                <button
+                  className={cloudRole === "view" ? "active" : ""}
+                  onClick={() => onCloudRoleChange("view")}
+                  disabled={cloudConnected}
+                  aria-pressed={cloudRole === "view"}
+                >
+                  View only
+                </button>
+              </div>
               <div className="cloud-bar">
                 <input
                   className="cloud-input"
@@ -93,19 +142,33 @@ export default function SettingsPanel({
                   onChange={(e) => onCloudRoomChange(e.target.value)}
                   disabled={cloudConnected}
                 />
-                <input
-                  className="cloud-input"
-                  type="password"
-                  placeholder="Shared passphrase"
-                  aria-label="Cloud sync shared passphrase"
-                  value={cloudPassphrase}
-                  onChange={(e) => onCloudPassphraseChange(e.target.value)}
-                  disabled={cloudConnected}
-                />
+                {cloudRole === "edit" ? (
+                  <input
+                    className="cloud-input"
+                    type="password"
+                    placeholder="Shared passphrase"
+                    aria-label="Cloud sync shared passphrase"
+                    value={cloudPassphrase}
+                    onChange={(e) => onCloudPassphraseChange(e.target.value)}
+                    disabled={cloudConnected}
+                  />
+                ) : (
+                  <input
+                    className="cloud-input"
+                    placeholder="Content key (from someone with edit access)"
+                    aria-label="Cloud sync view-only content key"
+                    value={cloudViewKey}
+                    onChange={(e) => onCloudViewKeyChange(e.target.value)}
+                    disabled={cloudConnected}
+                  />
+                )}
                 <button
                   className="btn-primary"
                   onClick={onToggleCloudConnected}
-                  disabled={!cloudConnected && (!cloudPassphrase || !relayUrl.trim())}
+                  disabled={
+                    !cloudConnected &&
+                    (!relayUrl.trim() || (cloudRole === "edit" ? !cloudPassphrase : !cloudViewKey.trim()))
+                  }
                 >
                   {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
                 </button>
@@ -115,10 +178,26 @@ export default function SettingsPanel({
                   </span>
                 )}
               </div>
+              {cloudRole === "edit" && (
+                <div className="cloud-view-key-share">
+                  {viewKeyPreview ? (
+                    <div className="cloud-view-key-row">
+                      <code className="cloud-view-key-value">{viewKeyPreview}</code>
+                      <button className="btn-ghost" onClick={onCopyViewKey}>
+                        {viewKeyCopied ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="btn-ghost" onClick={onShowViewKey} disabled={!cloudPassphrase}>
+                      Get a view-only key to share
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="cloud-warning">
-                <TriangleAlert size={13} className="cloud-warning-icon" aria-hidden="true" /> Cloud sync has no
-                view/edit separation yet — anyone with this passphrase can read <em>and write</em>, unlike the
-                Share panel's local roles. Only share it with people you'd trust to edit.
+                <TriangleAlert size={13} className="cloud-warning-icon" aria-hidden="true" /> Anyone with the
+                passphrase gets edit access — anyone with just a view-only content key can read but their edits are
+                rejected by the relay, even if their client tried to send them.
               </p>
             </>
           ) : (
