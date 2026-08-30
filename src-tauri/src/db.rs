@@ -1,4 +1,8 @@
-use crate::{frontmatter, links, vault::Vault};
+use crate::{
+    frontmatter, links,
+    srs::{initial_card_state, next_card_state, CardState, Rating},
+    vault::Vault,
+};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -62,6 +66,14 @@ pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
             authors TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS history_path ON history(path);
+        CREATE TABLE IF NOT EXISTS flashcard_reviews (
+            path TEXT PRIMARY KEY,
+            ease REAL NOT NULL,
+            interval_days REAL NOT NULL,
+            repetitions INTEGER NOT NULL,
+            due_at REAL NOT NULL,
+            reviewed_at REAL
+        );
         ",
     )
     .map_err(|e| e.to_string())?;
@@ -632,4 +644,84 @@ pub fn search_notes(conn: &Connection, query: &str) -> Result<Vec<SearchResult>,
         })
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+// ---- Flashcards / spaced repetition ----
+//
+// Mirrors server/db.ts's flashcard functions exactly. A note is a
+// flashcard purely by convention (`type: flashcard`); this only tracks
+// *when* each one is next due — front/back content is read client-side
+// (src/FlashcardReview.tsx), same split_front_back as srs.rs.
+
+#[derive(Serialize)]
+pub struct DueCard {
+    pub path: String,
+    pub title: String,
+}
+
+pub fn get_due_cards(index_conn: &Connection, state_conn: &Connection) -> Result<Vec<DueCard>, String> {
+    let now = chrono::Utc::now().timestamp_millis() as f64;
+
+    let mut stmt = index_conn
+        .prepare("SELECT path, title FROM notes WHERE type = 'flashcard'")
+        .map_err(|e| e.to_string())?;
+    let flashcard_notes: Vec<DueCard> = stmt
+        .query_map([], |row| Ok(DueCard { path: row.get(0)?, title: row.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut due_stmt = state_conn
+        .prepare("SELECT path, due_at FROM flashcard_reviews")
+        .map_err(|e| e.to_string())?;
+    let due_map: HashMap<String, f64> = due_stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(|e| e.to_string())?;
+
+    // A card never reviewed has no row at all — due immediately, same as
+    // a card whose due_at has already passed.
+    Ok(flashcard_notes
+        .into_iter()
+        .filter(|n| *due_map.get(&n.path).unwrap_or(&0.0) <= now)
+        .collect())
+}
+
+pub fn record_card_review(state_conn: &Connection, note_path: &str, rating: Rating) -> Result<(), String> {
+    let result: rusqlite::Result<CardState> = state_conn.query_row(
+        "SELECT ease, interval_days, repetitions FROM flashcard_reviews WHERE path = ?1",
+        params![note_path],
+        |r| {
+            Ok(CardState {
+                ease: r.get(0)?,
+                interval_days: r.get(1)?,
+                repetitions: r.get(2)?,
+            })
+        },
+    );
+    let prev = match result {
+        Ok(state) => state,
+        Err(rusqlite::Error::QueryReturnedNoRows) => initial_card_state(),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    let next = next_card_state(prev, rating);
+    let now = chrono::Utc::now().timestamp_millis() as f64;
+    let due_at = now + next.interval_days * 24.0 * 60.0 * 60.0 * 1000.0;
+
+    state_conn
+        .execute(
+            "INSERT INTO flashcard_reviews (path, ease, interval_days, repetitions, due_at, reviewed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(path) DO UPDATE SET
+               ease = excluded.ease,
+               interval_days = excluded.interval_days,
+               repetitions = excluded.repetitions,
+               due_at = excluded.due_at,
+               reviewed_at = excluded.reviewed_at",
+            params![note_path, next.ease, next.interval_days, next.repetitions, due_at, now],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }

@@ -203,3 +203,20 @@ pub fn save_export_file(
 pub fn print_current_window(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn get_due_cards(state: State<AppState>) -> Result<Vec<db::DueCard>, String> {
+    let conn = state.conn.lock().map_err(lock_err)?;
+    let state_conn = state.state_conn.lock().map_err(lock_err)?;
+    db::get_due_cards(&conn, &state_conn)
+}
+
+#[tauri::command]
+pub fn record_card_review(
+    state: State<AppState>,
+    path: String,
+    rating: crate::srs::Rating,
+) -> Result<(), String> {
+    let state_conn = state.state_conn.lock().map_err(lock_err)?;
+    db::record_card_review(&state_conn, &path, rating)
+}

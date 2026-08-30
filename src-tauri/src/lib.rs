@@ -3,6 +3,7 @@ mod db;
 mod frontmatter;
 mod import;
 mod links;
+mod srs;
 mod state;
 mod vault;
 
@@ -274,6 +275,8 @@ pub fn run() {
             commands::import_folder,
             commands::save_export_file,
             commands::print_current_window,
+            commands::get_due_cards,
+            commands::record_card_review,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

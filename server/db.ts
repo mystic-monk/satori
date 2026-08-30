@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { listNoteFiles, readNoteRaw, parseNote } from "./vault.js";
 import { extractWikilinkRefs } from "../shared/wikilinks.js";
+import { initialCardState, nextCardState, type CardState, type Rating } from "./srs.js";
 
 const INDEX_DIR = path.resolve(process.cwd(), ".pkm");
 const INDEX_PATH = path.join(INDEX_DIR, "index.sqlite");
@@ -71,6 +72,18 @@ stateDb.exec(`
     authors TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS history_path ON history(path);
+
+  -- Spaced-repetition scheduling state (SM-2 — see srs.ts) for
+  -- type:flashcard notes. Genuine app state, not derivable from the vault
+  -- itself, so it lives here rather than in the rebuildable index.
+  CREATE TABLE IF NOT EXISTS flashcard_reviews (
+    path TEXT PRIMARY KEY,
+    ease REAL NOT NULL,
+    interval_days REAL NOT NULL,
+    repetitions INTEGER NOT NULL,
+    due_at INTEGER NOT NULL,
+    reviewed_at INTEGER
+  );
 `);
 
 function deleteFromIndex(relPath: string) {
@@ -465,4 +478,53 @@ export function getHistory(notePath: string): HistoryEntry[] {
       typeof a === "string" ? { id: null, name: a } : a
     ),
   }));
+}
+
+// ---- Flashcards / spaced repetition ----
+//
+// A note is a flashcard purely by convention: `type: flashcard`. Its
+// content (front/back split) is read by the client (see
+// shared/wikilinks.js's sibling pattern — actually src/FlashcardReview.tsx
+// on the frontend, using the same splitFrontBack as srs.ts); this module
+// only tracks *when* each card is next due.
+
+export interface DueCard {
+  path: string;
+  title: string;
+}
+
+export function getDueCards(): DueCard[] {
+  const now = Date.now();
+  const flashcardNotes = db
+    .prepare("SELECT path, title FROM notes WHERE type = 'flashcard'")
+    .all() as DueCard[];
+  const dueRows = stateDb.prepare("SELECT path, due_at as dueAt FROM flashcard_reviews").all() as {
+    path: string;
+    dueAt: number;
+  }[];
+  const dueMap = new Map(dueRows.map((r) => [r.path, r.dueAt]));
+  // A card never reviewed has no row at all — due immediately, same as a
+  // card whose due_at has already passed.
+  return flashcardNotes.filter((n) => (dueMap.get(n.path) ?? 0) <= now);
+}
+
+export function recordCardReview(notePath: string, rating: Rating): void {
+  const row = stateDb
+    .prepare("SELECT ease, interval_days as intervalDays, repetitions FROM flashcard_reviews WHERE path = ?")
+    .get(notePath) as CardState | undefined;
+  const next = nextCardState(row ?? initialCardState(), rating);
+  const now = Date.now();
+  const dueAt = now + next.intervalDays * 24 * 60 * 60 * 1000;
+  stateDb
+    .prepare(
+      `INSERT INTO flashcard_reviews (path, ease, interval_days, repetitions, due_at, reviewed_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET
+         ease = excluded.ease,
+         interval_days = excluded.interval_days,
+         repetitions = excluded.repetitions,
+         due_at = excluded.due_at,
+         reviewed_at = excluded.reviewed_at`
+    )
+    .run(notePath, next.ease, next.intervalDays, next.repetitions, dueAt, now);
 }

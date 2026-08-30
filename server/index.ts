@@ -20,8 +20,11 @@ import {
   revokeShare,
   getHistory,
   resolveShareRole,
+  getDueCards,
+  recordCardReview,
   type ShareRole,
 } from "./db.js";
+import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
 
@@ -171,6 +174,23 @@ app.get("/api/search", requireOwner, (req, res) => {
 
 app.post("/api/reindex", requireOwner, (_req, res) => {
   res.json(rebuildIndex());
+});
+
+// Flashcard review — owner-only like every other vault-wide surface
+// (reviewing/scheduling cards across the whole vault isn't something a
+// share-link guest scoped to one note should touch).
+app.get("/api/flashcards/due", requireOwner, (_req, res) => {
+  res.json(getDueCards());
+});
+
+app.post("/api/flashcards/review", requireOwner, (req, res) => {
+  const { path: relPath, rating } = req.body as { path: string; rating: Rating };
+  if (!["again", "hard", "good", "easy"].includes(rating)) {
+    res.status(400).json({ error: "invalid rating" });
+    return;
+  }
+  recordCardReview(relPath, rating);
+  res.json({ ok: true });
 });
 
 const PORT = 3001;

@@ -232,3 +232,30 @@ export async function saveExportFile(
 export async function printCurrentWindow(): Promise<void> {
   await invoke("print_current_window");
 }
+
+export type Rating = "again" | "hard" | "good" | "easy";
+
+export interface DueCard {
+  path: string;
+  title: string;
+}
+
+// Owner-only, same as reindex/search — see the requireOwner guard on
+// these routes in server/index.ts.
+export async function fetchDueCards(): Promise<DueCard[]> {
+  if (IS_TAURI) return invoke("get_due_cards");
+  const res = await fetch("/api/flashcards/due");
+  return res.json();
+}
+
+export async function reviewCard(path: string, rating: Rating): Promise<void> {
+  if (IS_TAURI) {
+    await invoke("record_card_review", { path, rating });
+    return;
+  }
+  await fetch("/api/flashcards/review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, rating }),
+  });
+}
