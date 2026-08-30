@@ -30,6 +30,16 @@ export interface CloudSession {
 // architecture decision), and a production web deploy reverse-proxied
 // behind a different port/host. See relayUrlDefault() below for the one
 // case where the old derivation is still a reasonable guess.
+// Capped exponential backoff — a free-tier relay host (Render and similar)
+// can take 30-60s to wake from an idle spin-down, well past a first
+// connection attempt's timeout, and with no retry at all that looked
+// indistinguishable from "cloud sync is just broken" (the failed attempt
+// left onStatus stuck at "error" with nothing to fix it). 1s/2s/4s/.../
+// capped at 15s comfortably covers a cold-start wake without hammering the
+// relay once it's actually gone.
+const RETRY_BASE_MS = 1000;
+const RETRY_MAX_MS = 15000;
+
 export async function openCloudCollab(
   room: string,
   passphrase: string,
@@ -42,9 +52,10 @@ export async function openCloudCollab(
   const awareness = new awarenessProtocol.Awareness(doc);
 
   const wsUrl = `${relayBase.replace(/\/$/, "")}/relay/${encodeURIComponent(room)}`;
-  const ws = new WebSocket(wsUrl);
-  ws.binaryType = "arraybuffer";
+  let ws: WebSocket;
   let destroyed = false;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   function send(bytes: Uint8Array) {
     if (destroyed || ws.readyState !== WebSocket.OPEN) return;
@@ -53,38 +64,65 @@ export async function openCloudCollab(
     });
   }
 
-  ws.addEventListener("open", () => {
-    onStatus("connected");
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, MSG_SYNC);
-    syncProtocol.writeSyncStep1(encoder, doc);
-    send(encoding.toUint8Array(encoder));
-  });
+  function scheduleRetry() {
+    if (destroyed || retryTimer) return;
+    const delay = Math.min(RETRY_BASE_MS * 2 ** retryAttempt, RETRY_MAX_MS);
+    retryAttempt++;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      connect();
+    }, delay);
+  }
 
-  ws.addEventListener("message", async (ev) => {
-    let plain: Uint8Array;
-    try {
-      plain = await decrypt(new Uint8Array(ev.data as ArrayBuffer), key);
-    } catch {
-      // Wrong passphrase, or a blob from a peer using a different key —
-      // the relay can't tell those apart, but we can: authentication fails.
-      onStatus("decrypt-failed");
-      return;
-    }
-    const decoder = decoding.createDecoder(plain);
-    const type = decoding.readVarUint(decoder);
-    if (type === MSG_SYNC) {
+  function connect() {
+    onStatus("connecting");
+    ws = new WebSocket(wsUrl);
+    ws.binaryType = "arraybuffer";
+
+    ws.addEventListener("open", () => {
+      retryAttempt = 0;
+      onStatus("connected");
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, MSG_SYNC);
-      syncProtocol.readSyncMessage(decoder, encoder, doc, REMOTE_ORIGIN);
-      if (encoding.length(encoder) > 1) send(encoding.toUint8Array(encoder));
-    } else if (type === MSG_AWARENESS) {
-      awarenessProtocol.applyAwarenessUpdate(awareness, decoding.readVarUint8Array(decoder), REMOTE_ORIGIN);
-    }
-  });
+      syncProtocol.writeSyncStep1(encoder, doc);
+      send(encoding.toUint8Array(encoder));
+    });
 
-  ws.addEventListener("close", () => !destroyed && onStatus("disconnected"));
-  ws.addEventListener("error", () => !destroyed && onStatus("error"));
+    ws.addEventListener("message", async (ev) => {
+      let plain: Uint8Array;
+      try {
+        plain = await decrypt(new Uint8Array(ev.data as ArrayBuffer), key);
+      } catch {
+        // Wrong passphrase, or a blob from a peer using a different key —
+        // the relay can't tell those apart, but we can: authentication fails.
+        onStatus("decrypt-failed");
+        return;
+      }
+      const decoder = decoding.createDecoder(plain);
+      const type = decoding.readVarUint(decoder);
+      if (type === MSG_SYNC) {
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, MSG_SYNC);
+        syncProtocol.readSyncMessage(decoder, encoder, doc, REMOTE_ORIGIN);
+        if (encoding.length(encoder) > 1) send(encoding.toUint8Array(encoder));
+      } else if (type === MSG_AWARENESS) {
+        awarenessProtocol.applyAwarenessUpdate(awareness, decoding.readVarUint8Array(decoder), REMOTE_ORIGIN);
+      }
+    });
+
+    ws.addEventListener("close", () => {
+      if (destroyed) return;
+      onStatus("disconnected");
+      scheduleRetry();
+    });
+    ws.addEventListener("error", () => {
+      if (destroyed) return;
+      onStatus("error");
+      scheduleRetry();
+    });
+  }
+
+  connect();
 
   doc.on("update", (update: Uint8Array, origin: unknown) => {
     if (origin === REMOTE_ORIGIN) return;
@@ -112,6 +150,7 @@ export async function openCloudCollab(
     awareness,
     destroy: () => {
       destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
       ws.close();
       doc.destroy();
     },

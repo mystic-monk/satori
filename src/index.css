@@ -138,6 +138,49 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  transition: width var(--transition-base);
+}
+
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+/* Lives outside <aside> deliberately — .sidebar.collapsed sets width:0 with
+   overflow:hidden, so any toggle rendered inside it would become
+   unreachable the moment it collapses. Sits right at the sidebar's edge
+   when open, and slides to the viewport edge when collapsed so it's always
+   in the same reachable place either way. Desktop only: the mobile
+   drawer's own .hamburger already covers narrow viewports (see the
+   @media block below). */
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 14px;
+  left: 264px;
+  z-index: 20;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: left var(--transition-base), background var(--transition-fast), color var(--transition-fast);
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sidebar-collapse-toggle.collapsed {
+  left: 10px;
 }
 
 .sidebar-header {
@@ -552,6 +595,16 @@ button:disabled:hover {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
+}
+
+/* .sidebar-collapse-toggle sits fixed at left:10px (width 28px) once the
+   sidebar collapses to width:0, which would otherwise sit directly on top
+   of whatever this pane renders at its top-left corner — .editor-toolbar's
+   note-path text, GraphView's caption, TableView's rollup bar, etc. Padding
+   the pane itself (rather than each view's own top element individually)
+   reserves that space once, for every view it can render. */
+.editor-pane.sidebar-collapsed {
+  padding-left: 48px;
 }
 
 .editor-path {
@@ -1731,7 +1784,8 @@ button:disabled:hover {
     overflow: hidden;
   }
 
-  .sidebar {
+  .sidebar,
+  .sidebar.collapsed {
     position: fixed;
     inset: 0 auto 0 0;
     width: 78vw;
@@ -1741,10 +1795,19 @@ button:disabled:hover {
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+    border-right: none;
+    overflow: visible;
   }
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  /* The desktop collapse toggle is redundant with (and would visually
+     collide with) the drawer's own hamburger/backdrop below — a collapsed
+     state from a prior desktop session shouldn't hide the drawer here. */
+  .sidebar-collapse-toggle {
+    display: none;
   }
 
   .sidebar-header {
@@ -2035,6 +2098,42 @@ button:disabled:hover {
   gap: 8px;
 }
 
+/* SettingsPanel's cloud-sync fields need real width to stay usable — the
+   base .modal's 340px (sized for WorkspacePanel's single-column forms)
+   would cram three inputs and a button into a much tighter space. */
+.settings-modal {
+  width: 480px;
+}
+
+.settings-section {
+  margin-bottom: var(--space-4);
+}
+
+.settings-section:last-of-type {
+  margin-bottom: var(--space-3);
+}
+
+.settings-section-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--space-2);
+}
+
+.settings-note {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.settings-export-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 .command-palette-backdrop {
   align-items: flex-start;
   padding-top: 12vh;
@@ -2228,6 +2327,7 @@ button:disabled:hover {
 
 /* ---- Workspace / Members panel ---- */
 
+.settings-panel-trigger,
 .workspace-panel-trigger {
   display: flex;
   align-items: center;
@@ -2246,10 +2346,12 @@ button:disabled:hover {
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 
+.settings-panel-trigger svg,
 .workspace-panel-trigger svg {
   flex-shrink: 0;
 }
 
+.settings-panel-trigger:hover,
 .workspace-panel-trigger:hover {
   color: var(--text);
   background: var(--bg-hover);

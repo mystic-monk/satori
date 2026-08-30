@@ -29,6 +29,7 @@ import { IS_TAURI, defaultRelayUrl } from "./platform";
 import { fetchAuthStatus, type AuthStatus } from "./workspaceAuth";
 import LoginScreen from "./LoginScreen";
 import WorkspacePanel from "./WorkspacePanel";
+import SettingsPanel from "./SettingsPanel";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
@@ -69,12 +70,14 @@ import {
   LayoutTemplate,
   Menu as MenuIcon,
   Paintbrush,
+  PanelLeftClose,
+  PanelLeftOpen,
   PenLine,
   RotateCw,
+  Settings as SettingsIcon,
   Star,
   Table2,
   Users,
-  TriangleAlert,
   Vault as VaultIcon,
   Waypoints,
 } from "lucide-react";
@@ -176,6 +179,7 @@ export default function App() {
   // actually needed.
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -187,6 +191,18 @@ export default function App() {
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop-only: the mobile off-canvas drawer above (sidebarOpen) already
+  // handles small viewports, so this stays permanently false there (see the
+  // sidebar-collapse-toggle button's mobile media query). A plain UI
+  // preference, not app state, so localStorage rather than server-side —
+  // same category as pkm-relay-url below.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pkm-sidebar-collapsed") === "1");
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((collapsed) => {
+      localStorage.setItem("pkm-sidebar-collapsed", collapsed ? "0" : "1");
+      return !collapsed;
+    });
+  }
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
@@ -785,6 +801,23 @@ export default function App() {
     return { resolver, bodies: new Map(), pathStack: new Set(), citations: buildCitations(notes) };
   }
 
+  // Named (rather than inline in each button's onClick) so the same three
+  // actions can be wired up from both the note toolbar's quick-export
+  // buttons and SettingsPanel's export section without duplicating the
+  // renderNoteBodyForExport(...) call in three places.
+  function onExportMd() {
+    if (!activePath) return;
+    exportMarkdown(activePath, raw);
+  }
+  async function onExportHtml() {
+    if (!activePath) return;
+    exportHtml(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes));
+  }
+  async function onExportPdf() {
+    if (!activePath) return;
+    exportPdf(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes));
+  }
+
   // Same owner-only scoping as everything else vault-wide (search/nav/
   // create/reindex) — a guest viewing one shared note shouldn't get a
   // command list either, and most of these actions would 403 anyway.
@@ -836,11 +869,44 @@ export default function App() {
           onClose={() => setWorkspacePanelOpen(false)}
         />
       )}
+      {settingsPanelOpen && (
+        <SettingsPanel
+          onClose={() => setSettingsPanelOpen(false)}
+          themeId={themeId}
+          onThemeChange={setThemeId}
+          relayUrl={relayUrl}
+          onRelayUrlChange={(url) => {
+            setRelayUrl(url);
+            localStorage.setItem("pkm-relay-url", url);
+          }}
+          cloudRoom={cloudRoom}
+          onCloudRoomChange={setCloudRoom}
+          cloudPassphrase={cloudPassphrase}
+          onCloudPassphraseChange={setCloudPassphrase}
+          cloudConnected={cloudConnected}
+          onToggleCloudConnected={() => setCloudConnected((c) => !c)}
+          cloudStatus={cloudStatus}
+          activePath={activePath}
+          canConnectCloud={role === "owner" && !!activePath && !!localSession}
+          canExport={!!activePath && !isCanvas}
+          onExportMd={onExportMd}
+          onExportHtml={onExportHtml}
+          onExportPdf={onExportPdf}
+        />
+      )}
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
         <MenuIcon size={18} />
       </button>
+      <button
+        className={`sidebar-collapse-toggle ${sidebarCollapsed ? "collapsed" : ""}`}
+        onClick={toggleSidebarCollapsed}
+        aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+      >
+        {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+      </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
         {IS_TAURI && (
           <div className="vault-header">
             <button
@@ -873,7 +939,11 @@ export default function App() {
             )}
           </div>
         )}
-        <IdentityPanel themeId={themeId} onThemeChange={setThemeId} />
+        <IdentityPanel />
+        <button className="settings-panel-trigger" onClick={() => setSettingsPanelOpen(true)} title="Settings">
+          <SettingsIcon size={14} />
+          Settings
+        </button>
         {!IS_TAURI && !shareToken && authStatus && (
           <button
             className="workspace-panel-trigger"
@@ -1180,7 +1250,7 @@ export default function App() {
         )}
         <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
-      <main className="editor-pane">
+      <main className={`editor-pane ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} />
         ) : showTable ? (
@@ -1210,21 +1280,9 @@ export default function App() {
               )}
               {!isCanvas && (
                 <>
-                  <button onClick={() => exportMarkdown(activePath, raw)}>MD</button>
-                  <button
-                    onClick={async () =>
-                      exportHtml(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes))
-                    }
-                  >
-                    HTML
-                  </button>
-                  <button
-                    onClick={async () =>
-                      exportPdf(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes))
-                    }
-                  >
-                    PDF
-                  </button>
+                  <button onClick={onExportMd}>MD</button>
+                  <button onClick={onExportHtml}>HTML</button>
+                  <button onClick={onExportPdf}>PDF</button>
                 </>
               )}
               {role !== "owner" && <span className="role-badge">{role}</span>}
@@ -1234,56 +1292,6 @@ export default function App() {
                 </button>
               )}
             </div>
-            {role === "owner" && (
-              <div className="cloud-bar-wrap">
-                <div className="cloud-bar">
-                  <input
-                    className="cloud-input"
-                    placeholder="Relay server (ws://host:port)"
-                    aria-label="Cloud sync relay server address"
-                    value={relayUrl}
-                    onChange={(e) => {
-                      setRelayUrl(e.target.value);
-                      localStorage.setItem("pkm-relay-url", e.target.value);
-                    }}
-                    disabled={cloudConnected}
-                  />
-                  <input
-                    className="cloud-input"
-                    placeholder={`Room (default: ${activePath})`}
-                    aria-label="Cloud sync room name"
-                    value={cloudRoom}
-                    onChange={(e) => setCloudRoom(e.target.value)}
-                    disabled={cloudConnected}
-                  />
-                  <input
-                    className="cloud-input"
-                    type="password"
-                    placeholder="Shared passphrase"
-                    aria-label="Cloud sync shared passphrase"
-                    value={cloudPassphrase}
-                    onChange={(e) => setCloudPassphrase(e.target.value)}
-                    disabled={cloudConnected}
-                  />
-                  <button
-                    onClick={() => setCloudConnected((c) => !c)}
-                    disabled={!cloudConnected && (!cloudPassphrase || !relayUrl.trim())}
-                  >
-                    {cloudConnected ? "Disconnect cloud sync" : "Connect cloud sync"}
-                  </button>
-                  {cloudConnected && (
-                    <span className={`cloud-status ${cloudStatus === "decrypt-failed" ? "cloud-status-error" : ""}`}>
-                      {cloudStatus === "decrypt-failed" ? "wrong passphrase — can't decrypt peer data" : cloudStatus}
-                    </span>
-                  )}
-                </div>
-                <p className="cloud-warning">
-                  <TriangleAlert size={13} className="cloud-warning-icon" aria-hidden="true" /> Cloud sync has no
-                  view/edit separation yet — anyone with this passphrase can read <em>and write</em>, unlike the
-                  Share panel's local roles below. Only share it with people you'd trust to edit.
-                </p>
-              </div>
-            )}
             <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
             <SharePanel path={activePath} isOwner={role === "owner"} />
             <CommentsPanel path={activePath} canComment={role !== "view"} shareToken={shareToken} />

@@ -8,22 +8,15 @@ import {
   setIdentityFromEmail,
   type Identity,
 } from "./identity";
-import { THEMES } from "./themes";
 import PromptDialog from "./PromptDialog";
-
-interface IdentityPanelProps {
-  themeId: string;
-  onThemeChange: (id: string) => void;
-}
 
 // Vault-wide, not per-note — unlike PropertiesPanel/SharePanel/HistoryPanel
 // (which all render inside the activePath block), this is who *you* are
 // across every note, so it's rendered once near the top of the sidebar.
-// Theme lives here too (App.tsx still owns the actual themeId state, since
-// it drives the applyTheme()/isDarkTheme() effect there) — it's a personal
-// preference in the same category as display name/color, not something
-// that needed its own settings surface.
-export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelProps) {
+// Theme used to live here too but moved to SettingsPanel.tsx, which
+// consolidates it with cloud-sync connection settings and export — this
+// panel is purely "who am I" now (name/color/email/portability).
+export default function IdentityPanel() {
   const [open, setOpen] = useState(false);
   const [identity, setIdentity] = useState<Identity>(() => getIdentity());
   const [nameDraft, setNameDraft] = useState(identity.name);
@@ -136,18 +129,6 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
             </button>
           </div>
           {importError && <p className="identity-error">{importError}</p>}
-          <select
-            className="type-filter"
-            value={themeId}
-            onChange={(e) => onThemeChange(e.target.value)}
-            aria-label="Theme"
-          >
-            {THEMES.map((t) => (
-              <option key={t.id} value={t.id}>
-                Theme: {t.label}
-              </option>
-            ))}
-          </select>
         </div>
       )}
       {emailPromptOpen && (
