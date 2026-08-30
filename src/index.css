@@ -555,6 +555,95 @@ button:hover {
   text-align: center;
 }
 
+.table-rollup-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.table-rollup-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.table-rollup-remove {
+  padding: 0 2px;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.table-rollup-remove:hover {
+  color: var(--text);
+}
+
+.table-rollup-add {
+  font-size: 12px;
+  padding: 3px 8px;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.table-rollup-add:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.table-rollup-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-rollup-form select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.table-cell-relation {
+  white-space: normal;
+}
+
+.table-relation-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.table-relation-chip {
+  padding: 1px 7px;
+  background: var(--bg-active);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.table-relation-chip:hover {
+  text-decoration: underline;
+}
+
+.table-relation-chip.table-relation-broken {
+  color: var(--text-dim);
+  cursor: help;
+  text-decoration: none;
+  border: 1px dashed var(--text-dim);
+  background: transparent;
+}
+
 .flashcard-review {
   height: 100%;
   display: flex;

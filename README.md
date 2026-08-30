@@ -29,7 +29,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
 - Templates with `{{date}}`/`{{title}}` placeholder substitution
-- Table/database views over your notes' properties, with inline editing
+- Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
 - Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing
 
@@ -94,7 +94,7 @@ Satori is early and honest about what it isn't yet:
 - No native mobile apps yet (responsive web layout only)
 - No block-level references (Logseq's outliner model) — transclusion works at the whole-note level only
 - Cloud-mode sharing has no role separation yet (see above)
-- Table views are a single layout — no kanban/calendar/gallery views yet
+- Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Comments are a flat per-note thread, not anchored to a specific line or text range
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation

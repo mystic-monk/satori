@@ -13,6 +13,7 @@ import { renderMermaidBlocks } from "./mermaid-render";
 import { parseFilterText, queryNotes } from "./noteQuery";
 import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
+import { buildResolver } from "./noteResolver";
 
 // The inverse of markdown.ts's taskListsPlugin: `line` is the checkbox's
 // list-item start line within the frontmatter-stripped body (same
@@ -62,21 +63,6 @@ function formatReferenceEntry(info: CitationInfo): string {
   if (info.year) parts.push(`(${info.year})`);
   parts.push(info.title.endsWith(".") ? info.title : `${info.title}.`);
   return parts.join(" ");
-}
-
-export function buildResolver(notes: NoteListItem[]) {
-  const byPath = new Map(notes.map((n) => [n.path.replace(/\.md$/, ""), n]));
-  const byTitle = new Map(notes.map((n) => [n.title.toLowerCase(), n]));
-  return {
-    resolve(ref: string): ResolvedNote | null {
-      const clean = ref.trim().replace(/\.md$/, "");
-      const byP = byPath.get(clean);
-      if (byP) return { path: byP.path, title: byP.title };
-      const byT = byTitle.get(clean.toLowerCase());
-      if (byT) return { path: byT.path, title: byT.title };
-      return null;
-    },
-  };
 }
 
 interface PreviewProps {

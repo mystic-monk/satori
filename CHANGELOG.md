@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Relational properties in Table view: a `[[wikilink]]`-valued property renders as a clickable link instead of plain text, and rollup columns show a count/list of notes that relate back to a given note via a chosen property
 - Citations: `[@citekey]` inline references, `​```bibliography` blocks, and `.bib` file import (`type: reference` notes)
 - Real inline comments — the "comment" share role now actually grants comment-posting rights, instead of doing nothing
 - Interactive task/checkbox lists in preview
