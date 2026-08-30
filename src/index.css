@@ -69,6 +69,7 @@
   --type-flashcard: #e0699a;
   --type-template: #e0a622;
   --type-reference: #5cb85c;
+  --type-tutorial: #4a90d9;
   --type-other: #7a8699;
 }
 
@@ -417,6 +418,10 @@ body {
 
 .type-color-reference {
   color: var(--type-reference);
+}
+
+.type-color-tutorial {
+  color: var(--type-tutorial);
 }
 
 .type-color-other {

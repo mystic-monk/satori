@@ -9,9 +9,9 @@ The other tutorial pages cover writing and collaborating. This one covers everyt
 
 Click **▸ You: Anonymous** near the top of the sidebar. This is who collaborators see — your display name and cursor color when co-editing, and who a note's History panel attributes an edit to.
 
-It's stored only in this browser, so a fresh browser or device starts as a new "Anonymous" identity by default — which fragments your own edit history across devices unless you carry it over. **Export identity** copies a small text blob; **Import identity** on another device restores the exact same identity there, so your history stays attributed to one person instead of splintering.
+It's stored only in this browser, so a fresh browser or device starts as a new "Anonymous" identity by default — which fragments your own edit history across devices unless you carry it over. **Export identity** copies a small text blob; **Import identity** on another device restores the exact same identity there, so your history stays attributed to one person instead of splintering. Or type your email instead — it's hashed locally and never sent anywhere, but typing the same one again on any device gets you back to this same identity without an export file.
 
-Your theme (Dark/Light/Solarized Dark/Solarized Light) lives in this same panel.
+**Settings**, just below your identity, is where theme (Dark/Light/Solarized Dark/Solarized Light), cloud sync, and export live — see [[tutorial/settings-and-export|Settings & export]].
 
 ## The command palette
 
@@ -35,15 +35,18 @@ Just below Favorites, the sidebar tracks the last several notes you opened, most
 
 ## Organized navigation
 
-The sidebar's **All Notes / Journal / Canvas / Graph / Table / Flashcards** row switches what you're browsing:
+The sidebar's **All Notes / Journal / Canvas / Graph / Table / Flashcards / Tutorials** row switches what you're browsing:
 - **All Notes** — everything (the default)
 - **Journal** — just your daily notes, with a one-click "Write today's entry" prompt when today's doesn't exist yet
 - **Canvas** — just your Excalidraw canvas notes
 - **Graph** — the visual link graph (see [[tutorial/linking|Linking & the graph]])
 - **Table** — see below
 - **Flashcards** — spaced-repetition review (see below)
+- **Tutorials** — every page in this tutorial, in one place — the exact section you're reading right now
 
 If you've added a custom `type` to some notes (beyond `daily`/`canvas`), a **More types…** dropdown appears so you can filter to those too.
+
+On a wide enough screen, the little panel icon next to the note title collapses the sidebar entirely — more room for writing, one click to bring it back. Your choice is remembered next time you open the app.
 
 ## Query blocks: live-filtered lists inside a note
 

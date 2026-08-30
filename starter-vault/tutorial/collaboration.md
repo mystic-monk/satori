@@ -11,7 +11,9 @@ Open any note in two browser tabs and start typing in one — the other updates 
 
 ## Cloud sync, end-to-end encrypted
 
-Under a note's toolbar there's a **Connect cloud sync** row: a room name (defaults to the note's path) and a shared passphrase. Anyone with the same passphrase, anywhere, can co-edit — but the relay server in between never sees anything but ciphertext. Wrong passphrase in, and you simply can't decrypt what comes back.
+Open **Settings** in the sidebar (below your identity) with a note open — its **Cloud sync** section has a relay address, a room name (defaults to the note's path), and a shared passphrase. Anyone with the same passphrase, anywhere, can co-edit — but the relay server in between never sees anything but ciphertext. Wrong passphrase in, and you simply can't decrypt what comes back.
+
+The relay itself has to run somewhere reachable over the internet — your own machine only works for someone on the same network. See [[tutorial/team-workspace|Team, Workspace & self-hosting]] for what it takes to actually stand one up.
 
 There's no view/edit separation here yet, though — unlike the local Share panel below, anyone with the cloud passphrase can write, not just read. The app warns about this right above the cloud-sync controls; only share that passphrase with people you'd trust to edit.
 
@@ -33,4 +35,4 @@ Open the **Comments** panel on any note to leave a threaded comment without touc
 
 The **History** panel logs who's been touching a note and when — not a full diff/undo log, but enough to answer "who's been in here."
 
-You've reached the end of the tutorial — back to [[tutorial|Tutorial]].
+Next: [[tutorial/team-workspace|Team, Workspace & self-hosting →]]

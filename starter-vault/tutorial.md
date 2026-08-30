@@ -5,15 +5,20 @@ tags: [tutorial]
 
 Welcome! This is a living tutorial written *in* the app, using the app's own features — every link, callout, and diagram below is real, not a screenshot.
 
+Every page here carries `tags: [tutorial]`, which is what powers the sidebar's **Tutorials** nav entry — click it any time to see this whole list in one place without needing to find your way back to this page first.
+
 ## Where to start
 
 - [[tutorial/formatting|Formatting]] — bold, italic, highlights, callouts, math, code, task lists
 - [[tutorial/linking|Linking & the graph]] — wikilinks, section/block references, transclusion, backlinks
 - [[tutorial/properties|Properties & types]] — structured frontmatter you can query, filter, and relate notes by
-- [[tutorial/organizing|Organizing & finding your notes]] — favorites, recent, the command palette, query blocks, templates, table views, quick capture
+- [[tutorial/organizing|Organizing & finding your notes]] — favorites, recent, the command palette, query blocks, templates, table views, quick capture, collapsing the sidebar
 - [[tutorial/diagrams|Diagrams]] — Mermaid flowcharts and the Excalidraw canvas
 - [[tutorial/citations|Citations & references]] — cite sources with `[@key]`, import a `.bib` file
 - [[tutorial/collaboration|Collaboration & sharing]] — local sync, encrypted cloud sync, comments, and access control
+- [[tutorial/team-workspace|Team, Workspace & self-hosting]] — standing accounts for a shared server, and reaching one from outside your network
+- [[tutorial/ai-related-notes|Related Notes & local AI]] — fully local semantic search, no account or API key
+- [[tutorial/settings-and-export|Settings & export]] — theme, cloud sync controls, and getting a note out as Markdown/HTML/PDF
 
 > [!tip] Fastest way to learn
 > Open each linked note, then look at its **Source** view (top-right toggle) to see the raw markdown that produced what you're reading.

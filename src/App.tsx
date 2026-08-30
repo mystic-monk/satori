@@ -117,7 +117,7 @@ type ViewMode = "source" | "preview" | "split";
 // "all"/"journal"/"canvas" drive the existing typeFilter mechanism under
 // the hood (see selectView) — "favorites" is a pure client-side filter
 // over whatever's already loaded, since a favorited note can be any type.
-type SidebarView = "all" | "journal" | "canvas" | "favorites";
+type SidebarView = "all" | "journal" | "canvas" | "favorites" | "tutorials";
 
 // Same icon set as the sidebar nav rows, so a type reads the same way
 // wherever it shows up (nav row, Recent list, etc).
@@ -545,7 +545,7 @@ export default function App() {
     setShowFlashcards(false);
     if (view === "journal") setTypeFilter("daily");
     else if (view === "canvas") setTypeFilter("canvas");
-    else setTypeFilter(""); // "all" and "favorites" both draw from the full set
+    else setTypeFilter(""); // "all", "favorites", and "tutorials" all draw from the full set
   }
 
   // Toggles the `favorite` frontmatter property directly — not a separate
@@ -795,9 +795,22 @@ export default function App() {
   // typeFilter narrows what the sidebar list (and Table view, which reads
   // this same value) shows — applied here, client-side, rather than by
   // fetching a pre-filtered `notes` from the server (see loadNotes above).
+  // Filtered by tag rather than type: every tutorial note already carries
+  // tags: [tutorial] (it's what the tutorial's own query-block example
+  // demonstrates), including tutorial/properties.md, which is deliberately
+  // type: reference to double as the citation-system demo — a type-based
+  // filter would have missed it.
+  const tutorialNotes = useMemo(() => notes.filter((n) => n.tags.includes("tutorial")), [notes]);
   const displayedNotes = useMemo(
-    () => (sidebarView === "favorites" ? favoriteNotes : typeFilter ? notes.filter((n) => n.type === typeFilter) : notes),
-    [sidebarView, favoriteNotes, typeFilter, notes]
+    () =>
+      sidebarView === "favorites"
+        ? favoriteNotes
+        : sidebarView === "tutorials"
+          ? tutorialNotes
+          : typeFilter
+            ? notes.filter((n) => n.type === typeFilter)
+            : notes,
+    [sidebarView, favoriteNotes, tutorialNotes, typeFilter, notes]
   );
   const templateNotes = useMemo(() => queryNotes(notes, { type: "template" }), [notes]);
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -1058,6 +1071,15 @@ export default function App() {
                 <Brain size={15} className="type-color-flashcard" />
               </span>
               Flashcards
+            </button>
+            <button
+              className={sidebarView === "tutorials" && !showGraph && !showTable && !showFlashcards ? "active" : ""}
+              onClick={() => selectView("tutorials")}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <BookOpen size={15} className="type-color-tutorial" />
+              </span>
+              Tutorials
             </button>
             {types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
               <select
