@@ -59,6 +59,7 @@ import type { RenderEnv } from "./markdown";
 import { renderNoteBodyForExport } from "./renderForExport";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
+import { resolveFragment } from "../shared/blockrefs";
 import {
   BookOpen,
   Brain,
@@ -234,8 +235,22 @@ export default function App() {
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
+  // Which note `raw` actually belongs to — needed because `raw` going
+  // non-empty and `activePath` becoming the new note happen in the *same*
+  // render (both set synchronously in openNote below), but the actual new
+  // content only arrives later, asynchronously, once the collab session
+  // for that note finishes opening. Without this, the fragment-resolution
+  // effect further down would see a non-empty `raw` immediately and try to
+  // resolve against the *previous* note's still-stale content.
+  const [rawPath, setRawPath] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [role, setRole] = useState<ShareRole | "owner" | "denied">("owner");
+  // A [[Note#fragment]] *link* click (as opposed to an embed, which
+  // already resolves fragments to render just that excerpt) sets this;
+  // resolved into an actual editor scroll position once the target note's
+  // content is available — see the effect near the editor render below.
+  const [pendingFragment, setPendingFragment] = useState<string | null>(null);
+  const [scrollToOffset, setScrollToOffset] = useState<number | null>(null);
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
@@ -470,7 +485,10 @@ export default function App() {
       setPeerCount(0);
 
       const activeSession = session;
-      const onTextChange = () => setRaw(activeSession.ytext.toString());
+      const onTextChange = () => {
+        setRaw(activeSession.ytext.toString());
+        setRawPath(path);
+      };
       onTextChange();
       activeSession.ytext.observe(onTextChange);
       unbindText = () => activeSession.ytext.unobserve(onTextChange);
@@ -518,9 +536,36 @@ export default function App() {
       session?.destroy();
       setLocalSession(null);
       setRaw("");
+      setRawPath(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
+
+  // Resolves a pending [[Note#fragment]] link click into an actual editor
+  // scroll position, once the target note's content is actually loaded —
+  // fires on `raw` changing (not `activePath`) so this also works for a
+  // fragment link to the note you're *already* on, which never touches
+  // activePath at all (see openNote above). Embeds already inline just the
+  // matching excerpt via this exact same resolveFragment function
+  // (src/markdown.ts's wikiembed renderer) — this is the link-navigation
+  // equivalent, applied to the live document instead of rendered HTML.
+  //
+  // Gated on rawPath === activePath, not just `raw` being non-empty:
+  // openNote sets pendingFragment and activePath in the same synchronous
+  // update, but `raw` briefly still holds the *previous* note's content
+  // (the new note's text only arrives later, once its collab session
+  // finishes opening) — without this check, this would race and try to
+  // resolve the fragment against the wrong note's body.
+  useEffect(() => {
+    if (!pendingFragment || !raw || rawPath !== activePath) return;
+    const { body } = parseFrontmatter(raw);
+    const bodyOffset = raw.length - body.length;
+    const range = resolveFragment(body, pendingFragment);
+    setPendingFragment(null);
+    if (!range) return; // fragment doesn't exist in this note — link is just stale, nothing to scroll to
+    setScrollToOffset(bodyOffset + range.start);
+    setViewMode((m) => (m === "preview" ? "split" : m)); // the target has to actually be visible to scroll to it
+  }, [raw, rawPath, activePath, pendingFragment]);
 
   // Opt-in cloud sync for the currently open note: connects to the E2E
   // relay under a room name (defaults to the note's path) and bridges it
@@ -561,7 +606,7 @@ export default function App() {
   // update hasn't landed yet in this render's closure, so looking it up
   // from `notes`/`results` here would silently fall back to the raw file
   // path for a note opened immediately after creation.
-  function openNote(p: string, knownTitle?: string, knownType?: string | null) {
+  function openNote(p: string, knownTitle?: string, knownType?: string | null, fragment?: string) {
     setShowGraph(false);
     setShowTable(false);
     setShowFlashcards(false);
@@ -574,6 +619,12 @@ export default function App() {
     // still be a render behind right after creation.
     const type = knownType !== undefined ? knownType : notes.find((n) => n.path === p)?.type ?? null;
     setRecentNotes(recordOpened(p, title, type));
+    // Set before the same-note early return below — a [[Note#Heading]]
+    // link to the note you're already on should still scroll, even though
+    // it's not a real navigation. The effect that resolves this into an
+    // actual scroll position (further down) fires off raw/pendingFragment
+    // changing, not off activePath, so it works either way.
+    if (fragment) setPendingFragment(fragment);
     if (p === activePath) return;
     setActivePath(p);
   }
@@ -1413,6 +1464,7 @@ export default function App() {
                         awareness={localSession.awareness}
                         readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
                         dark={isDarkTheme(themeId)}
+                        scrollToOffset={scrollToOffset}
                       />
                     </div>
                   )}
@@ -1421,7 +1473,12 @@ export default function App() {
                       <Preview
                         raw={raw}
                         notes={notes}
-                        onNavigate={openNote}
+                        // Not just onNavigate={openNote} — Preview's
+                        // onNavigate is (path, fragment?), but openNote's
+                        // 2nd positional param is knownTitle, not fragment.
+                        // Passing openNote directly would silently land a
+                        // clicked link's fragment in the wrong parameter.
+                        onNavigate={(path, fragment) => openNote(path, undefined, undefined, fragment)}
                         shareToken={shareToken}
                         ytext={localSession.ytext}
                         readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}

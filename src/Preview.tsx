@@ -47,7 +47,7 @@ export function buildCitations(notes: NoteListItem[]): Map<string, CitationInfo>
 interface PreviewProps {
   raw: string;
   notes: NoteListItem[];
-  onNavigate: (path: string) => void;
+  onNavigate: (path: string, fragment?: string) => void;
   shareToken?: string | null;
   ytext?: Y.Text;
   readOnly?: boolean;
@@ -145,7 +145,7 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
       return;
     }
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");
-    if (el) onNavigate(el.dataset.notePath!);
+    if (el) onNavigate(el.dataset.notePath!, el.dataset.fragment);
   }
 
   return (

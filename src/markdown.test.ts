@@ -30,6 +30,25 @@ describe("wikilink/wikiembed fragment rendering (block references)", () => {
     expect(html).toContain("Target Note › First");
   });
 
+  // Regression coverage for the bug where a [[Note#fragment]] *link*
+  // (unlike an embed) opened the target note but never scrolled to the
+  // right spot — the fragment was parsed but never carried through to the
+  // rendered element for App.tsx's click handler to pick up.
+  it("a [[Note#Heading]] link carries its fragment in data-fragment", () => {
+    const html = renderNoteBody("See [[Target Note#First]].", env());
+    expect(html).toContain('data-fragment="First"');
+  });
+
+  it("a [[Note#^block-id]] link carries its raw fragment (with the ^) in data-fragment", () => {
+    const html = renderNoteBody("See [[Target Note#^item-a]].", env());
+    expect(html).toContain('data-fragment="^item-a"');
+  });
+
+  it("a plain [[Note]] link with no fragment has no data-fragment attribute", () => {
+    const html = renderNoteBody("See [[Target Note]].", env());
+    expect(html).not.toContain("data-fragment");
+  });
+
   it("a [[Note#^block-id]] link labels the fragment as 'block'", () => {
     const html = renderNoteBody("See [[Target Note#^item-a]].", env());
     expect(html).toContain("Target Note › block");
@@ -38,7 +57,13 @@ describe("wikilink/wikiembed fragment rendering (block references)", () => {
   it("an alias overrides the fragment-derived label", () => {
     const html = renderNoteBody("[[Target Note#First|custom]]", env());
     expect(html).toContain(">custom<");
-    expect(html).not.toContain("First");
+    // The fragment itself still has to survive in data-fragment even with
+    // an alias — App.tsx's scroll-to-block needs it regardless of what the
+    // link displays — so this checks the *visible label* specifically
+    // doesn't leak "First", not that the substring never appears anywhere
+    // in the markup (data-fragment="First" is expected and correct).
+    expect(html).not.toContain("›");
+    expect(html).not.toMatch(/>[^<]*First[^<]*</);
   });
 
   it("![[Note#Heading]] embeds just that section, not the whole note", () => {

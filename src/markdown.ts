@@ -330,7 +330,12 @@ function wikilinksPlugin(md: MDInstance) {
     if (!resolved) {
       return `<a class="wikilink wikilink-broken" data-missing-ref="${md.utils.escapeHtml(ref)}">${label}</a>`;
     }
-    return `<a class="wikilink" data-note-path="${md.utils.escapeHtml(resolved.path)}" href="javascript:void(0)">${label}</a>`;
+    // Carries the fragment through to the click handler (Preview.tsx) so
+    // navigating a [[Note#Heading]]/[[Note#^block-id]] *link* can scroll to
+    // that spot once the note opens — previously dropped here, which is why
+    // only embeds (![[...]]) landed on the right spot, never links.
+    const fragmentAttr = fragment ? ` data-fragment="${md.utils.escapeHtml(fragment)}"` : "";
+    return `<a class="wikilink" data-note-path="${md.utils.escapeHtml(resolved.path)}"${fragmentAttr} href="javascript:void(0)">${label}</a>`;
   };
 
   md.renderer.rules.wikiembed = (tokens, idx, _opts, envIn) => {

@@ -78,9 +78,15 @@ interface EditorProps {
   awareness: Awareness;
   readOnly?: boolean;
   dark?: boolean;
+  // A character offset to scroll into view once, e.g. from resolving a
+  // [[Note#fragment]] link click (App.tsx). Deliberately a separate effect
+  // below rather than folded into the view-creation effect: this needs to
+  // fire again on an *already-mounted* editor too (a fragment link to the
+  // note you're already viewing doesn't remount this component at all).
+  scrollToOffset?: number | null;
 }
 
-export default function Editor({ ytext, awareness, readOnly = false, dark = true }: EditorProps) {
+export default function Editor({ ytext, awareness, readOnly = false, dark = true, scrollToOffset }: EditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
@@ -141,6 +147,17 @@ export default function Editor({ ytext, awareness, readOnly = false, dark = true
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ytext, awareness, readOnly, dark]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view == null || scrollToOffset == null) return;
+    const pos = Math.min(Math.max(scrollToOffset, 0), view.state.doc.length);
+    view.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    view.focus();
+  }, [scrollToOffset]);
 
   const filtered = slash
     ? SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(slash.query))
