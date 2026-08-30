@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Visual polish pass: sidebar/toolbar icons are now a consistent SVG set (lucide-react) instead of raw emoji; buttons have real primary/ghost/danger variants instead of one generic gray style everywhere (Delete finally looks different from Source/Preview); empty states (no note open, empty graph, empty table) got an icon, a heading, and — where relevant — a call-to-action button instead of a bare sentence; a spacing/type scale and consistent hover transitions are now design tokens (`--space-*`, `--text-*`, `--transition-*`) rather than ad hoc per-component values
+- Visual polish pass (Tier 1): sidebar/toolbar icons are now a consistent SVG set (lucide-react) instead of raw emoji; buttons have real primary/ghost/danger variants instead of one generic gray style everywhere (Delete finally looks different from Source/Preview); empty states (no note open, empty graph, empty table) got an icon, a heading, and — where relevant — a call-to-action button instead of a bare sentence; a spacing/type scale and consistent hover transitions are now design tokens (`--space-*`, `--text-*`, `--transition-*`) rather than ad hoc per-component values
+- Visual polish pass (Tier 2/3): graph nodes are colored by note type (matching the sidebar's per-type icon colors) instead of one blue for everything; the graph view now auto-fits its viewBox to wherever nodes actually settle instead of a fixed-size canvas that left sparse/isolated notes sitting off-center or clipped outside it; node labels get a background halo so they stay legible where they cross link lines or overlap a neighbor; the command palette shows a keyboard-shortcut badge for commands that have a real one (New Note's ⌘N, Tauri only); table rows and command palette items now have a hover state with a transition instead of no feedback or an instant snap
 
 ### Fixed
 

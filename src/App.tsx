@@ -54,6 +54,7 @@ import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import {
+  BookOpen,
   Brain,
   Calendar,
   ChevronDown,
@@ -114,17 +115,19 @@ type SidebarView = "all" | "journal" | "canvas" | "favorites";
 function NoteTypeIcon({ type }: { type: string | null }) {
   switch (type) {
     case "daily":
-      return <Calendar size={13} />;
+      return <Calendar size={13} className="type-color-daily" />;
     case "canvas":
-      return <Paintbrush size={13} />;
+      return <Paintbrush size={13} className="type-color-canvas" />;
     case "flashcard":
-      return <Brain size={13} />;
+      return <Brain size={13} className="type-color-flashcard" />;
     case "template":
-      return <LayoutTemplate size={13} />;
+      return <LayoutTemplate size={13} className="type-color-template" />;
+    case "reference":
+      return <BookOpen size={13} className="type-color-reference" />;
     case null:
       return <FileText size={13} />;
     default:
-      return <FileStack size={13} />;
+      return <FileStack size={13} className="type-color-other" />;
   }
 }
 
@@ -755,7 +758,7 @@ export default function App() {
   const paletteCommands: Command[] = shareToken
     ? []
     : [
-        { id: "new-note", label: "New Note", action: onNewNote },
+        { id: "new-note", label: "New Note", shortcut: IS_TAURI ? "⌘N" : undefined, action: onNewNote },
         { id: "new-canvas", label: "New Canvas", action: onNewCanvas },
         { id: "today", label: "Today's Journal Entry", action: onDailyNote },
         { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => setShowGraph((g) => !g) },
@@ -855,7 +858,7 @@ export default function App() {
               onClick={() => selectView("journal")}
             >
               <span className="nav-icon" aria-hidden="true">
-                <Calendar size={15} />
+                <Calendar size={15} className="type-color-daily" />
               </span>
               Journal
             </button>
@@ -864,7 +867,7 @@ export default function App() {
               onClick={() => selectView("canvas")}
             >
               <span className="nav-icon" aria-hidden="true">
-                <Paintbrush size={15} />
+                <Paintbrush size={15} className="type-color-canvas" />
               </span>
               Canvas
             </button>
@@ -906,7 +909,7 @@ export default function App() {
               }}
             >
               <span className="nav-icon" aria-hidden="true">
-                <Brain size={15} />
+                <Brain size={15} className="type-color-flashcard" />
               </span>
               Flashcards
             </button>

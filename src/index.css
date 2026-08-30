@@ -56,6 +56,20 @@
      this token existed) rather than tuning a separate value per theme —
      a warm red reads clearly as "destructive" against every theme here. */
   --danger: #e0524a;
+
+  /* Per-type accent colors — mid-lightness so each reads on both light
+     and dark backgrounds without separate per-theme tuning (same reasoning
+     as --danger above). Used for the note-type icon and graph node fill,
+     so a type reads the same wherever it shows up. type-template reuses
+     the favorite-star gold on purpose — both already mean "this note is
+     special-purpose," no reason to invent a second gold. null/plain notes
+     stay --text-dim (no color = no type, not an arbitrary 7th hue). */
+  --type-daily: #3fb6c9;
+  --type-canvas: #a374e0;
+  --type-flashcard: #e0699a;
+  --type-template: #e0a622;
+  --type-reference: #5cb85c;
+  --type-other: #7a8699;
 }
 
 :root[data-theme="light"] {
@@ -340,6 +354,30 @@ body {
   display: inline-flex;
   color: var(--text-dim);
   flex-shrink: 0;
+}
+
+.type-color-daily {
+  color: var(--type-daily);
+}
+
+.type-color-canvas {
+  color: var(--type-canvas);
+}
+
+.type-color-flashcard {
+  color: var(--type-flashcard);
+}
+
+.type-color-template {
+  color: var(--type-template);
+}
+
+.type-color-reference {
+  color: var(--type-reference);
+}
+
+.type-color-other {
+  color: var(--type-other);
 }
 
 .note-list-compact li:hover {
@@ -647,6 +685,11 @@ button:disabled:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.table-view tbody tr:hover td {
+  background: var(--bg-hover);
 }
 
 .table-cell-title {
@@ -1870,6 +1913,35 @@ button:disabled:hover {
   transition: opacity 0.15s;
 }
 
+/* Same category colors as App.tsx's NoteTypeIcon — declared after the
+   default fill above and before graph-node-active below, so a type color
+   overrides the default accent, but the active (currently open) note's
+   white fill always wins regardless of type — source order is what
+   decides it since both sides are a single class selector. */
+.graph-node-daily circle {
+  fill: var(--type-daily);
+}
+
+.graph-node-canvas circle {
+  fill: var(--type-canvas);
+}
+
+.graph-node-flashcard circle {
+  fill: var(--type-flashcard);
+}
+
+.graph-node-template circle {
+  fill: var(--type-template);
+}
+
+.graph-node-reference circle {
+  fill: var(--type-reference);
+}
+
+.graph-node-other circle {
+  fill: var(--type-other);
+}
+
 .graph-node-active circle {
   fill: #fff;
   stroke: var(--accent);
@@ -1882,6 +1954,13 @@ button:disabled:hover {
   text-anchor: middle;
   pointer-events: none;
   transition: opacity 0.15s;
+  /* A halo behind each glyph (stroke drawn first, fill on top) so labels
+     stay legible where they cross link lines or overlap a neighboring
+     label — cheap alternative to real force-directed label placement. */
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .graph-node-dim circle,
@@ -2010,6 +2089,7 @@ button:disabled:hover {
   border-radius: 5px;
   cursor: pointer;
   font-size: 13px;
+  transition: background var(--transition-fast);
 }
 
 .command-palette-list li.active {
@@ -2026,6 +2106,17 @@ button:disabled:hover {
   color: var(--text-dim);
   font-size: 11px;
   flex-shrink: 0;
+}
+
+.command-palette-shortcut {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
 }
 
 .command-palette-empty {

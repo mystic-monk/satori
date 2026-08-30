@@ -5,6 +5,11 @@ export interface Command {
   id: string;
   label: string;
   hint?: string;
+  // A real, already-working keyboard shortcut (e.g. the native menu's
+  // accelerator) — deliberately separate from `hint` above, which notes
+  // use for a file path, a different kind of information styled
+  // differently (a kbd-style badge here vs. plain dim text there).
+  shortcut?: string;
   action: () => void;
 }
 
@@ -49,9 +54,9 @@ export default function CommandPalette({ commands, notes, onOpenNote, onClose }:
     [notes, query]
   );
 
-  type Entry = { key: string; label: string; hint?: string; run: () => void };
+  type Entry = { key: string; label: string; hint?: string; shortcut?: string; run: () => void };
   const entries: Entry[] = [
-    ...filteredCommands.map((c) => ({ key: `cmd:${c.id}`, label: c.label, hint: c.hint, run: c.action })),
+    ...filteredCommands.map((c) => ({ key: `cmd:${c.id}`, label: c.label, hint: c.hint, shortcut: c.shortcut, run: c.action })),
     ...filteredNotes.map((n) => ({
       key: `note:${n.path}`,
       label: n.title,
@@ -107,6 +112,7 @@ export default function CommandPalette({ commands, notes, onOpenNote, onClose }:
               onClick={() => run(entry)}
             >
               <span className="command-palette-label">{entry.label}</span>
+              {entry.shortcut && <kbd className="command-palette-shortcut">{entry.shortcut}</kbd>}
               {entry.hint && <span className="command-palette-hint">{entry.hint}</span>}
             </li>
           ))}

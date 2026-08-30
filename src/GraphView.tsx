@@ -14,6 +14,7 @@ import { Waypoints } from "lucide-react";
 interface GraphNode extends SimulationNodeDatum {
   id: string;
   title: string;
+  type: string | null;
 }
 interface GraphLink {
   source: GraphNode;
@@ -22,6 +23,7 @@ interface GraphLink {
 interface RawNode {
   id: string;
   title: string;
+  type: string | null;
 }
 interface RawLink {
   source: string;
@@ -35,6 +37,34 @@ interface GraphViewProps {
 
 const WIDTH = 800;
 const HEIGHT = 560;
+const DEFAULT_VIEWBOX = `${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`;
+const MAX_LABEL_LEN = 28;
+
+// Same category set as App.tsx's NoteTypeIcon, so a type reads the same
+// color wherever it shows up — a class per type rather than an inline
+// style, consistent with how the rest of the app's styling works.
+function graphNodeTypeClass(type: string | null): string {
+  switch (type) {
+    case "daily":
+      return "graph-node-daily";
+    case "canvas":
+      return "graph-node-canvas";
+    case "flashcard":
+      return "graph-node-flashcard";
+    case "template":
+      return "graph-node-template";
+    case "reference":
+      return "graph-node-reference";
+    case null:
+      return "";
+    default:
+      return "graph-node-other";
+  }
+}
+
+function truncateLabel(title: string): string {
+  return title.length > MAX_LABEL_LEN ? `${title.slice(0, MAX_LABEL_LEN - 1)}…` : title;
+}
 
 // "Local" scope is just the active note plus whoever it directly links to
 // or is linked from — one hop, not a full traversal. A deeper radius
@@ -61,13 +91,15 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [tick, setTick] = useState(0);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
   const simRef = useRef<Simulation<GraphNode, undefined> | null>(null);
+  const tickCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchNotes(), fetchLinks()]).then(([notesRes, linksRes]) => {
       if (cancelled) return;
-      setRawNodes(notesRes.map((n) => ({ id: n.path, title: n.title })));
+      setRawNodes(notesRes.map((n) => ({ id: n.path, title: n.title, type: n.type })));
       setRawLinks(linksRes);
     });
     return () => {
@@ -81,13 +113,15 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   // positions that no longer make sense for a much smaller node set.
   useEffect(() => {
     simRef.current?.stop();
+    tickCountRef.current = 0;
+    setViewBox(DEFAULT_VIEWBOX);
     if (rawNodes.length === 0) {
       setNodes([]);
       setLinks([]);
       return;
     }
     const scoped = scopedGraph(rawNodes, rawLinks, mode, activePath);
-    const nodeList: GraphNode[] = scoped.nodes.map((n) => ({ id: n.id, title: n.title }));
+    const nodeList: GraphNode[] = scoped.nodes.map((n) => ({ id: n.id, title: n.title, type: n.type }));
     const byId = new Map(nodeList.map((n) => [n.id, n]));
     const linkList = scoped.links
       .filter((l) => byId.has(l.source) && byId.has(l.target))
@@ -102,8 +136,37 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
           .distance(70)
       )
       .force("center", forceCenter(0, 0))
-      .force("collide", forceCollide(26))
-      .on("tick", () => setTick((t) => t + 1));
+      .force("collide", forceCollide(32))
+      .on("tick", () => {
+        setTick((t) => t + 1);
+        tickCountRef.current += 1;
+        // Recompute the fit on every tick past an initial settle-in
+        // window, rather than locking to a single "alpha looks low
+        // enough" moment — a weakly-connected node only has the global
+        // centering force pulling it back (no link force), so it can keep
+        // drifting outward well past the point a one-shot lock would have
+        // already frozen the box, ending up clipped outside it. Past
+        // tick 40 the simulation's own per-tick movement is already small
+        // (alpha decays geometrically), so continuously refitting doesn't
+        // read as jittery — it just tracks the last bit of settling.
+        if (tickCountRef.current > 40) {
+          const xs = nodeList.map((n) => n.x ?? 0);
+          const ys = nodeList.map((n) => n.y ?? 0);
+          const pad = 70;
+          const minX = Math.min(...xs) - pad;
+          const maxX = Math.max(...xs) + pad;
+          const minY = Math.min(...ys) - pad;
+          const maxY = Math.max(...ys) + pad;
+          const w = Math.max(maxX - minX, 240);
+          const h = Math.max(maxY - minY, 180);
+          // Center the fitted box the same way the box itself is centered,
+          // rather than anchoring to minX/minY, so a small cluster doesn't
+          // end up pinned to one corner.
+          const cx = (minX + maxX) / 2;
+          const cy = (minY + maxY) / 2;
+          setViewBox(`${cx - w / 2} ${cy - h / 2} ${w} ${h}`);
+        }
+      });
 
     simRef.current = sim;
     setNodes(nodeList);
@@ -165,7 +228,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
           No notes to graph yet.
         </div>
       ) : (
-        <svg className="graph-svg" data-tick={tick} viewBox={`${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`}>
+        <svg className="graph-svg" data-tick={tick} viewBox={viewBox}>
           <g className="graph-links">
             {links.map((l, i) => (
               <line
@@ -187,6 +250,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
                 transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
                 className={[
                   "graph-node",
+                  graphNodeTypeClass(n.type),
                   n.id === activePath ? "graph-node-active" : "",
                   hoveredId && n.id !== hoveredId && !connectedIds.has(n.id) ? "graph-node-dim" : "",
                 ]
@@ -196,8 +260,9 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
+                <title>{n.title}</title>
                 <circle r={n.id === activePath ? 8 : 5} />
-                <text dy={-10}>{n.title}</text>
+                <text dy={-10}>{truncateLabel(n.title)}</text>
               </g>
             ))}
           </g>
