@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- MD/HTML/PDF export never rendered mermaid diagrams, KaTeX math, `​```query` blocks, or `​```bibliography` blocks — it embedded the raw, unfilled placeholder/fallback markup Preview.tsx's live async passes normally fill in, which export has no equivalent of until now (`renderForExport.ts`, `deferredBlocks.ts`)
+- `[@citekey]` citations always rendered as unresolved in every export, even when correct in the live Preview, because `exportEnv()` never built the citations map `Preview.tsx` computes for itself
+
+### Changed
+
+- KaTeX (261KB) is now lazily loaded the same way Mermaid already was, instead of a static top-level import — a note with no math no longer pays for the library at all (`math-render.ts`)
+- `server/embeddings.ts` no longer eagerly imports `fastembed` (which pulls in `onnxruntime-node`'s native bindings, ~160ms) at module load — deferred to first actual embedding use, same lazy-singleton pattern the model init itself already used
+- Sidebar note-list derivations (`favoriteNotes`, `displayedNotes`, `templateNotes` in App.tsx) are now memoized instead of recomputed on every render, including every editor keystroke
+
 ## [0.1.3] — 2026-08-30
 
 ### Added
