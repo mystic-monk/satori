@@ -33,3 +33,4 @@ uuid = { version = "1.20.0", features = ["serde", "v4"] }
 rfd = "0.17.2"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
+tauri-plugin-global-shortcut = "2.3.2"

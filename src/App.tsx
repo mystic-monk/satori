@@ -25,6 +25,7 @@ import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandl
 import type { CloudStatus } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
 import Editor from "./Editor";
@@ -236,6 +237,26 @@ export default function App() {
   useEffect(() => {
     if (!IS_TAURI) return;
     fetchVaultInfo().then((info) => setVaultName(info.name));
+  }, []);
+
+  // A note created from the separate Quick Capture window (or any other
+  // out-of-band change — another instance, a direct file edit) has no way
+  // to tell this window's React state about it, since they're separate
+  // renderer processes with no shared state. Refetching on focus is a
+  // cheap, general way to pick that up without a more elaborate cross-
+  // window messaging setup.
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused) loadNotes();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => unlisten?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A few seconds after launch, not immediately — no need to compete with

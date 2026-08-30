@@ -59,6 +59,32 @@ pub(crate) fn run_import_dialog(state: &state::AppState) -> import::ImportSummar
     summary
 }
 
+// Triggered by the global shortcut (registered below, works even when
+// Satori isn't the focused app — that's the entire point of "quick
+// capture") and by the "Quick Capture…" menu item as a discoverable
+// fallback for anyone who doesn't know or want the hotkey. A second
+// trigger while the window is already open just refocuses it rather than
+// erroring on a duplicate window label.
+pub(crate) fn open_quick_capture(app_handle: &tauri::AppHandle) {
+    if let Some(win) = app_handle.get_webview_window("quick-capture") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(
+        app_handle,
+        "quick-capture",
+        tauri::WebviewUrl::App("index.html?quickcapture=1".into()),
+    )
+    .title("Quick Capture")
+    .inner_size(480.0, 280.0)
+    .resizable(false)
+    .center()
+    .always_on_top(true)
+    .focused(true)
+    .build();
+}
+
 // A setup failure (can't resolve the app data dir, can't create its
 // subdirectories, can't open either SQLite file — disk full, permissions,
 // a corrupted db file left over from a bad shutdown) used to panic via
@@ -143,6 +169,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(
+            // Not user-configurable yet (deliberate scope cut for a first
+            // pass) — CmdOrCtrl+Shift+N, chosen to be unlikely to collide
+            // with a browser/OS-level binding since this is a true global
+            // (system-wide, works while unfocused) registration.
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut("CmdOrCtrl+Shift+N")
+                .expect("quick-capture shortcut string is a valid accelerator")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        open_quick_capture(app);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -205,6 +246,11 @@ pub fn run() {
                 .item(&MenuItemBuilder::with_id("new_note", "New Note").accelerator("CmdOrCtrl+N").build(app)?)
                 .item(&MenuItemBuilder::with_id("new_canvas", "New Canvas").build(app)?)
                 .item(&MenuItemBuilder::with_id("today", "Today's Daily Note").build(app)?)
+                .item(
+                    &MenuItemBuilder::with_id("quick_capture", "Quick Capture…")
+                        .accelerator("CmdOrCtrl+Shift+N")
+                        .build(app)?,
+                )
                 .item(&MenuItemBuilder::with_id("reindex", "Reindex").build(app)?)
                 .separator()
                 .item(&MenuItemBuilder::with_id("switch_vault", "Open a Different Vault…").build(app)?)
@@ -249,6 +295,7 @@ pub fn run() {
 
             app.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                 "switch_vault" => switch_vault_dialog(app_handle),
+                "quick_capture" => open_quick_capture(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
                 | "view_source" | "view_split" | "view_preview" | "check_for_updates") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());

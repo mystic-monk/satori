@@ -1688,3 +1688,40 @@ button:hover {
     display: block !important;
   }
 }
+
+/* ---- Quick Capture (separate small native window, see QuickCapture.tsx) ---- */
+
+.quick-capture {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 12px;
+  gap: 8px;
+  background: var(--bg);
+}
+
+.quick-capture-input {
+  flex: 1;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+.quick-capture-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.quick-capture-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
