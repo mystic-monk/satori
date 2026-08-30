@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateField, StateEffect } from "@codemirror/state";
 import { EditorView, basicSetup } from "codemirror";
+import { Decoration, type DecorationSet } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -73,6 +74,36 @@ interface SlashState {
   query: string;
 }
 
+export interface CommentRange {
+  from: number;
+  to: number;
+}
+
+// A StateField (not a plain prop-driven render) because CodeMirror owns
+// its own document/positions — commentRanges comes from outside as plain
+// numbers (already resolved via yjsAnchor.ts against the *current* doc, so
+// they're accurate at the moment they're set), and this just needs to
+// paint them. Updated by dispatching setCommentRanges from the effect
+// below whenever the prop changes; the field itself never recomputes
+// anything, it only maps effects to a fresh decoration set.
+const setCommentRanges = StateEffect.define<CommentRange[]>();
+const commentRangesField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setCommentRanges)) {
+        const builder = effect.value
+          .filter((r) => r.from < r.to && r.to <= tr.state.doc.length)
+          .sort((a, b) => a.from - b.from)
+          .map((r) => Decoration.mark({ class: "cm-comment-range" }).range(r.from, r.to));
+        return Decoration.set(builder);
+      }
+    }
+    return value.map(tr.changes);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 interface EditorProps {
   ytext: Y.Text;
   awareness: Awareness;
@@ -84,13 +115,40 @@ interface EditorProps {
   // fire again on an *already-mounted* editor too (a fragment link to the
   // note you're already viewing doesn't remount this component at all).
   scrollToOffset?: number | null;
+  // Already-resolved (yjsAnchor.ts, against the live doc) ranges to
+  // highlight — anchored comments' targets, so a commented span is visibly
+  // apparent while editing, not just discoverable from the Comments panel.
+  commentRanges?: CommentRange[];
+  // Called with the current selection when someone clicks the floating
+  // "Comment" button — App.tsx/CommentsPanel.tsx turn that into an anchor
+  // via yjsAnchor.ts's encodeAnchor. Omitted entirely (no button ever
+  // shows) when the caller has no way to act on it, e.g. read-only.
+  onCommentOnSelection?: (from: number, to: number) => void;
 }
 
-export default function Editor({ ytext, awareness, readOnly = false, dark = true, scrollToOffset }: EditorProps) {
+export default function Editor({
+  ytext,
+  awareness,
+  readOnly = false,
+  dark = true,
+  scrollToOffset,
+  commentRanges,
+  onCommentOnSelection,
+}: EditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [selected, setSelected] = useState(0);
+  const [commentTrigger, setCommentTrigger] = useState<{ from: number; to: number; x: number; y: number } | null>(null);
+  // Read via .current inside selectionWatcher instead of closing over the
+  // prop directly — onCommentOnSelection isn't in the main effect's dep
+  // array below (deliberately: adding it would remount the whole
+  // EditorView, losing cursor position/undo history, every time App.tsx
+  // re-renders with a fresh inline function), so this is how it still
+  // always calls the *current* callback rather than whichever one existed
+  // when the editor was first created for this ytext.
+  const onCommentOnSelectionRef = useRef(onCommentOnSelection);
+  onCommentOnSelectionRef.current = onCommentOnSelection;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -124,6 +182,29 @@ export default function Editor({ ytext, awareness, readOnly = false, dark = true
       setSelected(0);
     });
 
+    // A small "Comment" button that appears near a non-empty selection —
+    // same floating-near-cursor positioning approach as the slash menu
+    // above, triggered by selection instead of typed text. Only wired up
+    // at all when the caller actually handles onCommentOnSelection (a
+    // read-only session, e.g. someone with just view/comment share access
+    // reading someone else's note, has nothing meaningful to select-and-
+    // anchor against their own edits).
+    const selectionWatcher = EditorView.updateListener.of((update) => {
+      if (!onCommentOnSelectionRef.current || !update.selectionSet) return;
+      const { from, to } = update.view.state.selection.main;
+      if (from === to) {
+        setCommentTrigger(null);
+        return;
+      }
+      const coords = update.view.coordsAtPos(to);
+      if (!coords) {
+        setCommentTrigger(null);
+        return;
+      }
+      const hostRect = hostRef.current!.getBoundingClientRect();
+      setCommentTrigger({ from, to, x: coords.left - hostRect.left, y: coords.bottom - hostRect.top });
+    });
+
     const state = EditorState.create({
       doc: ytext.toString(),
       extensions: [
@@ -135,6 +216,8 @@ export default function Editor({ ytext, awareness, readOnly = false, dark = true
         EditorView.editable.of(!readOnly),
         yCollab(ytext, awareness, { undoManager }),
         slashWatcher,
+        selectionWatcher,
+        commentRangesField,
       ],
     });
 
@@ -158,6 +241,18 @@ export default function Editor({ ytext, awareness, readOnly = false, dark = true
     });
     view.focus();
   }, [scrollToOffset]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view == null) return;
+    view.dispatch({ effects: setCommentRanges.of(commentRanges ?? []) });
+    // commentRanges is a fresh array reference on every App.tsx render
+    // (built from resolveAnchorRange calls) — comparing its *contents* here
+    // would need a deep-equal check for no real benefit, since dispatching
+    // with an unchanged set of ranges is cheap (CodeMirror just rebuilds
+    // the same decoration set).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentRanges]);
 
   const filtered = slash
     ? SLASH_ITEMS.filter((i) => i.label.toLowerCase().includes(slash.query))
@@ -212,6 +307,19 @@ export default function Editor({ ytext, awareness, readOnly = false, dark = true
             </div>
           ))}
         </div>
+      )}
+      {commentTrigger && (
+        <button
+          className="comment-selection-trigger"
+          style={{ left: commentTrigger.x, top: commentTrigger.y }}
+          onMouseDown={(e) => {
+            e.preventDefault(); // keeps the selection from collapsing before the click registers
+            onCommentOnSelectionRef.current?.(commentTrigger.from, commentTrigger.to);
+            setCommentTrigger(null);
+          }}
+        >
+          💬 Comment
+        </button>
       )}
     </div>
   );

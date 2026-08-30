@@ -29,7 +29,9 @@ Copy the generated link to hand to someone else on your network. Revoke it any t
 
 ## Comments
 
-Open the **Comments** panel on any note to leave a threaded comment without touching the note's actual content — separate from the `%%inline comment%%` syntax in [[tutorial/formatting|Formatting]], which edits the text itself. Someone with the **Can comment** share role can post here even though they can't edit the note.
+Open the **Comments** panel (in the right-hand panel — the icon next to the note title toggles it) on any note to leave a threaded comment without touching the note's actual content — separate from the `%%inline comment%%` syntax in [[tutorial/formatting|Formatting]], which edits the text itself. Someone with the **Can comment** share role can post here even though they can't edit the note.
+
+**Anchor a comment to a specific bit of text**: select some text first — a small **💬 Comment** button appears right there. Click it and your comment gets tied to that exact span, shown as a highlighted excerpt above what you type. The anchor survives edits made anywhere else in the note (insert a paragraph above it, and it still points at the same words) — it's tracked by the same CRDT mechanism real-time sync itself uses, not a fragile line number. Click the excerpt on any anchored comment later to jump straight back to that spot.
 
 ## Change history
 

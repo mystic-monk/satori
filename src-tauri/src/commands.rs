@@ -233,9 +233,11 @@ pub fn add_comment(
     author_id: Option<String>,
     author_name: String,
     body: String,
+    anchor_start: Option<String>,
+    anchor_end: Option<String>,
 ) -> Result<db::Comment, String> {
     let conn = state.state_conn.lock().map_err(lock_err)?;
-    db::add_comment(&conn, &path, author_id, &author_name, &body)
+    db::add_comment(&conn, &path, author_id, &author_name, &body, anchor_start, anchor_end)
 }
 
 #[tauri::command]

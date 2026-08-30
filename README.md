@@ -110,7 +110,6 @@ Satori is early and honest about what it isn't yet:
 - No native mobile apps yet (responsive web layout only)
 - Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
 - Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
-- Comments are a flat per-note thread, not anchored to a specific line or text range
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
 - Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with

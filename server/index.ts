@@ -231,13 +231,21 @@ app.get("/api/comments/*", requireNoteRead, (req, res) => {
 
 app.post("/api/comments/*", requireNoteComment, (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
-  const { body, authorId, authorName } = req.body as { body: string; authorId: string | null; authorName: string };
+  const { body, authorId, authorName, anchorStart, anchorEnd } = req.body as {
+    body: string;
+    authorId: string | null;
+    authorName: string;
+    anchorStart?: string | null;
+    anchorEnd?: string | null;
+  };
   const trimmed = body?.trim();
   if (!trimmed) {
     res.status(400).json({ error: "empty comment" });
     return;
   }
-  res.json(addComment(relPath, authorId ?? null, authorName?.trim() || "Anonymous", trimmed));
+  res.json(
+    addComment(relPath, authorId ?? null, authorName?.trim() || "Anonymous", trimmed, anchorStart ?? null, anchorEnd ?? null)
+  );
 });
 
 app.get("/api/search", requireOwner, (req, res) => {

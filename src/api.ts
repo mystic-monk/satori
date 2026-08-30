@@ -216,6 +216,12 @@ export interface Comment {
   authorName: string;
   body: string;
   createdAt: number;
+  // Opaque base64-encoded Y.RelativePosition bytes (src/yjsAnchor.ts) —
+  // both present or both null. Neither the server nor the Tauri backend
+  // interpret these; only decoded client-side, against whichever Y.Doc is
+  // currently open for this note.
+  anchorStart: string | null;
+  anchorEnd: string | null;
 }
 
 // What the "comment" share role actually grants — see SharePanel.tsx and
@@ -231,13 +237,17 @@ export async function postComment(
   body: string,
   authorId: string | null,
   authorName: string,
-  token?: string | null
+  token?: string | null,
+  anchorStart?: string | null,
+  anchorEnd?: string | null
 ): Promise<Comment> {
-  if (IS_TAURI) return invoke("add_comment", { path: p, authorId, authorName, body });
+  if (IS_TAURI) {
+    return invoke("add_comment", { path: p, authorId, authorName, body, anchorStart: anchorStart ?? null, anchorEnd: anchorEnd ?? null });
+  }
   const res = await fetch(withToken(`/api/comments/${encodePath(p)}`, token), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body, authorId, authorName }),
+    body: JSON.stringify({ body, authorId, authorName, anchorStart: anchorStart ?? null, anchorEnd: anchorEnd ?? null }),
   });
   if (!res.ok) throw new Error(`failed to post comment: ${res.status}`);
   return res.json();

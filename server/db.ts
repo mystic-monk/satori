@@ -100,13 +100,24 @@ stateDb.exec(`
   -- grants (previously that role existed in the UI but did nothing; see
   -- SharePanel.tsx). Append-only like history: no edit/delete for a first
   -- pass, same reasoning history already established for that tradeoff.
+  -- anchor_start/anchor_end: base64-encoded Y.RelativePosition bytes (see
+  -- src/yjsAnchor.ts), not raw character offsets — a plain offset pair
+  -- would silently point at the wrong text the moment anyone edits earlier
+  -- in the document. A relative position is resolved back into a live,
+  -- drift-corrected offset against whatever the document currently looks
+  -- like, by whichever client is displaying it — this server never
+  -- interprets the bytes itself, same "opaque to us" posture as
+  -- server/relay.ts's ciphertext. Both null means an unanchored,
+  -- note-level comment — the only kind that existed before this.
   CREATE TABLE IF NOT EXISTS comments (
     id TEXT PRIMARY KEY,
     path TEXT NOT NULL,
     author_id TEXT,
     author_name TEXT NOT NULL,
     body TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    anchor_start TEXT,
+    anchor_end TEXT
   );
   CREATE INDEX IF NOT EXISTS comments_path ON comments(path);
 
@@ -150,6 +161,23 @@ stateDb.exec(`
     expires_at INTEGER NOT NULL
   );
 `);
+
+// CREATE TABLE IF NOT EXISTS above only defines the shape for a *fresh*
+// database — it silently does nothing to a state.sqlite that already has a
+// comments table from before anchor_start/anchor_end existed, which would
+// otherwise break every comment insert with "no such column" the moment
+// this shipped. No prior migration precedent existed in this file to
+// follow (every schema change so far has been a whole new table); this is
+// deliberately minimal rather than a general migration framework this
+// project doesn't need yet.
+function ensureColumn(table: string, column: string, ddl: string) {
+  const cols = stateDb.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    stateDb.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+ensureColumn("comments", "anchor_start", "anchor_start TEXT");
+ensureColumn("comments", "anchor_end", "anchor_end TEXT");
 
 function deleteFromIndex(relPath: string) {
   db.prepare("DELETE FROM notes WHERE path = ?").run(relPath);
@@ -623,9 +651,21 @@ export interface Comment {
   authorName: string;
   body: string;
   createdAt: number;
+  // Opaque base64-encoded Y.RelativePosition bytes — see the comments
+  // table's own doc comment above. Both present or both null; there's no
+  // valid state with only one anchor end set.
+  anchorStart: string | null;
+  anchorEnd: string | null;
 }
 
-export function addComment(notePath: string, authorId: string | null, authorName: string, body: string): Comment {
+export function addComment(
+  notePath: string,
+  authorId: string | null,
+  authorName: string,
+  body: string,
+  anchorStart: string | null = null,
+  anchorEnd: string | null = null
+): Comment {
   const comment: Comment = {
     id: randomUUID(),
     path: notePath,
@@ -633,17 +673,30 @@ export function addComment(notePath: string, authorId: string | null, authorName
     authorName,
     body,
     createdAt: Date.now(),
+    anchorStart,
+    anchorEnd,
   };
   stateDb
-    .prepare("INSERT INTO comments (id, path, author_id, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(comment.id, comment.path, comment.authorId, comment.authorName, comment.body, comment.createdAt);
+    .prepare(
+      "INSERT INTO comments (id, path, author_id, author_name, body, created_at, anchor_start, anchor_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      comment.id,
+      comment.path,
+      comment.authorId,
+      comment.authorName,
+      comment.body,
+      comment.createdAt,
+      comment.anchorStart,
+      comment.anchorEnd
+    );
   return comment;
 }
 
 export function getComments(notePath: string): Comment[] {
   const rows = stateDb
     .prepare(
-      "SELECT id, path, author_id as authorId, author_name as authorName, body, created_at as createdAt FROM comments WHERE path = ? ORDER BY created_at ASC"
+      "SELECT id, path, author_id as authorId, author_name as authorName, body, created_at as createdAt, anchor_start as anchorStart, anchor_end as anchorEnd FROM comments WHERE path = ? ORDER BY created_at ASC"
     )
     .all(notePath) as Comment[];
   return rows;

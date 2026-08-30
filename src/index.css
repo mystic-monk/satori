@@ -1357,6 +1357,37 @@ button:disabled:hover {
   color: #eee;
 }
 
+/* Small "Comment" button that floats near a text selection — same
+   positioning approach as .slash-menu above, triggered by selection
+   instead of typed text. */
+.comment-selection-trigger {
+  position: absolute;
+  z-index: 10;
+  transform: translateY(4px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.comment-selection-trigger:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* The actual anchored range, once a comment exists for it — a visible,
+   persistent highlight (unlike the trigger button above, which is
+   transient) so a commented span reads as commented while just reading or
+   editing, not only discoverable by opening the Comments panel. */
+.cm-comment-range {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-bottom: 2px solid var(--accent);
+}
+
 /* ---- Rendered markdown preview ---- */
 
 .preview {
@@ -1906,10 +1937,70 @@ button:disabled:hover {
   background: transparent !important;
 }
 
+/* The anchored text a comment is actually about — a real button, not
+   static text, since clicking it jumps the editor there (reusing the same
+   scrollToOffset mechanism [[Note#fragment]] link navigation uses). */
+.comment-excerpt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--accent);
+  padding: 2px 0 2px 8px;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.comment-excerpt:hover {
+  color: var(--text);
+}
+
 .comment-compose {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Shown in the compose box only while a selection-triggered comment is in
+   flight — confirms what's about to be anchored, with a way to back out
+   (the × button) and just leave a plain, unanchored comment instead. */
+.comment-pending-anchor {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border-left: 2px solid var(--accent);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.comment-pending-anchor span {
+  flex: 1;
+  font-style: italic;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comment-pending-anchor-clear {
+  background: transparent;
+  border: none;
+  padding: 0 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.comment-pending-anchor-clear:hover {
+  color: var(--text);
 }
 
 .comment-compose textarea {

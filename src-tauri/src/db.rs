@@ -46,6 +46,22 @@ pub fn open_index(path: &std::path::Path) -> Result<Connection, String> {
 // vault, so it can't be rebuilt the way the index can. Deliberately a
 // separate database file from open_index's cache: deleting the index to
 // rebuild it must never silently discard sharing config or history.
+fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| e.to_string())?;
+    let exists = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .any(|name| name == column);
+    if !exists {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {ddl}"), [])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.pragma_update(None, "journal_mode", "WAL")
@@ -80,12 +96,20 @@ pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
             author_id TEXT,
             author_name TEXT NOT NULL,
             body TEXT NOT NULL,
-            created_at REAL NOT NULL
+            created_at REAL NOT NULL,
+            anchor_start TEXT,
+            anchor_end TEXT
         );
         CREATE INDEX IF NOT EXISTS comments_path ON comments(path);
         ",
     )
     .map_err(|e| e.to_string())?;
+    // CREATE TABLE IF NOT EXISTS above only shapes a *fresh* database — an
+    // existing comments table from before anchor_start/anchor_end existed
+    // needs these added explicitly, same reasoning as server/db.ts's
+    // ensureColumn (kept in sync with that function deliberately).
+    ensure_column(&conn, "comments", "anchor_start", "anchor_start TEXT")?;
+    ensure_column(&conn, "comments", "anchor_end", "anchor_end TEXT")?;
     Ok(conn)
 }
 
@@ -546,6 +570,14 @@ pub struct Comment {
     pub body: String,
     #[serde(rename = "createdAt")]
     pub created_at: f64,
+    // Opaque base64-encoded Y.RelativePosition bytes — see server/db.ts's
+    // comments table doc comment. Rust never interprets these, only
+    // stores/returns them; only the JS side (src/yjsAnchor.ts) knows what
+    // to do with the bytes.
+    #[serde(rename = "anchorStart")]
+    pub anchor_start: Option<String>,
+    #[serde(rename = "anchorEnd")]
+    pub anchor_end: Option<String>,
 }
 
 // No role/token gating here, same as write_note/create_note in
@@ -560,6 +592,8 @@ pub fn add_comment(
     author_id: Option<String>,
     author_name: &str,
     body: &str,
+    anchor_start: Option<String>,
+    anchor_end: Option<String>,
 ) -> Result<Comment, String> {
     let comment = Comment {
         id: uuid::Uuid::new_v4().simple().to_string(),
@@ -568,16 +602,21 @@ pub fn add_comment(
         author_name: author_name.to_string(),
         body: body.to_string(),
         created_at: chrono::Utc::now().timestamp_millis() as f64,
+        anchor_start,
+        anchor_end,
     };
     conn.execute(
-        "INSERT INTO comments (id, path, author_id, author_name, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO comments (id, path, author_id, author_name, body, created_at, anchor_start, anchor_end) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             comment.id,
             comment.path,
             comment.author_id,
             comment.author_name,
             comment.body,
-            comment.created_at
+            comment.created_at,
+            comment.anchor_start,
+            comment.anchor_end
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -587,7 +626,7 @@ pub fn add_comment(
 pub fn get_comments(conn: &Connection, path: &str) -> Result<Vec<Comment>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, path, author_id, author_name, body, created_at FROM comments \
+            "SELECT id, path, author_id, author_name, body, created_at, anchor_start, anchor_end FROM comments \
              WHERE path = ?1 ORDER BY created_at ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -600,6 +639,8 @@ pub fn get_comments(conn: &Connection, path: &str) -> Result<Vec<Comment>, Strin
                 author_name: row.get(3)?,
                 body: row.get(4)?,
                 created_at: row.get(5)?,
+                anchor_start: row.get(6)?,
+                anchor_end: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;

@@ -34,7 +34,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
-import Editor from "./Editor";
+import Editor, { type CommentRange } from "./Editor";
 import Preview, { buildCitations } from "./Preview";
 import { buildResolver } from "./noteResolver";
 import Backlinks from "./Backlinks";
@@ -251,6 +251,14 @@ export default function App() {
   // content is available — see the effect near the editor render below.
   const [pendingFragment, setPendingFragment] = useState<string | null>(null);
   const [scrollToOffset, setScrollToOffset] = useState<number | null>(null);
+  // Set when the "💬 Comment" button in the editor (Editor.tsx, appears on
+  // selecting text) is clicked; consumed by CommentsPanel.tsx once the
+  // comment is actually posted (or dismissed). commentRanges is the
+  // reverse direction — CommentsPanel reports back which existing
+  // comments' anchors resolved successfully, so Editor.tsx can highlight
+  // them; recomputed there whenever that note's comments change.
+  const [pendingCommentAnchor, setPendingCommentAnchor] = useState<{ from: number; to: number } | null>(null);
+  const [commentRanges, setCommentRanges] = useState<CommentRange[]>([]);
 
   const [cloudRoom, setCloudRoom] = useState("");
   const [cloudPassphrase, setCloudPassphrase] = useState("");
@@ -537,6 +545,13 @@ export default function App() {
       setLocalSession(null);
       setRaw("");
       setRawPath(null);
+      // Both note-specific: without this, a comment range highlighted in
+      // the note you're leaving would keep showing (wrong) in whichever
+      // note you open next, until/unless its own Comments panel happens to
+      // be open and refetches. A pending "commenting on this selection"
+      // from the note you're leaving is meaningless anywhere else too.
+      setCommentRanges([]);
+      setPendingCommentAnchor(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
@@ -1465,6 +1480,21 @@ export default function App() {
                         readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
                         dark={isDarkTheme(themeId)}
                         scrollToOffset={scrollToOffset}
+                        commentRanges={commentRanges}
+                        onCommentOnSelection={
+                          role !== "view"
+                            ? (from, to) => {
+                                setPendingCommentAnchor({ from, to });
+                                // The Comments accordion auto-opens itself
+                                // (CommentsPanel.tsx), but that's invisible
+                                // if the right panel it lives in is still
+                                // collapsed (the default) — has to actually
+                                // be on screen for "click Comment, type,
+                                // Post" to work as one continuous action.
+                                setRightPanelCollapsed(false);
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                   )}
@@ -1538,7 +1568,16 @@ export default function App() {
               />
             )}
             <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
-            <CommentsPanel path={activePath} canComment={role !== "view"} shareToken={shareToken} />
+            <CommentsPanel
+              path={activePath}
+              canComment={role !== "view"}
+              shareToken={shareToken}
+              ytext={localSession.ytext}
+              pendingAnchor={pendingCommentAnchor}
+              onPendingAnchorConsumed={() => setPendingCommentAnchor(null)}
+              onRangesResolved={setCommentRanges}
+              onExcerptClick={setScrollToOffset}
+            />
             <HistoryPanel path={activePath} shareToken={shareToken} />
           </aside>
         </>
