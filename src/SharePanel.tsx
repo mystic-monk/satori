@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createShare, fetchShares, revokeShareApi, type Share, type ShareRole } from "./api";
+import DisclosureChevron from "./DisclosureChevron";
 
 interface SharePanelProps {
   path: string;
@@ -61,7 +62,7 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
   return (
     <div className="share-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} Share{shares.length > 0 ? ` (${shares.length})` : ""}
+        <DisclosureChevron open={open} /> Share{shares.length > 0 ? ` (${shares.length})` : ""}
       </button>
       {open && (
         <div className="share-body">

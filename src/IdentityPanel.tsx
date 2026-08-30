@@ -9,6 +9,7 @@ import {
   type Identity,
 } from "./identity";
 import PromptDialog from "./PromptDialog";
+import DisclosureChevron from "./DisclosureChevron";
 
 // Vault-wide, not per-note — unlike PropertiesPanel/SharePanel/HistoryPanel
 // (which all render inside the activePath block), this is who *you* are
@@ -76,7 +77,7 @@ export default function IdentityPanel() {
   return (
     <div className="identity-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} You: {identity.name}
+        <DisclosureChevron open={open} /> You: {identity.name}
       </button>
       {open && (
         <div className="identity-body">

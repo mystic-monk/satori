@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchHistory, type HistoryEntry } from "./api";
+import DisclosureChevron from "./DisclosureChevron";
 
 interface HistoryPanelProps {
   path: string;
@@ -17,7 +18,7 @@ export default function HistoryPanel({ path, shareToken }: HistoryPanelProps) {
   return (
     <div className="history-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} History
+        <DisclosureChevron open={open} /> History
       </button>
       {open && (
         <ul className="history-list">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchComments, postComment, type Comment } from "./api";
 import { getIdentity } from "./identity";
+import DisclosureChevron from "./DisclosureChevron";
 
 interface CommentsPanelProps {
   path: string;
@@ -41,7 +42,7 @@ export default function CommentsPanel({ path, canComment, shareToken }: Comments
   return (
     <div className="comments-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} Comments{comments.length > 0 ? ` (${comments.length})` : ""}
+        <DisclosureChevron open={open} /> Comments{comments.length > 0 ? ` (${comments.length})` : ""}
       </button>
       {open && (
         <div className="comments-body">

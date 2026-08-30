@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import PromptDialog from "./PromptDialog";
+import DisclosureChevron from "./DisclosureChevron";
 
 const ORIGIN = "properties-panel";
 
@@ -42,7 +43,7 @@ export default function PropertiesPanel({ raw, ytext, readOnly = false }: Proper
   return (
     <div className="properties-panel">
       <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} Properties{parsed.data.type ? ` · ${parsed.data.type}` : ""}
+        <DisclosureChevron open={open} /> Properties{parsed.data.type ? ` · ${parsed.data.type}` : ""}
       </button>
       {open && (
         <div className="properties-body">

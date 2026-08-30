@@ -72,6 +72,8 @@ import {
   Paintbrush,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   PenLine,
   RotateCw,
   Settings as SettingsIcon,
@@ -88,6 +90,7 @@ import { queryNotes } from "./noteQuery";
 import TemplatePickerDialog from "./TemplatePickerDialog";
 import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";
+import { useResizableWidth } from "./useResizableWidth";
 
 const BRIDGE_ORIGIN = "bridge";
 
@@ -203,6 +206,21 @@ export default function App() {
       return !collapsed;
     });
   }
+  // Mirrors sidebarCollapsed above, same reasoning — Properties/Comments/
+  // History used to sit stacked above the editor, eating vertical space
+  // before you'd even started writing; moved to their own collapsible rail
+  // on the right so that space goes back to the note by default.
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(
+    () => localStorage.getItem("pkm-right-panel-collapsed") !== "0"
+  );
+  function toggleRightPanelCollapsed() {
+    setRightPanelCollapsed((collapsed) => {
+      localStorage.setItem("pkm-right-panel-collapsed", collapsed ? "0" : "1");
+      return !collapsed;
+    });
+  }
+  const sidebarResize = useResizableWidth("pkm-sidebar-width", 280, 200, 480, "left");
+  const rightPanelResize = useResizableWidth("pkm-right-panel-width", 300, 220, 480, "right");
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
@@ -958,6 +976,7 @@ export default function App() {
       </button>
       <button
         className={`sidebar-collapse-toggle ${sidebarCollapsed ? "collapsed" : ""}`}
+        style={sidebarCollapsed ? undefined : { left: sidebarResize.width - 16 }}
         onClick={toggleSidebarCollapsed}
         aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
         title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
@@ -965,7 +984,16 @@ export default function App() {
         {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
       </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
+      <aside
+        className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""} ${sidebarResize.resizing ? "resizing" : ""}`}
+        style={sidebarCollapsed ? undefined : { width: sidebarResize.width }}
+      >
+        {!sidebarCollapsed && (
+          <div
+            className={`resize-handle resize-handle-left ${sidebarResize.resizing ? "resizing" : ""}`}
+            onMouseDown={sidebarResize.onHandleMouseDown}
+          />
+        )}
         {IS_TAURI && (
           <div className="vault-header">
             <button
@@ -1318,7 +1346,9 @@ export default function App() {
         )}
         <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
-      <main className={`editor-pane ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <main
+        className={`editor-pane ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelCollapsed ? "right-panel-collapsed" : ""}`}
+      >
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} />
         ) : showTable ? (
@@ -1346,13 +1376,9 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {!isCanvas && (
-                <>
-                  <button onClick={onExportMd}>MD</button>
-                  <button onClick={onExportHtml}>HTML</button>
-                  <button onClick={onExportPdf}>PDF</button>
-                </>
-              )}
+              <div className="share-panel-toolbar-anchor">
+                <SharePanel path={activePath} isOwner={role === "owner"} />
+              </div>
               {role !== "owner" && <span className="role-badge">{role}</span>}
               {role === "owner" && (
                 <button className="btn-danger" onClick={() => setDeleteConfirmOpen(true)}>
@@ -1360,10 +1386,6 @@ export default function App() {
                 </button>
               )}
             </div>
-            <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
-            <SharePanel path={activePath} isOwner={role === "owner"} />
-            <CommentsPanel path={activePath} canComment={role !== "view"} shareToken={shareToken} />
-            <HistoryPanel path={activePath} shareToken={shareToken} />
             {isCanvas ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
                 <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
@@ -1425,6 +1447,33 @@ export default function App() {
           </div>
         )}
       </main>
+      {!showGraph && !showTable && !showFlashcards && role !== "denied" && activePath && localSession && (
+        <>
+          <button
+            className={`right-panel-collapse-toggle ${rightPanelCollapsed ? "collapsed" : ""}`}
+            style={rightPanelCollapsed ? undefined : { right: rightPanelResize.width - 16 }}
+            onClick={toggleRightPanelCollapsed}
+            aria-label={rightPanelCollapsed ? "Show properties panel" : "Hide properties panel"}
+            title={rightPanelCollapsed ? "Show properties panel" : "Hide properties panel"}
+          >
+            {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          </button>
+          <aside
+            className={`right-panel ${rightPanelCollapsed ? "collapsed" : ""} ${rightPanelResize.resizing ? "resizing" : ""}`}
+            style={rightPanelCollapsed ? undefined : { width: rightPanelResize.width }}
+          >
+            {!rightPanelCollapsed && (
+              <div
+                className={`resize-handle resize-handle-right ${rightPanelResize.resizing ? "resizing" : ""}`}
+                onMouseDown={rightPanelResize.onHandleMouseDown}
+              />
+            )}
+            <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
+            <CommentsPanel path={activePath} canComment={role !== "view"} shareToken={shareToken} />
+            <HistoryPanel path={activePath} shareToken={shareToken} />
+          </aside>
+        </>
+      )}
       {deleteConfirmOpen && activePath && (
         <ConfirmDialog
           title="Delete note?"
