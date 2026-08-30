@@ -175,9 +175,20 @@ export default function App() {
   // passphrase above, which deliberately stays in-memory only).
   const [relayUrl, setRelayUrl] = useState(() => localStorage.getItem("pkm-relay-url") || defaultRelayUrl());
 
+  // Always the full vault, never server-side filtered by typeFilter — this
+  // feeds far more than the sidebar list (the wikilink/citation resolver,
+  // relation resolution, favorites, template detection all read from
+  // `notes` too), and every one of those needs to resolve against the
+  // whole vault regardless of what the sidebar happens to be scoped to.
+  // Was previously fetched pre-filtered by typeFilter, which meant
+  // switching to Journal/Canvas/a custom type silently broke every
+  // wikilink/citation to a note of a different type — they'd render as
+  // "broken" purely because the sidebar filter, not the note's own
+  // wikilinks, changed. typeFilter is applied client-side instead, in
+  // displayedNotes below.
   const loadNotes = useCallback(async () => {
-    setNotes(await fetchNotes(typeFilter || undefined));
-  }, [typeFilter]);
+    setNotes(await fetchNotes());
+  }, []);
 
   useEffect(() => {
     loadNotes();
@@ -708,7 +719,11 @@ export default function App() {
   // !shareToken.
   const canFavorite = !shareToken;
   const favoriteNotes = notes.filter((n) => n.favorite);
-  const displayedNotes = sidebarView === "favorites" ? favoriteNotes : notes;
+  // typeFilter narrows what the sidebar list (and Table view, which reads
+  // this same value) shows — applied here, client-side, rather than by
+  // fetching a pre-filtered `notes` from the server (see loadNotes above).
+  const displayedNotes =
+    sidebarView === "favorites" ? favoriteNotes : typeFilter ? notes.filter((n) => n.type === typeFilter) : notes;
   const templateNotes = queryNotes(notes, { type: "template" });
   const todayIso = new Date().toISOString().slice(0, 10);
 
