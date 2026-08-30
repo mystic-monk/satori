@@ -127,7 +127,15 @@ export async function setIdentityFromEmail(email: string): Promise<Identity> {
   const trimmed = email.trim();
   if (!EMAIL_RE.test(trimmed)) throw new Error("not a valid email address");
   const id = await hashEmail(trimmed);
-  return save({ ...getIdentity(), id, email: trimmed.toLowerCase() });
+  const current = getIdentity();
+  // IdentityPanel.tsx's header always shows "You: {name}" — without this, a
+  // still-default "Anonymous" identity would take this "instead of
+  // anonymous" action and keep showing "You: Anonymous" everywhere but the
+  // expanded panel's own status line, directly contradicting what the user
+  // just did. Only overrides the untouched default, never a name someone
+  // deliberately chose via setDisplayName.
+  const name = current.name === "Anonymous" ? trimmed.split("@")[0] : current.name;
+  return save({ ...current, id, name, email: trimmed.toLowerCase() });
 }
 
 // Switching back to anonymous is a deliberate, separate action, not just

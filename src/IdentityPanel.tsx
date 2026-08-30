@@ -68,6 +68,7 @@ export default function IdentityPanel({ themeId, onThemeChange }: IdentityPanelP
     try {
       const next = await setIdentityFromEmail(email);
       setIdentity(next);
+      setNameDraft(next.name);
       setEmailPromptOpen(false);
       setEmailError(null);
     } catch {
