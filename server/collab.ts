@@ -7,7 +7,7 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import fs from "node:fs";
 import path from "node:path";
-import { readNoteRaw, writeNoteRaw } from "./vault.js";
+import { readNoteRaw, writeNoteRaw, getNoteMtime } from "./vault.js";
 import { upsertNoteIndex, resolveShareRole, logHistory, type ShareRole } from "./db.js";
 
 // Local-mode real-time collaboration. This server runs on the user's own
@@ -42,7 +42,7 @@ interface ConnInfo {
   id: string | null; // stable per-person identity id (src/identity.ts)
 }
 
-class Room {
+export class Room {
   doc = new Y.Doc();
   awareness = new awarenessProtocol.Awareness(this.doc);
   conns = new Map<WebSocket, ConnInfo>();
@@ -55,7 +55,22 @@ class Room {
 
   constructor(public notePath: string) {
     const statePath = crdtStatePath(notePath);
-    if (fs.existsSync(statePath)) {
+    // A .ybin snapshot is normally authoritative — it can hold edits made
+    // through this collab session that were debounced and not yet flushed
+    // to the .md file. But if the .md file's mtime is *newer* than the
+    // snapshot, something outside the collab system (a direct edit, a git
+    // checkout, a sync from another device) touched the file after the
+    // last collab session for this note ended. Trusting the stale
+    // snapshot in that case would silently revert that change the moment
+    // anyone next opens the note here — found this actually happening to
+    // a real file (see the CRDT_DIR comment above for the sibling bug).
+    // Reseed a fresh, causally-independent doc from the file instead.
+    const ybinExists = fs.existsSync(statePath);
+    const ybinMtime = ybinExists ? fs.statSync(statePath).mtimeMs : null;
+    const mdMtime = getNoteMtime(notePath);
+    const trustYbin = ybinExists && !(mdMtime !== null && ybinMtime !== null && mdMtime > ybinMtime);
+
+    if (trustYbin) {
       Y.applyUpdate(this.doc, fs.readFileSync(statePath));
     } else {
       let raw = "";

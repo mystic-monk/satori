@@ -45,6 +45,14 @@ export function readNoteRaw(relPath: string): string {
   return fs.readFileSync(toAbsPath(relPath), "utf8");
 }
 
+export function getNoteMtime(relPath: string): number | null {
+  try {
+    return fs.statSync(toAbsPath(relPath)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 export function writeNoteRaw(relPath: string, raw: string): void {
   const abs = toAbsPath(relPath);
   fs.mkdirSync(path.dirname(abs), { recursive: true });

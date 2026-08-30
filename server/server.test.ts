@@ -16,12 +16,14 @@ const originalCwd = process.cwd();
 
 let vault: typeof import("./vault.js");
 let db: typeof import("./db.js");
+let collab: typeof import("./collab.js");
 
 beforeAll(async () => {
   fs.mkdirSync(path.join(tmpRoot, "vault"), { recursive: true });
   process.chdir(tmpRoot);
   vault = await import("./vault.js");
   db = await import("./db.js");
+  collab = await import("./collab.js");
 });
 
 afterAll(() => {
@@ -137,5 +139,50 @@ describe("listNotesFromIndex favorite derivation", () => {
     db.upsertNoteIndex("starred.md");
     const note = db.listNotesFromIndex().find((n) => n.path === "starred.md");
     expect(note?.favorite).toBe(true);
+  });
+});
+
+// Regression coverage for a real content-loss bug found during this
+// session: Room's constructor used to trust a .ybin CRDT snapshot
+// unconditionally whenever one existed, with no regard for whether the
+// .md file had been modified since — so any out-of-band edit to the file
+// (a direct write, a git checkout, a sync from another device) got
+// silently reverted the moment anyone next opened that note through the
+// collab system. Caught this reverting real content in vault/tutorial.md
+// during manual testing.
+describe("collab Room CRDT/file staleness", () => {
+  it("reseeds from the .md file when it was modified after the .ybin snapshot", () => {
+    vault.writeNoteRaw("stale-test.md", "original content");
+    const room1 = new collab.Room("stale-test.md");
+    room1.persist(); // writes stale-test.md.ybin holding "original content"
+
+    const ybinPath = path.join(tmpRoot, ".pkm-state", "crdt", "stale-test.md.ybin");
+    const ybinMtime = fs.statSync(ybinPath).mtimeMs;
+    // Simulate an out-of-band edit happening after the collab session
+    // ended, landing with a mtime strictly after the .ybin's.
+    vault.writeNoteRaw("stale-test.md", "edited outside the collab system");
+    const newer = new Date(ybinMtime + 1000);
+    fs.utimesSync(path.join(tmpRoot, "vault", "stale-test.md"), newer, newer);
+
+    const room2 = new collab.Room("stale-test.md");
+    expect(room2.doc.getText("content").toString()).toBe("edited outside the collab system");
+  });
+
+  it("still trusts the .ybin snapshot when it is at least as new as the .md file", () => {
+    vault.writeNoteRaw("fresh-test.md", "from collab session");
+    const room1 = new collab.Room("fresh-test.md");
+    room1.persist(); // ybin + md both now hold "from collab session"
+
+    // A direct write to the .md file that doesn't advance its mtime past
+    // the .ybin's — the snapshot should still win.
+    const ybinPath = path.join(tmpRoot, ".pkm-state", "crdt", "fresh-test.md.ybin");
+    const ybinMtime = fs.statSync(ybinPath).mtimeMs;
+    const mdPath = path.join(tmpRoot, "vault", "fresh-test.md");
+    fs.writeFileSync(mdPath, "corrupted directly on disk");
+    const tied = new Date(ybinMtime);
+    fs.utimesSync(mdPath, tied, tied);
+
+    const room2 = new collab.Room("fresh-test.md");
+    expect(room2.doc.getText("content").toString()).toBe("from collab session");
   });
 });
