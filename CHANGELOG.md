@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-08-30
+
+### Fixed
+
+- Release builds are now actually signed for the auto-updater — 0.1.1 had the signing key wired into CI but was still missing `createUpdaterArtifacts` in the bundle config, so the build silently skipped producing a signature and `latest.json`
+
 ## [0.1.1] — 2026-08-30
 
 ### Fixed
 
-- Release builds now get signed for the auto-updater — the previous release predated the signing key being wired into CI
+- Wired the updater signing key into CI (turned out incomplete — see 0.1.2)
 
 ## [0.1.0] — 2026-08-29
 

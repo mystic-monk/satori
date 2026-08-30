@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.1"
+version = "0.1.2"
 description = "Satori — a privacy-first, local-first, end-to-end encrypted networked notes app"
 authors = ["Ankush"]
 license = "MIT"
