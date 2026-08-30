@@ -18,25 +18,31 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 
 **Writing & organizing**
 - Markdown editing with live preview (CodeMirror 6), formatting shortcuts, Mermaid diagrams, KaTeX math, callouts, highlights
+- Syntax-highlighted code blocks with a one-click copy button; the editor itself syntax-highlights ~180 languages as you type
+- Interactive task/checkbox lists (`- [ ]`) — click to toggle, right in preview
 - Excalidraw canvas notes, embedded natively
-- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph
+- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections
+- Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)
-- Favorites, Recent notes, and organized sidebar navigation (All Notes / Journal / Canvas / Table)
+- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table)
 - A command palette (⌘K) for jumping to any note or action instantly
+- Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
 - Templates with `{{date}}`/`{{title}}` placeholder substitution
 - Table/database views over your notes' properties, with inline editing
-- Daily journal notes, one keystroke away
+- Spaced-repetition flashcards (SM-2 scheduling)
+- Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing
 
 **Collaboration & sharing**
 - Real-time multi-cursor editing (CRDT-based, via Yjs) on your local network
 - Optional end-to-end encrypted cloud sync for collaborating over the internet
-- Per-note share links with view / comment / edit roles, enforced server-side
+- Per-note share links with view / comment / edit roles, enforced server-side — a "comment" link lets someone leave feedback on a note without being able to edit it
 - A persistent (portable, exportable) identity so your edit history stays attributed to you across devices — not just a random per-browser label
 - Per-note change history
 
 **The app itself**
 - Native desktop app (macOS, with Windows/Linux via the same Tauri build) — small, fast, no Electron
+- Auto-updates: checks for new releases and installs them in place
 - A real native menu bar and a proper vault picker (choose or create your notes folder on first launch)
 - Four built-in themes (Dark, Light, Solarized Dark, Solarized Light)
 - Also runs as a browser-based web app if you'd rather self-host it that way
@@ -83,12 +89,15 @@ Read `server/relay.ts` and `src/crypto.ts` if you want to verify these claims yo
 
 ## Roadmap / known limitations
 
-Satori is early (v0.1.0) and honest about what it isn't yet:
+Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
-- No spaced-repetition/flashcards yet
+- No block-level references (Logseq's outliner model) — transclusion works at the whole-note level only
 - Cloud-mode sharing has no role separation yet (see above)
 - Table views are a single layout — no kanban/calendar/gallery views yet
+- Comments are a flat per-note thread, not anchored to a specific line or text range
+- Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
+- The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
 

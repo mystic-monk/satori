@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Citations: `[@citekey]` inline references, `​```bibliography` blocks, and `.bib` file import (`type: reference` notes)
+- Real inline comments — the "comment" share role now actually grants comment-posting rights, instead of doing nothing
+- Interactive task/checkbox lists in preview
+- A one-click copy button on rendered code blocks
+- Local graph view — scope the graph to just the active note's direct connections instead of the whole vault
+- Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for zero-friction note capture
+
+### Fixed
+
+- A real content-loss bug: a stale `.ybin` CRDT snapshot could silently overwrite a `.md` file that had been edited outside the collab system (a direct edit, a git checkout, a sync from another device) the next time that note was opened
+
 ## [0.1.2] — 2026-08-30
 
 ### Fixed
