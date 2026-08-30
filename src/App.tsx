@@ -43,6 +43,7 @@ import FlashcardReview from "./FlashcardReview";
 const CanvasNote = lazy(() => import("./CanvasNote"));
 import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
+import CommentsPanel from "./CommentsPanel";
 import ConfirmDialog from "./ConfirmDialog";
 import PromptDialog from "./PromptDialog";
 import CommandPalette, { type Command } from "./CommandPalette";
@@ -1170,6 +1171,7 @@ export default function App() {
             )}
             <PropertiesPanel raw={raw} ytext={localSession.ytext} readOnly={role === "view" || role === "comment"} />
             <SharePanel path={activePath} isOwner={role === "owner"} />
+            <CommentsPanel path={activePath} canComment={role !== "view"} shareToken={shareToken} />
             <HistoryPanel path={activePath} shareToken={shareToken} />
             {isCanvas ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>

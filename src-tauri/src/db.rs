@@ -74,6 +74,15 @@ pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
             due_at REAL NOT NULL,
             reviewed_at REAL
         );
+        CREATE TABLE IF NOT EXISTS comments (
+            id TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            author_id TEXT,
+            author_name TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS comments_path ON comments(path);
         ",
     )
     .map_err(|e| e.to_string())?;
@@ -520,6 +529,77 @@ pub fn get_history(conn: &Connection, path: &str) -> Result<Vec<HistoryEntry>, S
             Ok(HistoryEntry {
                 at: row.get(0)?,
                 authors: raw.into_iter().map(AuthorRef::from).collect(),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct Comment {
+    pub id: String,
+    pub path: String,
+    #[serde(rename = "authorId")]
+    pub author_id: Option<String>,
+    #[serde(rename = "authorName")]
+    pub author_name: String,
+    pub body: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: f64,
+}
+
+// No role/token gating here, same as write_note/create_note in
+// commands.rs — Tauri IPC commands are only ever reachable from this
+// app's own owner's UI (no guest can call into a running native
+// instance), so enforcement is meaningless at this layer. The
+// requireNoteComment gate in server/index.ts is where that check
+// actually matters, for the browser/share-link deployment.
+pub fn add_comment(
+    conn: &Connection,
+    path: &str,
+    author_id: Option<String>,
+    author_name: &str,
+    body: &str,
+) -> Result<Comment, String> {
+    let comment = Comment {
+        id: uuid::Uuid::new_v4().simple().to_string(),
+        path: path.to_string(),
+        author_id,
+        author_name: author_name.to_string(),
+        body: body.to_string(),
+        created_at: chrono::Utc::now().timestamp_millis() as f64,
+    };
+    conn.execute(
+        "INSERT INTO comments (id, path, author_id, author_name, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            comment.id,
+            comment.path,
+            comment.author_id,
+            comment.author_name,
+            comment.body,
+            comment.created_at
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(comment)
+}
+
+pub fn get_comments(conn: &Connection, path: &str) -> Result<Vec<Comment>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, path, author_id, author_name, body, created_at FROM comments \
+             WHERE path = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![path], |row| {
+            Ok(Comment {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                author_id: row.get(2)?,
+                author_name: row.get(3)?,
+                body: row.get(4)?,
+                created_at: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?;

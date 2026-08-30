@@ -221,6 +221,24 @@ pub fn pick_bib_file() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub fn get_comments(state: State<AppState>, path: String) -> Result<Vec<db::Comment>, String> {
+    let conn = state.state_conn.lock().map_err(lock_err)?;
+    db::get_comments(&conn, &path)
+}
+
+#[tauri::command]
+pub fn add_comment(
+    state: State<AppState>,
+    path: String,
+    author_id: Option<String>,
+    author_name: String,
+    body: String,
+) -> Result<db::Comment, String> {
+    let conn = state.state_conn.lock().map_err(lock_err)?;
+    db::add_comment(&conn, &path, author_id, &author_name, &body)
+}
+
+#[tauri::command]
 pub fn get_due_cards(state: State<AppState>) -> Result<Vec<db::DueCard>, String> {
     let conn = state.conn.lock().map_err(lock_err)?;
     let state_conn = state.state_conn.lock().map_err(lock_err)?;

@@ -191,6 +191,40 @@ export async function fetchHistory(p: string, token?: string | null): Promise<Hi
   return res.json();
 }
 
+export interface Comment {
+  id: string;
+  path: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  createdAt: number;
+}
+
+// What the "comment" share role actually grants — see SharePanel.tsx and
+// the requireNoteComment gate in server/index.ts.
+export async function fetchComments(p: string, token?: string | null): Promise<Comment[]> {
+  if (IS_TAURI) return invoke("get_comments", { path: p });
+  const res = await fetch(withToken(`/api/comments/${encodePath(p)}`, token));
+  return res.json();
+}
+
+export async function postComment(
+  p: string,
+  body: string,
+  authorId: string | null,
+  authorName: string,
+  token?: string | null
+): Promise<Comment> {
+  if (IS_TAURI) return invoke("add_comment", { path: p, authorId, authorName, body });
+  const res = await fetch(withToken(`/api/comments/${encodePath(p)}`, token), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, authorId, authorName }),
+  });
+  if (!res.ok) throw new Error(`failed to post comment: ${res.status}`);
+  return res.json();
+}
+
 // Tauri only — browser mode has no multi-vault concept, the vault is fixed
 // to wherever the dev/prod server process runs.
 export async function fetchVaultInfo(): Promise<{ name: string }> {

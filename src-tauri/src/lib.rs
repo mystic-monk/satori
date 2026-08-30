@@ -321,6 +321,8 @@ pub fn run() {
             commands::revoke_share,
             commands::resolve_role,
             commands::get_history,
+            commands::get_comments,
+            commands::add_comment,
             commands::get_vault_info,
             commands::switch_vault,
             commands::import_folder,

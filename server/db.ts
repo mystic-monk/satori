@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import { listNoteFiles, readNoteRaw, parseNote } from "./vault.js";
 import { extractWikilinkRefs } from "../shared/wikilinks.js";
 import { initialCardState, nextCardState, type CardState, type Rating } from "./srs.js";
@@ -84,6 +85,20 @@ stateDb.exec(`
     due_at INTEGER NOT NULL,
     reviewed_at INTEGER
   );
+
+  -- A note's discussion thread — what the "comment" share role actually
+  -- grants (previously that role existed in the UI but did nothing; see
+  -- SharePanel.tsx). Append-only like history: no edit/delete for a first
+  -- pass, same reasoning history already established for that tradeoff.
+  CREATE TABLE IF NOT EXISTS comments (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    author_id TEXT,
+    author_name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS comments_path ON comments(path);
 `);
 
 function deleteFromIndex(relPath: string) {
@@ -478,6 +493,41 @@ export function getHistory(notePath: string): HistoryEntry[] {
       typeof a === "string" ? { id: null, name: a } : a
     ),
   }));
+}
+
+// ---- Comments ----
+
+export interface Comment {
+  id: string;
+  path: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  createdAt: number;
+}
+
+export function addComment(notePath: string, authorId: string | null, authorName: string, body: string): Comment {
+  const comment: Comment = {
+    id: randomUUID(),
+    path: notePath,
+    authorId,
+    authorName,
+    body,
+    createdAt: Date.now(),
+  };
+  stateDb
+    .prepare("INSERT INTO comments (id, path, author_id, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(comment.id, comment.path, comment.authorId, comment.authorName, comment.body, comment.createdAt);
+  return comment;
+}
+
+export function getComments(notePath: string): Comment[] {
+  const rows = stateDb
+    .prepare(
+      "SELECT id, path, author_id as authorId, author_name as authorName, body, created_at as createdAt FROM comments WHERE path = ? ORDER BY created_at ASC"
+    )
+    .all(notePath) as Comment[];
+  return rows;
 }
 
 // ---- Flashcards / spaced repetition ----

@@ -8,10 +8,7 @@ interface SharePanelProps {
 
 const ROLE_LABEL: Record<ShareRole, string> = {
   view: "Can view",
-  // "comment" isn't creatable from the UI anymore (see the dropdown below)
-  // since it doesn't do anything a "view" share doesn't — but a share
-  // created with it before that change still needs a truthful label here.
-  comment: "Can view (comment role — currently identical to view)",
+  comment: "Can view & comment",
   edit: "Can edit",
 };
 
@@ -71,6 +68,7 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
           <div className="share-create">
             <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)} aria-label="New share link role">
               <option value="view">Can view</option>
+              <option value="comment">Can view & comment</option>
               <option value="edit">Can edit</option>
             </select>
             <input

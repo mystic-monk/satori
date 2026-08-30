@@ -22,6 +22,8 @@ import {
   resolveShareRole,
   getDueCards,
   recordCardReview,
+  addComment,
+  getComments,
   type ShareRole,
 } from "./db.js";
 import type { Rating } from "./srs.js";
@@ -71,6 +73,19 @@ function requireNoteWrite(req: Request, res: Response, next: NextFunction) {
   const relPath = (req.params as Record<string, string>)[0];
   const role = resolveShareRole(relPath, tokenFrom(req));
   if (role !== "owner" && role !== "edit") {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  next();
+}
+
+// "comment" grants the ability to post a comment (not edit note content),
+// so this is deliberately its own gate rather than reusing
+// requireNoteWrite — the one role that role actually exists for.
+function requireNoteComment(req: Request, res: Response, next: NextFunction) {
+  const relPath = (req.params as Record<string, string>)[0];
+  const role = resolveShareRole(relPath, tokenFrom(req));
+  if (role !== "owner" && role !== "edit" && role !== "comment") {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -165,6 +180,25 @@ app.delete("/api/share/:token", requireOwner, (req, res) => {
 app.get("/api/history/*", requireNoteRead, (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
   res.json(getHistory(relPath));
+});
+
+// Anyone who can read the note can read its discussion (matches history's
+// gating); posting needs at least the "comment" role — see
+// requireNoteComment above for why that's not requireNoteWrite.
+app.get("/api/comments/*", requireNoteRead, (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  res.json(getComments(relPath));
+});
+
+app.post("/api/comments/*", requireNoteComment, (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  const { body, authorId, authorName } = req.body as { body: string; authorId: string | null; authorName: string };
+  const trimmed = body?.trim();
+  if (!trimmed) {
+    res.status(400).json({ error: "empty comment" });
+    return;
+  }
+  res.json(addComment(relPath, authorId ?? null, authorName?.trim() || "Anonymous", trimmed));
 });
 
 app.get("/api/search", requireOwner, (req, res) => {
