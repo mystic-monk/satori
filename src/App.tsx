@@ -762,13 +762,20 @@ export default function App() {
   // category as New note/Reindex/Graph/search — all already gated on
   // !shareToken.
   const canFavorite = !shareToken;
-  const favoriteNotes = notes.filter((n) => n.favorite);
+  // App re-renders on every keystroke (raw is set from ytext.observe while
+  // editing) — these three used to be plain filters recomputed on every one
+  // of those renders even though `notes` itself only changes on load/save.
+  // Memoized so an editing session over a large vault doesn't rescan the
+  // full notes array per keystroke for a value that hasn't changed.
+  const favoriteNotes = useMemo(() => notes.filter((n) => n.favorite), [notes]);
   // typeFilter narrows what the sidebar list (and Table view, which reads
   // this same value) shows — applied here, client-side, rather than by
   // fetching a pre-filtered `notes` from the server (see loadNotes above).
-  const displayedNotes =
-    sidebarView === "favorites" ? favoriteNotes : typeFilter ? notes.filter((n) => n.type === typeFilter) : notes;
-  const templateNotes = queryNotes(notes, { type: "template" });
+  const displayedNotes = useMemo(
+    () => (sidebarView === "favorites" ? favoriteNotes : typeFilter ? notes.filter((n) => n.type === typeFilter) : notes),
+    [sidebarView, favoriteNotes, typeFilter, notes]
+  );
+  const templateNotes = useMemo(() => queryNotes(notes, { type: "template" }), [notes]);
   const todayIso = new Date().toISOString().slice(0, 10);
 
   function exportEnv(): RenderEnv {
