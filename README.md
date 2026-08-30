@@ -37,7 +37,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 
 **Collaboration & sharing**
 - Real-time multi-cursor editing (CRDT-based, via Yjs) on your local network
-- Optional end-to-end encrypted cloud sync for collaborating over the internet
+- Optional end-to-end encrypted cloud sync for collaborating over the internet — with real view/edit role separation: a view-only key lets someone read without ever being able to write, enforced by signature verification the relay can check without decrypting anything
 - Per-note share links with view / comment / edit roles, enforced server-side — a "comment" link lets someone leave feedback on a note without being able to edit it
 - A persistent (portable, exportable) identity so your edit history stays attributed to you across devices — not just a random per-browser label
 - Per-note change history
@@ -98,7 +98,7 @@ Both modes share the same markdown/frontmatter parsing (`shared/`) and the same 
 ## Security & privacy model
 
 - **Local mode** (same machine or LAN): the local server can read your notes' plaintext — it has to, to serve them to your own browser — and enforces view/comment/edit roles on real-time editing sessions. It's meant for your own machine or a trusted home/office network, not the open internet.
-- **Cloud mode**: everything is encrypted client-side (XSalsa20-Poly1305 via libsodium, with an Argon2id-derived key from a passphrase you choose) before it ever reaches the relay server. The relay only forwards opaque ciphertext between peers — it has no way to decrypt your notes even if it wanted to. The tradeoff: cloud mode doesn't yet have per-role permissions the way local sharing does — anyone with the passphrase can read *and* write.
+- **Cloud mode**: everything is encrypted client-side (XSalsa20-Poly1305 via libsodium, with an Argon2id-derived key from a passphrase you choose) before it ever reaches the relay server. The relay only forwards opaque ciphertext between peers — it has no way to decrypt your notes even if it wanted to. A passphrase grants edit access; a separate view-only content key (derived from the passphrase, but not reversible back to it) can be shared instead for read-only access — the relay verifies a signature on every write against that room's registered editor keys before forwarding it, without ever decrypting the content to do so. See `src/crypto.ts`'s `deriveRoomSecrets` for the derivation and `server/relay.ts` for the enforcement.
 - Share links are scoped per-note and fail closed: an invalid, expired, or mismatched token is rejected outright, never silently treated as full access.
 
 Read `server/relay.ts` and `src/crypto.ts` if you want to verify these claims yourself — that's the point of not trusting a vendor's word for it.
@@ -110,7 +110,6 @@ Satori is early and honest about what it isn't yet:
 - No native mobile apps yet (responsive web layout only)
 - Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
 - Navigating to a `[[Note#Heading]]` or `[[Note#^block-id]]` *link* opens the note but doesn't yet scroll to or highlight that specific spot — embeds (`![[...]]`) already inline just that section/block correctly
-- Cloud-mode sharing has no role separation yet (see above)
 - Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Comments are a flat per-note thread, not anchored to a specific line or text range
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
@@ -118,7 +117,7 @@ Satori is early and honest about what it isn't yet:
 - Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with
 - Team/Workspace v1 is server/browser-only, same as Related Notes above — Tauri's local vault stays single-owner
 - Workspace roles are coarse (admin / member, both full vault read-write) — no per-note permission tiers for members the way per-note share links have; a member gets the same access an owner always had
-- Workspace accounts don't extend to cloud-mode sync — that still uses one shared passphrase for everyone, unchanged. Real per-role access there needs a genuinely different cryptographic scheme (per-user keypairs + a wrapped content key + signature-based write authorization instead of one symmetric secret everyone shares), not something layered on top of the current one
+- Workspace accounts and cloud-sync roles are two separate systems that don't know about each other — being a workspace admin/member doesn't automatically grant edit/view access to a given cloud room, and vice versa. Cloud sync's own view/edit separation (a view-only content key vs. the full passphrase, cryptographically enforced by the relay) is unrelated to whether workspace accounts exist on that server at all
 - No SSO, no email verification, no self-serve password reset for workspace accounts (a self-hosted admin can intervene directly in `.pkm-state/state.sqlite` if truly needed)
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.

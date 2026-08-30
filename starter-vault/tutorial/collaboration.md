@@ -11,11 +11,11 @@ Open any note in two browser tabs and start typing in one — the other updates 
 
 ## Cloud sync, end-to-end encrypted
 
-Open **Settings** in the sidebar (below your identity) with a note open — its **Cloud sync** section has a relay address, a room name (defaults to the note's path), and a shared passphrase. Anyone with the same passphrase, anywhere, can co-edit — but the relay server in between never sees anything but ciphertext. Wrong passphrase in, and you simply can't decrypt what comes back.
+Open **Settings** in the sidebar (below your identity) with a note open — its **Cloud sync** section has a relay address, a room name (defaults to the note's path), an **Edit / View only** toggle, and a passphrase field. Whoever connects with the same passphrase, anywhere, can co-edit — but the relay server in between never sees anything but ciphertext. Wrong passphrase in, and you simply can't decrypt what comes back.
 
 The relay itself has to run somewhere reachable over the internet — your own machine only works for someone on the same network. See [[tutorial/team-workspace|Team, Workspace & self-hosting]] for what it takes to actually stand one up.
 
-There's no view/edit separation here yet, though — unlike the local Share panel below, anyone with the cloud passphrase can write, not just read. The app warns about this right above the cloud-sync controls; only share that passphrase with people you'd trust to edit.
+**Real view/edit separation, cryptographically enforced.** Once you're connected as an editor, a **"Get a view-only key to share"** button appears — click it and you get a separate string, derived from your passphrase but not reversible back to it. Give that to someone instead of the passphrase, and they can connect as **View only**: they can read everything, but if their client ever tried to send an edit anyway, the relay itself rejects it — it verifies a signature against a list of who's actually proven edit access, without ever decrypting a single note to check. This isn't a UI restriction someone could work around with browser dev tools; the editor is also just read-only for them, but the *real* enforcement happens on the relay before their write would ever reach you.
 
 ## Sharing with roles
 

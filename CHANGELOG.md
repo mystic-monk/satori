@@ -7,16 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Cloud sync now has real, cryptographically enforced view/edit role separation — a passphrase still grants edit access, but a separate view-only content key (derived from the passphrase, not reversible back to it) can be shared instead, and the relay verifies a signature on every write against that room's registered editors before forwarding it, without ever decrypting content to do so. Settings' Cloud sync section gained an Edit/View-only toggle and a "Get a view-only key to share" action; the editor also goes read-only for a view-only session as a UI-level backstop on top of the relay's actual enforcement
+- Extensive new tutorial coverage (Team/Workspace, Related Notes/local AI, Settings & export) plus a dedicated **Tutorials** sidebar entry that lists every tutorial page in one place, filtered by tag rather than type
+- `server/` can now be deployed to Render (or similar) with one push — a `render.yaml` blueprint, a real `PORT`-aware production start script, and a README section on pointing cloud sync at a deployed relay
+
 ### Fixed
 
 - MD/HTML/PDF export never rendered mermaid diagrams, KaTeX math, `​```query` blocks, or `​```bibliography` blocks — it embedded the raw, unfilled placeholder/fallback markup Preview.tsx's live async passes normally fill in, which export has no equivalent of until now (`renderForExport.ts`, `deferredBlocks.ts`)
 - `[@citekey]` citations always rendered as unresolved in every export, even when correct in the live Preview, because `exportEnv()` never built the citations map `Preview.tsx` computes for itself
+- PDF export in the native app leaked its own styles onto the entire running UI — a `<style>` tag's rules apply document-wide regardless of its container's visibility, and the export container is left in the DOM permanently. Every export-specific CSS rule is now scoped under `.export-doc`
+- A note deleted in the native app while a debounced autosave was still pending could get silently resurrected moments later, since teardown's flush-on-close would write it straight back to disk after deletion — `confirmDelete()` now tears the collab session down deterministically, without flushing, before issuing the delete
+- The identity header could get permanently stuck showing "Anonymous" after using email to identify, because the fix only covered new email submissions, not identities already saved in that shape — `getIdentity()` now repairs this on read
+- Cloud sync getting stuck on "error" after one failed connection attempt (e.g. a free-tier relay host waking from an idle spin-down) with no way to recover except manually reconnecting — it now retries with capped exponential backoff
 
 ### Changed
 
 - KaTeX (261KB) is now lazily loaded the same way Mermaid already was, instead of a static top-level import — a note with no math no longer pays for the library at all (`math-render.ts`)
 - `server/embeddings.ts` no longer eagerly imports `fastembed` (which pulls in `onnxruntime-node`'s native bindings, ~160ms) at module load — deferred to first actual embedding use, same lazy-singleton pattern the model init itself already used
 - Sidebar note-list derivations (`favoriteNotes`, `displayedNotes`, `templateNotes` in App.tsx) are now memoized instead of recomputed on every render, including every editor keystroke
+- The left sidebar is now collapsible on desktop, remembered across sessions — previously the only way to hide it was the mobile off-canvas drawer
+- Theme, cloud sync connection, and export are now consolidated into a single Settings panel, reachable from the sidebar, instead of being scattered (theme in the identity panel, cloud sync inline above the editor, export as toolbar-only buttons)
 
 ## [0.1.3] — 2026-08-30
 

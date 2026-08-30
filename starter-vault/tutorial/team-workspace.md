@@ -32,7 +32,7 @@ This sits *on top of* the per-note Share panel from [[tutorial/collaboration|Col
 Worth knowing plainly rather than discovering by surprise:
 
 - Both roles get the same vault-wide access — there's no per-note permission tier for members the way share links have for guests. A member sees and can edit everything, same as you.
-- Workspace accounts are separate from cloud sync's passphrase. Connecting to cloud sync (previous page) still uses one shared passphrase for everyone in that room, regardless of who's a workspace member — real per-role access there needs a different cryptographic approach than what exists today.
+- Workspace accounts are separate from cloud sync's own view/edit roles (previous page) — being a workspace admin or member doesn't automatically grant edit or view access to a given cloud room, and connecting to cloud sync doesn't require a workspace account at all. The two systems just don't know about each other.
 - No SSO, no email verification, no self-serve "forgot password." If someone's genuinely locked out, whoever administers the server can intervene directly.
 
 ## Actually reaching a server from outside your network
