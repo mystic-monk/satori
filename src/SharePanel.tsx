@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { createShare, fetchShares, revokeShareApi, type Share, type ShareRole } from "./api";
-import DisclosureChevron from "./DisclosureChevron";
 
 interface SharePanelProps {
   path: string;
   isOwner: boolean;
+  open: boolean;
+  onClose: () => void;
 }
 
 const ROLE_LABEL: Record<ShareRole, string> = {
@@ -13,8 +14,14 @@ const ROLE_LABEL: Record<ShareRole, string> = {
   edit: "Can edit",
 };
 
-export default function SharePanel({ path, isOwner }: SharePanelProps) {
-  const [open, setOpen] = useState(false);
+// A modal (WorkspacePanel/SettingsPanel's pattern), not a toolbar-anchored
+// popover — an earlier version tried the popover approach and it was
+// genuinely broken (fixed-width box fighting flex-row content it didn't
+// have room for, text clipped, no overflow handling). A modal sidesteps
+// all of that: no positioning math, no fighting the viewport edge, and
+// it's the same pattern already proven to work for two other panels this
+// same size.
+export default function SharePanel({ path, isOwner, open, onClose }: SharePanelProps) {
   const [shares, setShares] = useState<Share[]>([]);
   const [role, setRole] = useState<ShareRole>("view");
   const [label, setLabel] = useState("");
@@ -25,7 +32,7 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
     if (open) fetchShares(path).then(setShares);
   }, [path, open]);
 
-  if (!isOwner) return null;
+  if (!isOwner || !open) return null;
 
   async function onCreate() {
     const share = await createShare(path, role, label);
@@ -60,58 +67,64 @@ export default function SharePanel({ path, isOwner }: SharePanelProps) {
   }
 
   return (
-    <div className="share-panel">
-      <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        <DisclosureChevron open={open} /> Share{shares.length > 0 ? ` (${shares.length})` : ""}
-      </button>
-      {open && (
-        <div className="share-body">
-          <div className="share-create">
-            <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)} aria-label="New share link role">
-              <option value="view">Can view</option>
-              <option value="comment">Can view & comment</option>
-              <option value="edit">Can edit</option>
-            </select>
-            <input
-              placeholder="Label (optional)"
-              aria-label="New share link label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-            <button onClick={onCreate}>Create link</button>
-          </div>
-          {justCreated && (
-            <div className="share-new-link">
-              <div>Share link created — copy it now:</div>
-              <div className="share-new-link-row">
-                <input readOnly value={linkFor(justCreated)} onFocus={(e) => e.currentTarget.select()} />
-                <button onClick={() => onCopy(linkFor(justCreated))}>{copied ? "Copied!" : "Copy"}</button>
-              </div>
-            </div>
-          )}
-          <ul className="share-list">
-            {shares.map((s) => (
-              <li key={s.token}>
-                <span className="share-label">{s.label}</span>
-                <span className="share-role">{ROLE_LABEL[s.role]}</span>
-                <button
-                  className="share-revoke"
-                  onClick={() => onRevoke(s.token)}
-                  aria-label={`Revoke share "${s.label}"`}
-                >
-                  Revoke
-                </button>
-              </li>
-            ))}
-            {shares.length === 0 && <li className="share-empty">No active shares.</li>}
-          </ul>
-          <p className="share-note">
-            Roles are enforced by this app's local server, which is on this machine (or LAN) — not by encryption, so
-            this only applies to local/LAN access, not cloud-relay sync. See server/collab.ts and server/relay.ts for
-            why.
-          </p>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal share-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3 className="modal-title">Share{shares.length > 0 ? ` (${shares.length})` : ""}</h3>
+
+        <div className="share-create">
+          <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)} aria-label="New share link role">
+            <option value="view">Can view</option>
+            <option value="comment">Can view &amp; comment</option>
+            <option value="edit">Can edit</option>
+          </select>
+          <input
+            placeholder="Label (optional)"
+            aria-label="New share link label"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+          <button className="btn-primary" onClick={onCreate}>
+            Create link
+          </button>
         </div>
-      )}
+
+        {justCreated && (
+          <div className="share-new-link">
+            <div>Share link created — copy it now:</div>
+            <div className="share-new-link-row">
+              <input readOnly value={linkFor(justCreated)} onFocus={(e) => e.currentTarget.select()} />
+              <button className="btn-ghost" onClick={() => onCopy(linkFor(justCreated))}>
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <ul className="share-list">
+          {shares.map((s) => (
+            <li key={s.token}>
+              <span className="share-label">{s.label}</span>
+              <span className="share-role">{ROLE_LABEL[s.role]}</span>
+              <button className="share-revoke" onClick={() => onRevoke(s.token)} aria-label={`Revoke share "${s.label}"`}>
+                Revoke
+              </button>
+            </li>
+          ))}
+          {shares.length === 0 && <li className="share-empty">No active shares.</li>}
+        </ul>
+
+        <p className="share-note">
+          Roles are enforced by this app's local server, which is on this machine (or LAN) — not by encryption, so
+          this only applies to local/LAN access, not cloud-relay sync. See <code>server/collab.ts</code> and{" "}
+          <code>server/relay.ts</code> for why.
+        </p>
+
+        <div className="modal-actions">
+          <button type="button" className="btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

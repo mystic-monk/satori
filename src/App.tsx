@@ -77,6 +77,7 @@ import {
   PenLine,
   RotateCw,
   Settings as SettingsIcon,
+  Share2,
   Star,
   Table2,
   Users,
@@ -183,6 +184,7 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [sharePanelOpen, setSharePanelOpen] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -971,6 +973,14 @@ export default function App() {
           onExportPdf={onExportPdf}
         />
       )}
+      {activePath && (
+        <SharePanel
+          path={activePath}
+          isOwner={role === "owner"}
+          open={sharePanelOpen}
+          onClose={() => setSharePanelOpen(false)}
+        />
+      )}
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
         <MenuIcon size={18} />
       </button>
@@ -1376,9 +1386,11 @@ export default function App() {
                   ))}
                 </div>
               )}
-              <div className="share-panel-toolbar-anchor">
-                <SharePanel path={activePath} isOwner={role === "owner"} />
-              </div>
+              {role === "owner" && (
+                <button onClick={() => setSharePanelOpen(true)}>
+                  <Share2 size={13} /> Share
+                </button>
+              )}
               {role !== "owner" && <span className="role-badge">{role}</span>}
               {role === "owner" && (
                 <button className="btn-danger" onClick={() => setDeleteConfirmOpen(true)}>

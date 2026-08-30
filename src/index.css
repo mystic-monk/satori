@@ -284,48 +284,6 @@ body {
   }
 }
 
-/* Share used to be a fourth stacked accordion above the editor, same as
-   Properties/Comments/History — moved into the toolbar's already-existing
-   flex-grow spacer (.editor-status) so it reads as "top right of this
-   note" instead. SharePanel.tsx's own .share-panel is left completely
-   unchanged (still a self-toggling button + body); this just repositions
-   that body to drop down from the button instead of pushing content below
-   it inline. */
-.share-panel-toolbar-anchor {
-  position: relative;
-}
-
-.share-panel-toolbar-anchor .share-panel {
-  border-bottom: none;
-}
-
-.share-panel-toolbar-anchor .share-panel .properties-header {
-  width: auto;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-}
-
-.share-panel-toolbar-anchor .share-panel .properties-header:hover {
-  background: var(--bg-hover);
-}
-
-.share-panel-toolbar-anchor .share-panel .share-body {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 25;
-  width: 320px;
-  max-height: 70vh;
-  overflow-y: auto;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-
 .sidebar-header {
   padding: 10px;
   border-bottom: 1px solid var(--border);
@@ -1792,6 +1750,7 @@ button:disabled:hover {
 
 .share-create {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1807,6 +1766,7 @@ button:disabled:hover {
 
 .share-create input {
   flex: 1;
+  min-width: 120px;
 }
 
 .share-new-link {
@@ -2319,6 +2279,10 @@ button:disabled:hover {
    would cram three inputs and a button into a much tighter space. */
 .settings-modal {
   width: 480px;
+}
+
+.share-modal {
+  width: 420px;
 }
 
 .settings-section {
