@@ -43,6 +43,8 @@ import HistoryPanel from "./HistoryPanel";
 import ConfirmDialog from "./ConfirmDialog";
 import PromptDialog from "./PromptDialog";
 import CommandPalette, { type Command } from "./CommandPalette";
+import UpdateBanner from "./UpdateBanner";
+import { checkForUpdate, type Update } from "./updater";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
@@ -99,12 +101,13 @@ export default function App() {
   const [showGraph, setShowGraph] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
-  const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | null>(null);
+  const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | "flashcard" | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templatePath, setTemplatePath] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -178,6 +181,7 @@ export default function App() {
       listen("menu:view-source", () => setViewMode("source")),
       listen("menu:view-split", () => setViewMode("split")),
       listen("menu:view-preview", () => setViewMode("preview")),
+      listen("menu:check-for-updates", () => onCheckForUpdates()),
     ];
     return () => {
       unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
@@ -189,6 +193,37 @@ export default function App() {
     if (!IS_TAURI) return;
     fetchVaultInfo().then((info) => setVaultName(info.name));
   }, []);
+
+  // A few seconds after launch, not immediately — no need to compete with
+  // startup for network/CPU, and it means a silent failure (offline, no
+  // network yet) doesn't show up as a startup hiccup. Silently swallows
+  // errors: a failed background check shouldn't interrupt anyone, unlike
+  // the same failure from the deliberate "Check for Updates…" menu action
+  // below, which does report it.
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    const timer = setTimeout(() => {
+      checkForUpdate()
+        .then((update) => update && setPendingUpdate(update))
+        .catch(() => {});
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  async function onCheckForUpdates() {
+    setStatus("checking for updates…");
+    try {
+      const update = await checkForUpdate();
+      if (update) {
+        setPendingUpdate(update);
+        setStatus("");
+      } else {
+        setStatus("you're up to date");
+      }
+    } catch {
+      setStatus("couldn't check for updates");
+    }
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -427,6 +462,10 @@ export default function App() {
     setCreatePromptMode("canvas");
   }
 
+  function onNewFlashcard() {
+    setCreatePromptMode("flashcard");
+  }
+
   function onNewFromTemplate() {
     setTemplatePickerOpen(true);
   }
@@ -467,10 +506,20 @@ export default function App() {
       await createNote(p, template);
       await loadNotes();
       openNote(p, title);
-    } else {
+    } else if (mode === "canvas") {
       const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
       const scene = { type: "excalidraw", version: 2, elements: [], appState: {} };
       const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
+      await createNote(p, template);
+      await loadNotes();
+      fetchTypes().then(setTypes);
+      openNote(p, title);
+    } else {
+      // Starter content spells out the front/back convention directly in
+      // the note, since there's nowhere else a first-time user would
+      // learn it — the "---" line is real, not a placeholder to delete.
+      const p = `${slug || "untitled"}-flashcard-${Date.now()}.md`;
+      const template = `---\ntitle: ${title}\ntype: flashcard\n---\n${title}\n---\nType the answer here, after a line containing exactly "---".\n`;
       await createNote(p, template);
       await loadNotes();
       fetchTypes().then(setTypes);
@@ -570,6 +619,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {pendingUpdate && <UpdateBanner update={pendingUpdate} onDismiss={() => setPendingUpdate(null)} />}
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
         ☰
       </button>
@@ -841,6 +891,14 @@ export default function App() {
                 >
                   Today's Journal Entry
                 </button>
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onNewFlashcard();
+                  }}
+                >
+                  New Flashcard
+                </button>
                 {templateNotes.length > 0 && (
                   <button
                     onClick={() => {
@@ -1001,8 +1059,16 @@ export default function App() {
       )}
       {createPromptMode && (
         <PromptDialog
-          title={createPromptMode === "note" ? "New note" : "New canvas"}
-          placeholder={createPromptMode === "note" ? "Note title" : "Canvas title"}
+          title={
+            createPromptMode === "note" ? "New note" : createPromptMode === "canvas" ? "New canvas" : "New flashcard"
+          }
+          placeholder={
+            createPromptMode === "note"
+              ? "Note title"
+              : createPromptMode === "canvas"
+                ? "Canvas title"
+                : "What's the question?"
+          }
           confirmLabel="Create"
           onSubmit={submitCreatePrompt}
           onCancel={() => setCreatePromptMode(null)}

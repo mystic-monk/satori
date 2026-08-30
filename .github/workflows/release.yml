@@ -54,9 +54,20 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for the auto-updater: tauri-action signs each build and
+          # publishes a latest.json update manifest alongside the installers
+          # when these are set. See README.md's release section for how to
+          # generate this key and add it as a repo secret.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "pkm ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseName: "Satori ${{ github.ref_name }}"
+          # false, not true: a draft release is invisible on the public
+          # Releases page until someone manually publishes it — which is
+          # also why the auto-updater's "latest release" endpoint would
+          # never resolve to anything. Auto-publishing is what makes both
+          # the Releases page and the updater actually work.
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

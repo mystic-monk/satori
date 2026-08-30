@@ -141,6 +141,8 @@ fn resolve_vault_dir(app: &tauri::App) -> std::path::PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -230,6 +232,8 @@ pub fn run() {
                 .build()?;
 
             let help_menu = SubmenuBuilder::new(app, "Help")
+                .item(&MenuItemBuilder::with_id("check_for_updates", "Check for Updates…").build(app)?)
+                .separator()
                 .about(Some(
                     AboutMetadataBuilder::new()
                         .name(Some("Satori"))
@@ -246,7 +250,7 @@ pub fn run() {
             app.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                 "switch_vault" => switch_vault_dialog(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
-                | "view_source" | "view_split" | "view_preview") => {
+                | "view_source" | "view_split" | "view_preview" | "check_for_updates") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
                 }
                 _ => {}
