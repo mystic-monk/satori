@@ -3,6 +3,27 @@ import path from "node:path";
 import { parseFrontmatter } from "../shared/frontmatter.js";
 
 export const VAULT_DIR = path.resolve(process.cwd(), "vault");
+const STARTER_VAULT_DIR = path.resolve(process.cwd(), "starter-vault");
+
+// A brand-new vault/ (first run, or a fresh clone/self-host with no vault/
+// committed — it's gitignored on purpose, see .gitignore) opens completely
+// empty otherwise: no notes, no guidance, nothing to click. Seeds the
+// bundled starter/tutorial content in exactly once — only when the vault
+// has zero real note files (a stray .DS_Store or empty subfolder shouldn't
+// count as "already has content" and block seeding) — never on top of
+// real content, so this can't clobber anything once you've actually
+// started using the app.
+export function seedStarterVaultIfEmpty(): void {
+  if (!fs.existsSync(STARTER_VAULT_DIR)) return; // e.g. a dev checkout that removed it
+  if (listNoteFiles().length > 0) return;
+  fs.mkdirSync(VAULT_DIR, { recursive: true });
+  // dereference: true — if STARTER_VAULT_DIR (or anything inside it) were
+  // ever a symlink, copy what it points to rather than replicating the
+  // symlink itself, which cpSync's default (false) would try to recreate
+  // at the destination and fail on since VAULT_DIR already exists as a
+  // real directory from the line above.
+  fs.cpSync(STARTER_VAULT_DIR, VAULT_DIR, { recursive: true, dereference: true });
+}
 
 export interface NoteMeta {
   path: string;

@@ -45,6 +45,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Native desktop app (macOS, with Windows/Linux via the same Tauri build) — small, fast, no Electron
 - Auto-updates: checks for new releases and installs them in place
 - A real native menu bar and a proper vault picker (choose or create your notes folder on first launch)
+- A new, empty vault is seeded with a real built-in tutorial — written and kept up to date using the app's own features (wikilinks, embeds, callouts, citations, task lists), not a static walkthrough
 - Four built-in themes (Dark, Light, Solarized Dark, Solarized Light)
 - Also runs as a browser-based web app if you'd rather self-host it that way
 

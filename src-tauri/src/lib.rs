@@ -217,6 +217,15 @@ pub fn run() {
             }
 
             let vault = Vault::new(vault_dir);
+            // Bundled via tauri.conf.json's bundle.resources — copied into
+            // the target dir at build time (dev and release alike), so
+            // this resolves correctly in both. Best-effort: a resolution
+            // failure just means no starter content, not a fatal error —
+            // an empty vault is the same experience the app always used
+            // to have, not a broken one.
+            if let Ok(starter_dir) = app.path().resolve("starter-vault", tauri::path::BaseDirectory::Resource) {
+                vault::seed_starter_vault_if_empty(&vault, &starter_dir);
+            }
             let conn = db::open_index(&index_path)
                 .unwrap_or_else(|e| fatal_setup_error("open the search index database", e));
             let state_conn = db::open_state(&state_path)

@@ -5,6 +5,7 @@ import {
   readNoteRaw,
   writeNoteRaw,
   deleteNote,
+  seedStarterVaultIfEmpty,
 } from "./vault.js";
 import {
   rebuildIndex,
@@ -32,6 +33,11 @@ import { setupRelayServer } from "./relay.js";
 
 const app = express();
 app.use(express.json());
+
+// A genuinely empty vault/ (first run, fresh clone) gets seeded with the
+// bundled tutorial before anything else — see seedStarterVaultIfEmpty's
+// doc comment for why this is safe to always call unconditionally.
+seedStarterVaultIfEmpty();
 
 // The SQLite index is a cache. If it's empty but the vault has notes (e.g.
 // the .pkm/ cache dir was deleted, or this is a fresh clone), rebuild it.

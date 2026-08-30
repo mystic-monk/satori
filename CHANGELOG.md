@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A one-click copy button on rendered code blocks
 - Local graph view — scope the graph to just the active note's direct connections instead of the whole vault
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for zero-friction note capture
+- A genuinely new (empty) vault is now seeded with a built-in tutorial covering the whole feature set, instead of opening completely blank — found while scoping "onboarding polish" that this had never actually been wired up: the well-written tutorial content from earlier development only ever lived in a personal, gitignored vault, never shipped with the app. `starter-vault/` (new, tracked in git) is copied in exactly once, only when the vault has zero real note files, in both the Tauri app (bundled via `tauri.conf.json`'s `bundle.resources`) and the Node/browser deployment
 
 ### Changed
 
