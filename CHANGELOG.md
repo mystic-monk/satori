@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-08-30
+
 ### Added
 
 - Section and block references: `[[Note#Heading]]` and `[[Note#^block-id]]` link or embed (`![[...]]`) just that section or single line, not the whole note — an Obsidian-style plain-text convention (not Roam/Logseq's outliner block model, which Satori's flat markdown editor doesn't have)
