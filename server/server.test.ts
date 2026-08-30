@@ -186,3 +186,70 @@ describe("collab Room CRDT/file staleness", () => {
     expect(room2.doc.getText("content").toString()).toBe("from collab session");
   });
 });
+
+describe("findSimilar (cosine similarity ranking)", () => {
+  // Real embedding generation (fastembed/ONNX) is deliberately not
+  // exercised here — that's a model-inference call, not logic worth unit
+  // testing repeatedly; it's covered by a live Playwright run against the
+  // real dev server instead (creating topically related/unrelated notes
+  // and checking the Related panel). What's tested here is the pure
+  // math: given known vectors, does findSimilar rank and filter
+  // correctly — same "test the math, not the model" split server/srs.ts
+  // already uses for its SM-2 tests.
+  it("ranks by cosine similarity, closest first, excluding the query note itself", () => {
+    vault.writeNoteRaw("a.md", "---\ntitle: A\n---\nBody.");
+    vault.writeNoteRaw("b.md", "---\ntitle: B\n---\nBody.");
+    vault.writeNoteRaw("c.md", "---\ntitle: C\n---\nBody.");
+    db.upsertNoteIndex("a.md");
+    db.upsertNoteIndex("b.md");
+    db.upsertNoteIndex("c.md");
+
+    db.upsertEmbedding("a.md", Float32Array.from([1, 0, 0]));
+    db.upsertEmbedding("b.md", Float32Array.from([0.9, 0.1, 0])); // close to A
+    db.upsertEmbedding("c.md", Float32Array.from([0, 1, 0])); // orthogonal to A
+
+    const results = db.findSimilar("a.md", 5);
+    expect(results.map((r) => r.path)).toEqual(["b.md", "c.md"]);
+    expect(results[0].score).toBeGreaterThan(results[1].score);
+    expect(results.some((r) => r.path === "a.md")).toBe(false);
+  });
+
+  it("respects the k limit", () => {
+    vault.writeNoteRaw("k1.md", "---\ntitle: K1\n---\nBody.");
+    vault.writeNoteRaw("k2.md", "---\ntitle: K2\n---\nBody.");
+    vault.writeNoteRaw("k3.md", "---\ntitle: K3\n---\nBody.");
+    vault.writeNoteRaw("k4.md", "---\ntitle: K4\n---\nBody.");
+    for (const p of ["k1.md", "k2.md", "k3.md", "k4.md"]) db.upsertNoteIndex(p);
+    db.upsertEmbedding("k1.md", Float32Array.from([1, 0]));
+    db.upsertEmbedding("k2.md", Float32Array.from([0.9, 0.1]));
+    db.upsertEmbedding("k3.md", Float32Array.from([0.8, 0.2]));
+    db.upsertEmbedding("k4.md", Float32Array.from([0.7, 0.3]));
+
+    expect(db.findSimilar("k1.md", 2)).toHaveLength(2);
+  });
+
+  it("returns an empty list for a note with no embedding yet", () => {
+    vault.writeNoteRaw("no-embedding.md", "---\ntitle: None\n---\nBody.");
+    db.upsertNoteIndex("no-embedding.md");
+    expect(db.findSimilar("no-embedding.md", 5)).toEqual([]);
+  });
+
+  it("a removed note's embedding no longer appears in others' results", () => {
+    // Distinctive, unlikely-to-collide vector values — this file's tests
+    // all share one SQLite db with no per-test cleanup (established
+    // pattern elsewhere in this file too), so findSimilar's result set
+    // can include rows from earlier tests; assert containment, not an
+    // exact result list, same reasoning as those other tests using
+    // unique note names to avoid collisions.
+    vault.writeNoteRaw("keep.md", "---\ntitle: Keep\n---\nBody.");
+    vault.writeNoteRaw("gone.md", "---\ntitle: Gone\n---\nBody.");
+    db.upsertNoteIndex("keep.md");
+    db.upsertNoteIndex("gone.md");
+    db.upsertEmbedding("keep.md", Float32Array.from([0.1234, 0.9876]));
+    db.upsertEmbedding("gone.md", Float32Array.from([0.1234, 0.9876]));
+    expect(db.findSimilar("keep.md", 50).map((r) => r.path)).toContain("gone.md");
+
+    db.removeNoteIndex("gone.md");
+    expect(db.findSimilar("keep.md", 50).map((r) => r.path)).not.toContain("gone.md");
+  });
+});

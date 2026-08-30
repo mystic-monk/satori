@@ -55,6 +55,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS links_source ON links(source);
   CREATE INDEX IF NOT EXISTS links_target ON links(target);
+
+  -- A note's semantic embedding — rebuildable from its own content (same
+  -- category as notes_fts, not app state), just expensive to recompute
+  -- (a model inference call, not a cheap re-tokenize), so it's cached
+  -- here rather than derived on every findSimilar() call.
+  CREATE TABLE IF NOT EXISTS embeddings (
+    path TEXT PRIMARY KEY,
+    vector BLOB NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 stateDb.exec(`
@@ -219,6 +229,7 @@ export function removeNoteIndex(relPath: string): void {
   // notes), but getAllLinks() (the graph) returns raw rows, so clean up
   // both directions explicitly rather than leaving stale edges.
   db.prepare("DELETE FROM links WHERE source = ? OR target = ?").run(relPath, relPath);
+  db.prepare("DELETE FROM embeddings WHERE path = ?").run(relPath);
 }
 
 export function rebuildIndex(): { count: number } {
@@ -339,6 +350,74 @@ export function getAllLinks(): LinkEdge[] {
     embed: number;
   }[];
   return rows.map((r) => ({ source: r.source, target: r.target, embed: Boolean(r.embed) }));
+}
+
+// Title + body straight out of notes_fts (a plain SELECT works fine on an
+// FTS5 table outside of MATCH) rather than re-reading the file — by the
+// time this is called, upsertNoteIndex has already run for this save, so
+// the index already has exactly the text worth embedding.
+export function getIndexedText(relPath: string): string | null {
+  const row = db.prepare("SELECT title, body FROM notes_fts WHERE path = ?").get(relPath) as
+    | { title: string; body: string }
+    | undefined;
+  return row ? `${row.title}\n\n${row.body}` : null;
+}
+
+export function upsertEmbedding(relPath: string, vector: Float32Array): void {
+  const buf = Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
+  db.prepare(
+    `INSERT INTO embeddings (path, vector, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET vector = excluded.vector, updated_at = excluded.updated_at`
+  ).run(relPath, buf, Date.now());
+}
+
+function toFloat32Array(buf: Buffer): Float32Array {
+  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+}
+
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dot = 0,
+    normA = 0,
+    normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+export interface SimilarNote {
+  path: string;
+  title: string;
+  score: number;
+}
+
+// Brute-force cosine similarity over every stored embedding — no ANN
+// index needed at personal-vault scale (a few thousand notes is well
+// within "fine to scan in memory", same reasoning already applied to
+// Table view/query blocks elsewhere in this codebase). Returns [] for a
+// note with no embedding yet (async generation hasn't caught up, or the
+// note is brand new) rather than erroring — the caller just shows an
+// empty Related panel until it's ready.
+export function findSimilar(relPath: string, k = 5): SimilarNote[] {
+  const target = db.prepare("SELECT vector FROM embeddings WHERE path = ?").get(relPath) as
+    | { vector: Buffer }
+    | undefined;
+  if (!target) return [];
+  const targetVec = toFloat32Array(target.vector);
+  const rows = db
+    .prepare(
+      `SELECT e.path as path, n.title as title, e.vector as vector
+       FROM embeddings e JOIN notes n ON n.path = e.path
+       WHERE e.path != ?`
+    )
+    .all(relPath) as { path: string; title: string; vector: Buffer }[];
+  return rows
+    .map((r) => ({ path: r.path, title: r.title, score: cosineSimilarity(targetVec, toFloat32Array(r.vector)) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
 }
 
 export interface SearchResult {

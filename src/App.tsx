@@ -34,6 +34,7 @@ import Editor from "./Editor";
 import Preview from "./Preview";
 import { buildResolver } from "./noteResolver";
 import Backlinks from "./Backlinks";
+import RelatedNotes from "./RelatedNotes";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
 import TableView from "./TableView";
@@ -1249,6 +1250,16 @@ export default function App() {
                   <div className="backlinks-header">Backlinks</div>
                   <Backlinks path={activePath} onNavigate={openNote} shareToken={shareToken} />
                 </div>
+                {/* Local-embeddings-based, Node/browser only for now — see
+                    fetchRelated's doc comment in api.ts. Hidden entirely
+                    in the native app rather than showing a panel that can
+                    structurally never have anything in it. */}
+                {!IS_TAURI && (
+                  <div className="backlinks-panel">
+                    <div className="backlinks-header">Related</div>
+                    <RelatedNotes path={activePath} onNavigate={openNote} shareToken={shareToken} />
+                  </div>
+                )}
               </>
             )}
           </>

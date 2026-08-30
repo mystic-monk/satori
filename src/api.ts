@@ -74,6 +74,24 @@ export async function fetchBacklinks(p: string, token?: string | null): Promise<
   return res.json();
 }
 
+export interface SimilarNote {
+  path: string;
+  title: string;
+  score: number;
+}
+
+// Deliberate v1 scope cut: local embeddings (fastembed, ONNX-via-WASM)
+// only exist on the Node/browser side so far — the Tauri equivalent
+// needs a Rust ML inference crate (candle) and a bundled model, real
+// scope on its own, not yet built. Returns [] rather than a Tauri
+// invoke() call that doesn't exist; the Related panel just renders
+// nothing extra in the native app for now instead of erroring.
+export async function fetchRelated(p: string, token?: string | null): Promise<SimilarNote[]> {
+  if (IS_TAURI) return [];
+  const res = await fetch(withToken(`/api/related/${encodePath(p)}`, token));
+  return res.json();
+}
+
 export async function fetchLinks(): Promise<LinkEdge[]> {
   if (IS_TAURI) return invoke("get_links");
   const res = await fetch("/api/links");

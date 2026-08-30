@@ -25,6 +25,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Section and block references: `[[Note#Heading]]` links/embeds just that section, `[[Note#^block-id]]` links/embeds one specific line — not just whole-note transclusion
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)
+- **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
 - Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table)
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
@@ -101,6 +102,7 @@ Satori is early and honest about what it isn't yet:
 - Comments are a flat per-note thread, not anchored to a specific line or text range
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
+- Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
 

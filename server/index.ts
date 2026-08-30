@@ -25,11 +25,13 @@ import {
   recordCardReview,
   addComment,
   getComments,
+  findSimilar,
   type ShareRole,
 } from "./db.js";
 import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
+import { scheduleEmbeddingUpdate, scheduleEmbeddingUpdateAll } from "./embeddings.js";
 
 const app = express();
 app.use(express.json());
@@ -43,6 +45,9 @@ seedStarterVaultIfEmpty();
 // the .pkm/ cache dir was deleted, or this is a fresh clone), rebuild it.
 if (listNotesFromIndex().length === 0 && listNoteFiles().length > 0) {
   rebuildIndex();
+  // Fire-and-forget — the server starts serving immediately; the Related
+  // panel is just empty for each note until its embedding lands.
+  scheduleEmbeddingUpdateAll();
 }
 
 // The REST API mirrors server/collab.ts's role enforcement, which only
@@ -121,6 +126,13 @@ app.get("/api/backlinks/*", requireNoteRead, (req, res) => {
   res.json(getBacklinks(relPath));
 });
 
+// Same read gating as backlinks — semantic neighbors are exactly as
+// revealing as an explicit link would be, share-role-wise.
+app.get("/api/related/*", requireNoteRead, (req, res) => {
+  const relPath = (req.params as Record<string, string>)[0];
+  res.json(findSimilar(relPath, 5));
+});
+
 app.get("/api/notes/*", requireNoteRead, (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
   try {
@@ -136,6 +148,7 @@ app.put("/api/notes/*", requireNoteWrite, (req, res) => {
   const { raw } = req.body as { raw: string };
   writeNoteRaw(relPath, raw);
   upsertNoteIndex(relPath);
+  scheduleEmbeddingUpdate(relPath);
   res.json({ ok: true });
 });
 
@@ -143,6 +156,7 @@ app.post("/api/notes", requireOwner, (req, res) => {
   const { path: relPath, raw } = req.body as { path: string; raw: string };
   writeNoteRaw(relPath, raw);
   upsertNoteIndex(relPath);
+  scheduleEmbeddingUpdate(relPath);
   res.json({ ok: true, path: relPath });
 });
 
@@ -213,7 +227,9 @@ app.get("/api/search", requireOwner, (req, res) => {
 });
 
 app.post("/api/reindex", requireOwner, (_req, res) => {
-  res.json(rebuildIndex());
+  const result = rebuildIndex();
+  scheduleEmbeddingUpdateAll();
+  res.json(result);
 });
 
 // Flashcard review — owner-only like every other vault-wide surface
