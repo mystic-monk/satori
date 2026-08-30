@@ -34,7 +34,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
 import Editor from "./Editor";
-import Preview from "./Preview";
+import Preview, { buildCitations } from "./Preview";
 import { buildResolver } from "./noteResolver";
 import Backlinks from "./Backlinks";
 import RelatedNotes from "./RelatedNotes";
@@ -54,7 +54,8 @@ import PromptDialog from "./PromptDialog";
 import CommandPalette, { type Command } from "./CommandPalette";
 import UpdateBanner from "./UpdateBanner";
 import { checkForUpdate, type Update } from "./updater";
-import { renderNoteBody, type RenderEnv } from "./markdown";
+import type { RenderEnv } from "./markdown";
+import { renderNoteBodyForExport } from "./renderForExport";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import {
@@ -771,7 +772,10 @@ export default function App() {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   function exportEnv(): RenderEnv {
-    return { resolver, bodies: new Map(), pathStack: new Set() };
+    // citations included — previously missing here, which meant every
+    // [@citekey] rendered as broken in an export even when it resolved
+    // fine in the live Preview (which computes this same map itself).
+    return { resolver, bodies: new Map(), pathStack: new Set(), citations: buildCitations(notes) };
   }
 
   // Same owner-only scoping as everything else vault-wide (search/nav/
@@ -1201,11 +1205,17 @@ export default function App() {
                 <>
                   <button onClick={() => exportMarkdown(activePath, raw)}>MD</button>
                   <button
-                    onClick={() => exportHtml(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}
+                    onClick={async () =>
+                      exportHtml(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes))
+                    }
                   >
                     HTML
                   </button>
-                  <button onClick={() => exportPdf(activeNote?.title ?? activePath, renderNoteBody(raw, exportEnv()))}>
+                  <button
+                    onClick={async () =>
+                      exportPdf(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes))
+                    }
+                  >
                     PDF
                   </button>
                 </>

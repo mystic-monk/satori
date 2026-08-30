@@ -70,3 +70,32 @@ describe("wikilink/wikiembed fragment rendering (block references)", () => {
     expect(html).not.toContain("block-id-marker");
   });
 });
+
+// KaTeX itself isn't loaded/rendered here (see math-render.ts's doc
+// comment for why: it's a lazily-loaded dependency, filled in by a
+// browser-only async pass Preview.tsx/renderForExport.ts run after this
+// synchronous render) — what's actually worth testing at this layer is
+// that the placeholder carries the right raw TeX and display-mode flag
+// for that later pass to pick up correctly.
+describe("math placeholders (KaTeX rendering is deferred, see math-render.ts)", () => {
+  it("inline math ($...$) emits a span placeholder with the raw TeX", () => {
+    const html = renderNoteBody("Einstein: $E = mc^2$ was the result.", env());
+    expect(html).toContain('<span class="math-inline math-pending" data-tex="E = mc^2" data-display="false">');
+  });
+
+  it("block math ($$...$$) emits a div placeholder with display mode true", () => {
+    const html = renderNoteBody("$$\\int_0^1 x\\,dx$$", env());
+    expect(html).toContain('class="math-block math-pending"');
+    expect(html).toContain('data-display="true"');
+  });
+
+  it("a bare $ (e.g. a currency amount) is not treated as math", () => {
+    const html = renderNoteBody("It costs $5 and $10.", env());
+    expect(html).not.toContain("math-pending");
+  });
+
+  it("escapes HTML-significant characters in the TeX source", () => {
+    const html = renderNoteBody("Compare: $a < b$", env());
+    expect(html).toContain("data-tex=\"a &lt; b\"");
+  });
+});

@@ -18,7 +18,6 @@ import go from "highlight.js/lib/languages/go";
 import sql from "highlight.js/lib/languages/sql";
 import yaml from "highlight.js/lib/languages/yaml";
 import markdown from "highlight.js/lib/languages/markdown";
-import katex from "katex";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("js", javascript);
@@ -70,12 +69,19 @@ export interface RenderEnv {
   [key: symbol]: unknown;
 }
 
-function renderMath(tex: string, displayMode: boolean): string {
-  try {
-    return katex.renderToString(tex, { throwOnError: false, displayMode, trust: false });
-  } catch {
-    return `<span class="math-error">${new MarkdownIt().utils.escapeHtml(tex)}</span>`;
-  }
+// KaTeX is a ~260KB dependency most notes never touch (same reasoning
+// mermaid-render.ts already applies to mermaid) — rather than rendering
+// synchronously here with an eagerly-imported katex, this emits a
+// placeholder carrying the raw TeX source (readable immediately, same
+// "escaped fallback text, not a blank gap" approach the mermaid/query
+// block placeholders already use) and Preview.tsx's effect
+// (math-render.ts's renderMathBlocks) fills it in once KaTeX has loaded,
+// lazily, on first note that actually needs it.
+function mathPlaceholder(tex: string, displayMode: boolean): string {
+  const escaped = new MarkdownIt().utils.escapeHtml(tex);
+  const cls = displayMode ? "math-block" : "math-inline";
+  const tag = displayMode ? "div" : "span";
+  return `<${tag} class="${cls} math-pending" data-tex="${escaped}" data-display="${displayMode}">${escaped}</${tag}>`;
 }
 
 function mathPlugin(md: MDInstance) {
@@ -127,8 +133,7 @@ function mathPlugin(md: MDInstance) {
     },
     { alt: [] }
   );
-  md.renderer.rules.math_block = (tokens, idx) =>
-    `<div class="math-block">${renderMath(tokens[idx].content, true)}</div>\n`;
+  md.renderer.rules.math_block = (tokens, idx) => `${mathPlaceholder(tokens[idx].content, true)}\n`;
 
   // Inline math: $...$ (no surrounding whitespace right after/before $, avoids
   // colliding with currency amounts like "$5 and $10").
@@ -148,7 +153,7 @@ function mathPlugin(md: MDInstance) {
     state.pos = end + 1;
     return true;
   });
-  md.renderer.rules.math_inline = (tokens, idx) => renderMath(tokens[idx].content, false);
+  md.renderer.rules.math_inline = (tokens, idx) => mathPlaceholder(tokens[idx].content, false);
 }
 
 // `> [!type] Title` followed by more `>`-prefixed lines becomes a callout

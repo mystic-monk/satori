@@ -1,5 +1,5 @@
 import path from "node:path";
-import { EmbeddingModel, FlagEmbedding } from "fastembed";
+import type { FlagEmbedding as FlagEmbeddingType } from "fastembed";
 import { getIndexedText, upsertEmbedding, listNotesFromIndex } from "./db.js";
 
 // fastembed defaults to a bare local_cache/ at cwd, which doesn't match
@@ -10,16 +10,20 @@ import { getIndexedText, upsertEmbedding, listNotesFromIndex } from "./db.js";
 // re-downloadable cache that directory already exists for.
 const MODEL_CACHE_DIR = path.resolve(process.cwd(), ".pkm", "models");
 
-// Lazy singleton — first use downloads and loads the model (~90MB of
-// ONNX weights, cached on disk after the first run), which isn't worth
-// paying for at server startup if the Related Notes feature is never
-// actually opened. Every note save just schedules an update through
-// this; nothing here blocks the synchronous index-write path in db.ts,
-// which is why scheduleEmbeddingUpdate below is fire-and-forget.
-let modelPromise: ReturnType<typeof FlagEmbedding.init> | null = null;
-function getModel() {
+// Lazy singleton, two layers deep: the *module* import (fastembed pulls
+// in onnxruntime-node's native bindings — measured at ~160ms just to
+// import, before any model is even loaded) is deferred exactly like the
+// model download/load itself already was, so a server that never has
+// Related Notes opened doesn't pay that cost on every boot. Every note
+// save just schedules an update through this; nothing here blocks the
+// synchronous index-write path in db.ts, which is why
+// scheduleEmbeddingUpdate below is fire-and-forget.
+let modelPromise: Promise<FlagEmbeddingType> | null = null;
+function getModel(): Promise<FlagEmbeddingType> {
   if (!modelPromise) {
-    modelPromise = FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2, cacheDir: MODEL_CACHE_DIR });
+    modelPromise = import("fastembed").then(({ EmbeddingModel, FlagEmbedding }) =>
+      FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2, cacheDir: MODEL_CACHE_DIR })
+    );
   }
   return modelPromise;
 }

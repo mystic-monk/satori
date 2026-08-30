@@ -1,16 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { fetchNote, type NoteListItem } from "./api";
-import {
-  extractCitationKeys,
-  extractWikilinkRefs,
-  renderNoteBody,
-  type CitationInfo,
-  type RenderEnv,
-  type ResolvedNote,
-} from "./markdown";
+import { extractWikilinkRefs, renderNoteBody, type CitationInfo, type RenderEnv, type ResolvedNote } from "./markdown";
 import { renderMermaidBlocks } from "./mermaid-render";
-import { parseFilterText, queryNotes } from "./noteQuery";
+import { renderMathBlocks } from "./math-render";
+import { fillQueryBlocks, fillBibliographyBlocks } from "./deferredBlocks";
 import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { buildResolver } from "./noteResolver";
@@ -28,14 +22,11 @@ function toggleTaskLine(raw: string, line: number): string {
   return stringifyFrontmatter(data, lines.join("\n"));
 }
 
-function escapeHtml(s: string): string {
-  const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
-  return s.replace(/[&<>"]/g, (c) => map[c]);
-}
-
 // citekey -> reference note, built from any note with type: reference and
 // a citekey property — see CitationInfo's doc comment in markdown.ts.
-function buildCitations(notes: NoteListItem[]): Map<string, CitationInfo> {
+// Exported: App.tsx's exportEnv() needs the same map for MD/HTML/PDF
+// export, which renders independently of this component.
+export function buildCitations(notes: NoteListItem[]): Map<string, CitationInfo> {
   const map = new Map<string, CitationInfo>();
   for (const n of notes) {
     if (n.type !== "reference") continue;
@@ -51,18 +42,6 @@ function buildCitations(notes: NoteListItem[]): Map<string, CitationInfo> {
     });
   }
   return map;
-}
-
-// "Author (Year). Title." for the ```bibliography block's reference
-// list — a plain, single citation-style format rather than trying to
-// support APA/MLA/Chicago switching, which is real scope beyond what a
-// first pass needs.
-function formatReferenceEntry(info: CitationInfo): string {
-  const parts: string[] = [];
-  if (info.author) parts.push(info.author);
-  if (info.year) parts.push(`(${info.year})`);
-  parts.push(info.title.endsWith(".") ? info.title : `${info.title}.`);
-  return parts.join(" ");
 }
 
 interface PreviewProps {
@@ -118,6 +97,10 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
     if (containerRef.current) renderMermaidBlocks(containerRef.current);
   }, [html]);
 
+  useEffect(() => {
+    if (containerRef.current) renderMathBlocks(containerRef.current);
+  }, [html]);
+
   // Same reasoning as the mermaid effect above: a query block's results
   // depend on live note data markdown-it's synchronous renderer can't see,
   // so the fence rule (src/markdown.ts) emits a placeholder and this fills
@@ -126,22 +109,7 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
   // [data-note-path] anchors wikilinks already use, so the existing
   // handleClick below navigates them with no extra wiring.
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    for (const el of Array.from(container.querySelectorAll<HTMLElement>(".query-block"))) {
-      const filterText = el.dataset.queryFilter ?? "";
-      const filter = parseFilterText(filterText);
-      const results = queryNotes(notes, filter);
-      el.innerHTML =
-        results.length === 0
-          ? `<div class="query-block-empty">No matching notes.</div>`
-          : `<ul class="query-block-results">${results
-              .map(
-                (n) =>
-                  `<li><a class="wikilink" data-note-path="${escapeHtml(n.path)}" href="javascript:void(0)">${escapeHtml(n.title)}</a></li>`
-              )
-              .join("")}</ul>`;
-    }
+    if (containerRef.current) fillQueryBlocks(containerRef.current, notes);
   }, [html, notes]);
 
   // Same placeholder-then-fill pattern as query blocks above: a
@@ -149,25 +117,7 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
   // note's own source (not the whole vault), resolved through the same
   // citations map the inline citation renderer used.
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const bibBlocks = container.querySelectorAll<HTMLElement>(".bibliography-block");
-    if (bibBlocks.length === 0) return;
-    const entries = extractCitationKeys(raw)
-      .map((key) => citations.get(key))
-      .filter((info): info is CitationInfo => info !== undefined);
-    const listHtml =
-      entries.length === 0
-        ? `<div class="bibliography-empty">No citations in this note yet — cite one with [@citekey].</div>`
-        : `<ul class="bibliography-list">${entries
-            .map(
-              (e) =>
-                `<li><a class="wikilink" data-note-path="${escapeHtml(e.path)}" href="javascript:void(0)">${escapeHtml(
-                  formatReferenceEntry(e)
-                )}</a></li>`
-            )
-            .join("")}</ul>`;
-    for (const el of Array.from(bibBlocks)) el.innerHTML = listHtml;
+    if (containerRef.current) fillBibliographyBlocks(containerRef.current, raw, citations);
   }, [html, raw, citations]);
 
   function handleClick(e: React.MouseEvent) {
