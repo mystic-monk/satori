@@ -109,7 +109,6 @@ Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
 - Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
-- Navigating to a `[[Note#Heading]]` or `[[Note#^block-id]]` *link* opens the note but doesn't yet scroll to or highlight that specific spot — embeds (`![[...]]`) already inline just that section/block correctly
 - Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Comments are a flat per-note thread, not anchored to a specific line or text range
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
