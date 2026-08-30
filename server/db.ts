@@ -109,6 +109,46 @@ stateDb.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS comments_path ON comments(path);
+
+  -- Team/Workspace v1 — real accounts, for the self-hosted server
+  -- deployment only (Tauri's local vault stays single-owner, no
+  -- accounts). Coarse, vault-wide roles, layered on top of — not
+  -- replacing — the per-note shares table above: a workspace member has
+  -- full read/write across the vault by default, same as today's
+  -- implicit local "owner"; shares stays the tool for scoping one
+  -- person (member or not) to just one note.
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS workspace_members (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    role TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+
+  -- Same share-link UX pattern as the shares table above, just for
+  -- standing workspace membership instead of one note: an admin
+  -- generates one of these, hands it out-of-band, the recipient uses it
+  -- once to set a name+password and become a member.
+  CREATE TABLE IF NOT EXISTS invites (
+    token TEXT PRIMARY KEY,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
 `);
 
 function deleteFromIndex(relPath: string) {

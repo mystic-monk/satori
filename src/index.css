@@ -2180,3 +2180,139 @@ button:disabled:hover {
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* ---- Team/Workspace auth screen ---- */
+
+.auth-screen {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.auth-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+}
+
+.auth-subtitle {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.auth-card .modal-input {
+  margin-bottom: var(--space-3);
+}
+
+.auth-error {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+
+/* ---- Workspace / Members panel ---- */
+
+.workspace-panel-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px;
+  font-size: var(--text-sm);
+  text-align: left;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.workspace-panel-trigger svg {
+  flex-shrink: 0;
+}
+
+.workspace-panel-trigger:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.workspace-members-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.workspace-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-member-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workspace-member-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.workspace-member-email {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.workspace-member-role {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workspace-invite-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.workspace-invite-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--text-dim);
+}

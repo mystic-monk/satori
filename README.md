@@ -41,6 +41,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Per-note share links with view / comment / edit roles, enforced server-side — a "comment" link lets someone leave feedback on a note without being able to edit it
 - A persistent (portable, exportable) identity so your edit history stays attributed to you across devices — not just a random per-browser label
 - Per-note change history
+- **Team/Workspace** (self-hosted server deployment): real accounts and standing, vault-wide membership on top of the per-note sharing above — opt-in and purely additive, a solo self-hosted vault behaves exactly as it always has until someone deliberately sets this up from the sidebar's "Set up team access" entry. An admin invites people with a link (same UX as note sharing); once anyone signs up, that server requires signing in from then on. See Roadmap for what this deliberately doesn't cover yet
 
 **The app itself**
 - Native desktop app (macOS, with Windows/Linux via the same Tauri build) — small, fast, no Electron
@@ -103,6 +104,10 @@ Satori is early and honest about what it isn't yet:
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
 - Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with
+- Team/Workspace v1 is server/browser-only, same as Related Notes above — Tauri's local vault stays single-owner
+- Workspace roles are coarse (admin / member, both full vault read-write) — no per-note permission tiers for members the way per-note share links have; a member gets the same access an owner always had
+- Workspace accounts don't extend to cloud-mode sync — that still uses one shared passphrase for everyone, unchanged. Real per-role access there needs a genuinely different cryptographic scheme (per-user keypairs + a wrapped content key + signature-based write authorization instead of one symmetric secret everyone shares), not something layered on top of the current one
+- No SSO, no email verification, no self-serve password reset for workspace accounts (a self-hosted admin can intervene directly in `.pkm-state/state.sqlite` if truly needed)
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.
 

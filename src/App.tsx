@@ -26,6 +26,9 @@ import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandl
 // CanvasNote/Excalidraw split above.
 import type { CloudStatus } from "./cloud-collab";
 import { IS_TAURI, defaultRelayUrl } from "./platform";
+import { fetchAuthStatus, type AuthStatus } from "./workspaceAuth";
+import LoginScreen from "./LoginScreen";
+import WorkspacePanel from "./WorkspacePanel";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
@@ -69,6 +72,7 @@ import {
   RotateCw,
   Star,
   Table2,
+  Users,
   TriangleAlert,
   Vault as VaultIcon,
   Waypoints,
@@ -164,6 +168,13 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>("all");
   const [recentNotes, setRecentNotes] = useState<RecentNote[]>(() => getRecent());
   const [vaultName, setVaultName] = useState<string | null>(null);
+  // null = still loading (only ever matters on the server/browser
+  // deployment — Tauri's local vault never has accounts, see IS_TAURI
+  // guards below). Loading state matters here specifically to avoid a
+  // flash of the normal app UI before we know whether a login gate is
+  // actually needed.
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -216,6 +227,16 @@ export default function App() {
     loadNotes();
     fetchTypes().then(setTypes);
   }, [loadNotes]);
+
+  // Team/Workspace v1 is a server/browser-only concept — Tauri's local
+  // vault has no accounts at all, so this never even makes the request
+  // there (authStatus just stays null forever, and every check below
+  // that gates on it treats IS_TAURI as "not configured" implicitly by
+  // never showing the login gate or the sidebar trigger).
+  useEffect(() => {
+    if (IS_TAURI) return;
+    fetchAuthStatus().then(setAuthStatus);
+  }, []);
 
   // A share link looks like ?path=<note>&token=<token> — open straight into
   // that note under that token's role.
@@ -782,9 +803,28 @@ export default function App() {
           : []),
       ];
 
+  // The one place accounts actually change behavior for someone without
+  // a valid session: once the server has ≥1 account, every browser needs
+  // to sign in — replacing the whole app UI, not just gating a panel.
+  // Unreachable in Tauri (authStatus never gets fetched there) and
+  // unreachable on a server with zero accounts configured (authStatus.
+  // configured stays false, matching hasOwnerAccess's server-side logic
+  // exactly — see server/auth.ts's doc comment on that function).
+  if (!IS_TAURI && authStatus?.configured && !authStatus.user) {
+    const inviteToken = new URLSearchParams(location.search).get("invite");
+    return <LoginScreen inviteToken={inviteToken} onSignedIn={(user) => setAuthStatus({ configured: true, user })} />;
+  }
+
   return (
     <div className="app">
       {pendingUpdate && <UpdateBanner update={pendingUpdate} onDismiss={() => setPendingUpdate(null)} />}
+      {workspacePanelOpen && authStatus && (
+        <WorkspacePanel
+          status={authStatus}
+          onStatusChange={setAuthStatus}
+          onClose={() => setWorkspacePanelOpen(false)}
+        />
+      )}
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
         <MenuIcon size={18} />
       </button>
@@ -823,6 +863,22 @@ export default function App() {
           </div>
         )}
         <IdentityPanel themeId={themeId} onThemeChange={setThemeId} />
+        {!IS_TAURI && !shareToken && authStatus && (
+          <button
+            className="workspace-panel-trigger"
+            onClick={() => setWorkspacePanelOpen(true)}
+            title={
+              authStatus.configured
+                ? authStatus.user?.role === "admin"
+                  ? "Manage workspace members"
+                  : "Workspace"
+                : "Set up team access"
+            }
+          >
+            <Users size={14} />
+            {authStatus.configured ? (authStatus.user ? `${authStatus.user.name} (${authStatus.user.role})` : "Workspace") : "Set up team access"}
+          </button>
+        )}
         <div className="sidebar-header">
           {!shareToken && (
             <input

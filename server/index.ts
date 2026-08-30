@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import {
   listNoteFiles,
@@ -32,9 +33,13 @@ import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
 import { scheduleEmbeddingUpdate, scheduleEmbeddingUpdateAll } from "./embeddings.js";
+import { hasOwnerAccess } from "./auth.js";
+import { registerAuthRoutes, SESSION_COOKIE } from "./auth-routes.js";
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
+registerAuthRoutes(app);
 
 // A genuinely empty vault/ (first run, fresh clone) gets seeded with the
 // bundled tutorial before anything else — see seedStarterVaultIfEmpty's
@@ -63,8 +68,22 @@ function tokenFrom(req: Request): string | null {
   return typeof req.query.token === "string" ? req.query.token : null;
 }
 
+function sessionTokenFrom(req: Request): string | null {
+  return (req.cookies?.[SESSION_COOKIE] as string | undefined) ?? null;
+}
+
+// Wraps resolveShareRole so its own no-token→"owner" default is never
+// reached once accounts exist — that fallback predates real accounts and
+// would silently undo auth.ts's hasOwnerAccess tightening if a caller
+// went around this.
+function effectiveRole(req: Request, relPath: string): ShareRole | "owner" | "denied" {
+  const token = tokenFrom(req);
+  if (token) return resolveShareRole(relPath, token);
+  return hasOwnerAccess(token, sessionTokenFrom(req)) ? "owner" : "denied";
+}
+
 function requireOwner(req: Request, res: Response, next: NextFunction) {
-  if (tokenFrom(req)) {
+  if (!hasOwnerAccess(tokenFrom(req), sessionTokenFrom(req))) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -73,7 +92,7 @@ function requireOwner(req: Request, res: Response, next: NextFunction) {
 
 function requireNoteRead(req: Request, res: Response, next: NextFunction) {
   const relPath = (req.params as Record<string, string>)[0];
-  if (resolveShareRole(relPath, tokenFrom(req)) === "denied") {
+  if (effectiveRole(req, relPath) === "denied") {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -82,7 +101,7 @@ function requireNoteRead(req: Request, res: Response, next: NextFunction) {
 
 function requireNoteWrite(req: Request, res: Response, next: NextFunction) {
   const relPath = (req.params as Record<string, string>)[0];
-  const role = resolveShareRole(relPath, tokenFrom(req));
+  const role = effectiveRole(req, relPath);
   if (role !== "owner" && role !== "edit") {
     res.status(403).json({ error: "forbidden" });
     return;
@@ -95,7 +114,7 @@ function requireNoteWrite(req: Request, res: Response, next: NextFunction) {
 // requireNoteWrite — the one role that role actually exists for.
 function requireNoteComment(req: Request, res: Response, next: NextFunction) {
   const relPath = (req.params as Record<string, string>)[0];
-  const role = resolveShareRole(relPath, tokenFrom(req));
+  const role = effectiveRole(req, relPath);
   if (role !== "owner" && role !== "edit" && role !== "comment") {
     res.status(403).json({ error: "forbidden" });
     return;
@@ -173,7 +192,7 @@ app.delete("/api/notes/*", requireNoteWrite, (req, res) => {
 // with a token that turns out to be invalid (the response IS "denied").
 app.get("/api/role/*", (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
-  res.json({ role: resolveShareRole(relPath, tokenFrom(req)) });
+  res.json({ role: effectiveRole(req, relPath) });
 });
 
 const SHARE_ROLES: ShareRole[] = ["view", "comment", "edit"];
