@@ -1,0 +1,38 @@
+# Render Blueprint — deploys server/ (the same Node process used for local
+# dev, minus the frontend dev server) as a single web service.
+#
+# The most common reason to want this: real-time collaboration between
+# people who aren't on the same network. Cloud sync's relay (server/relay.ts)
+# is stateless — it only forwards already-encrypted blobs, no database, no
+# disk — so the free plan below is enough for that on its own. Once deployed,
+# point the app's "Connect cloud sync" field (Tauri or browser, same UI) at
+# wss://<your-service>.onrender.com, agree on a room name and passphrase with
+# whoever you're collaborating with, and you're done — no accounts needed.
+#
+# If you also want browser-based Team/Workspace access from this same
+# deployment: that data (accounts/sessions in .pkm-state/state.sqlite, the
+# vault's search index in .pkm/index.sqlite) lives on local disk, which
+# Render's free plan wipes on every redeploy or restart. Uncomment the disk
+# block below (requires a paid plan) to persist it — check Render's logs for
+# this service's actual working directory before trusting the mountPath
+# below verbatim, it's the conventional path but not guaranteed. Note that
+# even with persistence, cloud-mode sharing still has no per-role
+# permissions (see README.md's Roadmap) — that's unrelated to hosting.
+#
+# This does NOT serve the built frontend (no static-file serving is wired
+# into server/index.ts) — this service is the API/WebSocket backend only.
+services:
+  - type: web
+    name: satori-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/auth/status
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+    # disk:
+    #   name: satori-state
+    #   mountPath: /opt/render/project/src/.pkm-state
+    #   sizeGB: 1

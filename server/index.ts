@@ -268,7 +268,12 @@ app.post("/api/flashcards/review", requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 
-const PORT = 3001;
+// Render (and most PaaS hosts) assign the port at runtime via $PORT and
+// require the app to bind to exactly that — hardcoding 3001 would make the
+// service unreachable there while working fine locally, which is why this
+// stayed hidden until an actual deploy was attempted. Falls back to 3001
+// for local dev, where nothing sets PORT.
+const PORT = Number(process.env.PORT) || 3001;
 const httpServer = createServer(app);
 setupCollabServer(httpServer);
 setupRelayServer(httpServer);

@@ -81,6 +81,18 @@ Satori runs in two deployment modes from the same codebase:
 - **Native app** (Tauri/Rust) — the primary target. `src-tauri/` is the Rust backend; the frontend talks to it over Tauri's IPC.
 - **Browser/self-hosted** — `server/` is a small Node/Express server (SQLite for the search index, a WebSocket relay for real-time sync) that the same React frontend can talk to over HTTP/WebSocket instead. Useful if you'd rather run Satori on your own server and access it from a browser.
 
+### Deploying the server (for cloud sync or Team/Workspace)
+
+The native app's local collaboration only reaches other devices on the same network. To collaborate with someone over the internet — either via cloud sync's passphrase-based relay, or via a self-hosted Team/Workspace — `server/` needs to run somewhere reachable, not just on your own machine.
+
+**Render** (or any Node host) works well for this — a [`render.yaml`](render.yaml) blueprint is included:
+```bash
+npm start   # tsx server/index.ts — binds to $PORT if set, else 3001
+```
+Push the repo to Render as a Blueprint and it builds/runs this automatically. The relay itself is stateless (no database, nothing to persist) — the free plan is enough if you only want cloud sync. If you also want Team/Workspace accounts to survive a redeploy, you'll need a persistent disk for `.pkm-state/` (see the commented-out `disk:` block in `render.yaml`) — a paid plan.
+
+Once deployed, point the app's "Connect cloud sync" field (same UI in Tauri or browser) at `wss://<your-service>.onrender.com`, agree on a room name and passphrase with whoever you're collaborating with, and you're connected — no accounts needed. This deployment path serves the API/WebSocket backend only, not the built frontend (there's no static-file serving wired in yet) — for browser/Team-Workspace access, run `npm run dev` yourself, or host the built frontend separately and point it at this server.
+
 Both modes share the same markdown/frontmatter parsing (`shared/`) and the same React UI (`src/`) — only the storage/IPC layer underneath differs.
 
 ## Security & privacy model
