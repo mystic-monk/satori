@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type * as Y from "yjs";
 import { fetchNote, type NoteListItem } from "./api";
 import { extractWikilinkRefs, renderNoteBody, type RenderEnv, type ResolvedNote } from "./markdown";
 import { renderMermaidBlocks } from "./mermaid-render";
 import { parseFilterText, queryNotes } from "./noteQuery";
+import { applyTextDiff } from "./collab";
+import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
+
+// The inverse of markdown.ts's taskListsPlugin: `line` is the checkbox's
+// list-item start line within the frontmatter-stripped body (same
+// numbering markdown-it used to produce it), so toggling has to strip
+// frontmatter the same way before indexing into lines, then re-attach it.
+function toggleTaskLine(raw: string, line: number): string {
+  const { data, body } = parseFrontmatter(raw);
+  const lines = body.split("\n");
+  if (line < 0 || line >= lines.length) return raw;
+  const current = lines[line];
+  lines[line] = current.includes("[ ]") ? current.replace("[ ]", "[x]") : current.replace(/\[[xX]\]/, "[ ]");
+  return stringifyFrontmatter(data, lines.join("\n"));
+}
 
 function escapeHtml(s: string): string {
   const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -29,9 +45,11 @@ interface PreviewProps {
   notes: NoteListItem[];
   onNavigate: (path: string) => void;
   shareToken?: string | null;
+  ytext?: Y.Text;
+  readOnly?: boolean;
 }
 
-export default function Preview({ raw, notes, onNavigate, shareToken }: PreviewProps) {
+export default function Preview({ raw, notes, onNavigate, shareToken, ytext, readOnly }: PreviewProps) {
   const [bodies, setBodies] = useState<Map<string, string>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const resolver = useMemo(() => buildResolver(notes), [notes]);
@@ -101,11 +119,39 @@ export default function Preview({ raw, notes, onNavigate, shareToken }: PreviewP
   }, [html, notes]);
 
   function handleClick(e: React.MouseEvent) {
+    const checkbox = (e.target as HTMLElement).closest<HTMLInputElement>(".task-checkbox");
+    if (checkbox) {
+      if (readOnly || !ytext) {
+        e.preventDefault();
+        return;
+      }
+      const line = Number(checkbox.dataset.line);
+      applyTextDiff(ytext, toggleTaskLine(ytext.toString(), line), "task-toggle");
+      return;
+    }
+    const copyBtn = (e.target as HTMLElement).closest<HTMLButtonElement>(".code-copy-btn");
+    if (copyBtn) {
+      const code = copyBtn.dataset.code ?? "";
+      navigator.clipboard.writeText(code).then(() => {
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.add("copied");
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+          copyBtn.classList.remove("copied");
+        }, 1500);
+      });
+      return;
+    }
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");
     if (el) onNavigate(el.dataset.notePath!);
   }
 
   return (
-    <div className="preview" ref={containerRef} onClick={handleClick} dangerouslySetInnerHTML={{ __html: html }} />
+    <div
+      className={`preview${readOnly ? " preview-readonly" : ""}`}
+      ref={containerRef}
+      onClick={handleClick}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }

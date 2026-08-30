@@ -228,6 +228,42 @@ function highlightsAndCommentsPlugin(md: MDInstance) {
   );
 }
 
+// `- [ ] text` / `- [x] text` list items become an interactive checkbox.
+// Runs as a core rule after inline parsing (not a custom inline/block rule)
+// because it needs to inspect an already-parsed list item's first inline
+// token and mutate it in place — markdown-it's own list parsing already
+// did the hard work, this just recognizes the leading "[ ] "/"[x] " text
+// and swaps it for a checkbox token. `data-line` carries the item's start
+// line *within the frontmatter-stripped body* (matching stripFrontmatter
+// above) so Preview.tsx can write the toggle straight back to that line —
+// see toggleTaskLine there for the other half of this.
+function taskListsPlugin(md: MDInstance) {
+  md.core.ruler.after("inline", "task_lists", (state) => {
+    const tokens = state.tokens;
+    for (let i = 0; i < tokens.length; i++) {
+      const inline = tokens[i];
+      if (inline.type !== "inline" || !inline.children || inline.children.length === 0) continue;
+      const first = inline.children[0];
+      if (first.type !== "text") continue;
+      const match = /^\[([ xX])\]\s+/.exec(first.content);
+      if (!match) continue;
+      const liToken = tokens[i - 2];
+      if (!liToken || liToken.type !== "list_item_open") continue;
+      const checked = match[1].toLowerCase() === "x";
+      first.content = first.content.slice(match[0].length);
+      liToken.attrJoin("class", "task-list-item");
+      const line = liToken.map ? liToken.map[0] : -1;
+      const checkbox = new state.Token("task_checkbox", "", 0);
+      checkbox.meta = { checked, line };
+      inline.children.unshift(checkbox);
+    }
+  });
+  md.renderer.rules.task_checkbox = (tokens, idx) => {
+    const { checked, line } = tokens[idx].meta as { checked: boolean; line: number };
+    return `<input type="checkbox" class="task-checkbox" data-line="${line}" ${checked ? "checked" : ""} />`;
+  };
+}
+
 function stripFrontmatter(raw: string): string {
   const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
   return m ? raw.slice(m[0].length) : raw;
@@ -312,6 +348,7 @@ md.use(mathPlugin);
 md.use(calloutsPlugin);
 md.use(wikilinksPlugin);
 md.use(highlightsAndCommentsPlugin);
+md.use(taskListsPlugin);
 
 // ```mermaid fenced blocks render as diagrams. Mermaid needs an async,
 // DOM-attached render pass (mermaid.render() returns a Promise), which
@@ -335,7 +372,12 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const source = md.utils.escapeHtml(token.content);
     return `<div class="query-block" data-query-filter="${source}"><pre class="query-fallback">${source}</pre></div>`;
   }
-  return defaultFenceRule(tokens, idx, options, env, self);
+  // A raw copy of the code, not the highlighted HTML — the copy button
+  // needs the original text, and re-deriving it from the highlighted
+  // markup (stripping hljs's <span> tags) would be more fragile than
+  // just keeping the source markdown-it already token'd.
+  const rawCode = md.utils.escapeHtml(token.content);
+  return `<div class="code-block-wrapper"><button type="button" class="code-copy-btn" data-code="${rawCode}">Copy</button>${defaultFenceRule(tokens, idx, options, env, self)}</div>`;
 };
 
 export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {

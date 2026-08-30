@@ -1103,7 +1103,14 @@ export default function App() {
                   )}
                   {viewMode !== "source" && (
                     <div className="editor-preview">
-                      <Preview raw={raw} notes={notes} onNavigate={openNote} shareToken={shareToken} />
+                      <Preview
+                        raw={raw}
+                        notes={notes}
+                        onNavigate={openNote}
+                        shareToken={shareToken}
+                        ytext={localSession.ytext}
+                        readOnly={role === "view" || role === "comment"}
+                      />
                     </div>
                   )}
                 </div>

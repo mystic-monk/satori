@@ -867,8 +867,57 @@ button:hover {
   overflow-x: auto;
 }
 
+.code-block-wrapper {
+  position: relative;
+}
+
+.code-block-wrapper .code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.code-block-wrapper:hover .code-copy-btn {
+  opacity: 1;
+}
+
+.code-block-wrapper .code-copy-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.code-block-wrapper .code-copy-btn.copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .preview code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.task-list-item {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.task-checkbox {
+  margin-right: 6px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.preview-readonly .task-checkbox {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.6;
 }
 
 .preview table {
@@ -1383,6 +1432,10 @@ button:hover {
 }
 
 .graph-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 14px;
   font-size: 12px;
   color: var(--text-dim);
@@ -1391,6 +1444,34 @@ button:hover {
 
 .graph-caption code {
   font-size: 11px;
+}
+
+.graph-mode-toggle {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.graph-mode-toggle button {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+
+.graph-mode-toggle button.active {
+  background: var(--bg-active);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.graph-mode-toggle button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .graph-svg {
