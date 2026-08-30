@@ -18,9 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local graph view — scope the graph to just the active note's direct connections instead of the whole vault
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for zero-friction note capture
 
+### Changed
+
+- Visual polish pass: sidebar/toolbar icons are now a consistent SVG set (lucide-react) instead of raw emoji; buttons have real primary/ghost/danger variants instead of one generic gray style everywhere (Delete finally looks different from Source/Preview); empty states (no note open, empty graph, empty table) got an icon, a heading, and — where relevant — a call-to-action button instead of a bare sentence; a spacing/type scale and consistent hover transitions are now design tokens (`--space-*`, `--text-*`, `--transition-*`) rather than ad hoc per-component values
+
 ### Fixed
 
 - A real content-loss bug: a stale `.ybin` CRDT snapshot could silently overwrite a `.md` file that had been edited outside the collab system (a direct edit, a git checkout, a sync from another device) the next time that note was opened
+- Switching the sidebar to Journal/Canvas/a custom type filter silently broke wikilinks, citations, and relation properties pointing at notes of a different type in the currently open note (they'd render as "broken" purely because of the sidebar filter) — favorited notes of other types also vanished from Favorites, and "New From Template" could disappear from the create menu, for the same underlying reason
 
 ## [0.1.2] — 2026-08-30
 

@@ -45,8 +45,10 @@ export default function ConfirmDialog({
           {message}
         </p>
         <div className="modal-actions">
-          <button onClick={onCancel}>{cancelLabel}</button>
-          <button className={danger ? "modal-danger" : ""} onClick={onConfirm} autoFocus>
+          <button className="btn-ghost" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button className={danger ? "btn-danger" : "btn-primary"} onClick={onConfirm} autoFocus>
             {confirmLabel}
           </button>
         </div>

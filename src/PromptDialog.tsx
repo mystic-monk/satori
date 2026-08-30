@@ -62,8 +62,10 @@ export default function PromptDialog({
           autoFocus
         />
         <div className="modal-actions">
-          <button onClick={onCancel}>Cancel</button>
-          <button onClick={submit} disabled={!value.trim()}>
+          <button className="btn-ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={submit} disabled={!value.trim()}>
             {confirmLabel}
           </button>
         </div>

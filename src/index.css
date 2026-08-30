@@ -27,6 +27,35 @@
   --text: #ddd;
   --text-dim: #888;
   --accent: #4c8dff;
+
+  /* Design tokens — structural, not theme-dependent. A deliberate scale
+     rather than ad hoc pixel values scattered per component, so spacing
+     and type size read as intentional choices instead of "whatever fit." */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+
+  /* One red across both themes (like .wikilink-broken already did before
+     this token existed) rather than tuning a separate value per theme —
+     a warm red reads clearly as "destructive" against every theme here. */
+  --danger: #e0524a;
 }
 
 :root[data-theme="light"] {
@@ -131,6 +160,7 @@ body {
   padding: 8px 10px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
+  transition: background var(--transition-fast);
 }
 
 .note-list li:has(.favorite-toggle) {
@@ -198,20 +228,24 @@ body {
 }
 
 .vault-icon {
-  font-size: 13px;
+  display: inline-flex;
+  color: var(--text-dim);
 }
 
 .vault-switch-caret {
+  display: inline-flex;
   color: var(--text-dim);
-  font-size: 10px;
 }
 
 .vault-reindex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
-  padding: 4px 8px;
-  font-size: 15px;
+  padding: 6px;
   color: var(--text-dim);
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .vault-reindex:hover {
@@ -238,6 +272,7 @@ body {
   text-align: left;
   border-radius: 5px;
   color: var(--text);
+  transition: background var(--transition-fast);
 }
 
 .sidebar-nav button:hover {
@@ -250,9 +285,18 @@ body {
 }
 
 .nav-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
-  text-align: center;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-nav button.active .nav-icon,
+.sidebar-nav button:hover .nav-icon {
+  color: var(--text);
 }
 
 .nav-more-types {
@@ -289,10 +333,12 @@ body {
   padding: 5px 12px;
   cursor: pointer;
   font-size: 13px;
+  transition: background var(--transition-fast);
 }
 
 .note-type-icon {
-  font-size: 12px;
+  display: inline-flex;
+  color: var(--text-dim);
   flex-shrink: 0;
 }
 
@@ -308,12 +354,13 @@ body {
   position: absolute;
   right: 8px;
   top: 8px;
+  display: inline-flex;
   background: transparent;
   border: none;
-  padding: 2px 4px;
-  font-size: 14px;
+  padding: 3px;
   color: var(--text-dim);
   line-height: 1;
+  transition: color var(--transition-fast);
 }
 
 .favorite-toggle:hover {
@@ -394,14 +441,63 @@ button {
   background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast),
+    filter var(--transition-fast);
 }
 
 button:hover {
   background: var(--bg-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button:disabled:hover {
+  background: var(--bg-elevated);
+}
+
+/* Button variants — the default (unclassed) button above reads as
+   "secondary" everywhere it's already used. These three exist because
+   nothing distinguished a primary action, a low-emphasis inline action,
+   and a destructive one: Delete looked exactly like Source/Preview. */
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+  background: var(--accent);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .editor-pane {
@@ -455,6 +551,12 @@ button:hover {
   line-height: 1.4;
 }
 
+.cloud-warning-icon {
+  position: relative;
+  top: 2px;
+  margin-right: 2px;
+}
+
 .cloud-input {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -477,10 +579,32 @@ button:hover {
 
 .empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   height: 100%;
   color: var(--text-dim);
+  text-align: center;
+  padding: var(--space-5);
+}
+
+.empty-state-icon {
+  color: var(--border);
+  margin-bottom: var(--space-2);
+}
+
+.empty-state-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty-state-hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  max-width: 320px;
 }
 
 .table-view {
@@ -550,9 +674,18 @@ button:hover {
 }
 
 .table-empty {
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
   color: var(--text-dim);
   text-align: center;
+}
+
+.table-empty svg,
+.graph-empty svg {
+  color: var(--border);
 }
 
 .table-rollup-bar {
@@ -703,7 +836,7 @@ button:hover {
 
 .flashcard-ratings button:nth-child(1) {
   border-color: #b3372c;
-  color: #e0524a;
+  color: var(--danger);
 }
 
 .flashcard-ratings button:nth-child(4) {
@@ -833,6 +966,11 @@ button:hover {
   padding: 8px 12px;
   font-size: 12px;
   color: var(--text-dim);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.properties-header:hover {
+  color: var(--text);
 }
 
 .properties-body {
@@ -1062,7 +1200,7 @@ button:hover {
 
 .callout-danger,
 .callout-error {
-  border-left-color: #e0524a;
+  border-left-color: var(--danger);
 }
 
 .callout-tip,
@@ -1090,7 +1228,7 @@ button:hover {
 
 .transclusion-missing,
 .transclusion-circular {
-  color: #e0524a;
+  color: var(--danger);
   font-size: 0.9em;
 }
 
@@ -1105,7 +1243,7 @@ button:hover {
 }
 
 .wikilink-broken {
-  color: #e0524a;
+  color: var(--danger);
 }
 
 .inline-comment {
@@ -1124,7 +1262,7 @@ button:hover {
 }
 
 .math-error {
-  color: #e0524a;
+  color: var(--danger);
   font-family: ui-monospace, monospace;
 }
 
@@ -1142,7 +1280,7 @@ button:hover {
 }
 
 .mermaid-error {
-  color: #e0524a;
+  color: var(--danger);
   font-size: 0.9em;
 }
 
@@ -1753,10 +1891,13 @@ button:hover {
 
 .graph-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   height: 100%;
   color: var(--text-dim);
+  text-align: center;
 }
 
 /* ---- Modal / confirm dialog ---- */
@@ -1813,16 +1954,6 @@ button:hover {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.modal-danger {
-  background: #b3372c;
-  color: #fff;
-  border-color: #b3372c;
-}
-
-.modal-danger:hover {
-  background: #c73f32;
 }
 
 .command-palette-backdrop {

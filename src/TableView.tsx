@@ -4,6 +4,7 @@ import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { getIdentity } from "./identity";
 import { buildResolver } from "./noteResolver";
 import { extractRelationRefs } from "./relations";
+import { Table2 } from "lucide-react";
 
 interface TableViewProps {
   notes: NoteListItem[];
@@ -309,7 +310,12 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
           ))}
         </tbody>
       </table>
-      {notes.length === 0 && <div className="table-empty">No notes in this view.</div>}
+      {notes.length === 0 && (
+        <div className="table-empty">
+          <Table2 size={32} aria-hidden="true" />
+          No notes in this view.
+        </div>
+      )}
     </div>
   );
 }

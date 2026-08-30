@@ -53,6 +53,24 @@ import { checkForUpdate, type Update } from "./updater";
 import { renderNoteBody, type RenderEnv } from "./markdown";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
+import {
+  Brain,
+  Calendar,
+  ChevronDown,
+  Download,
+  FileStack,
+  FileText,
+  LayoutTemplate,
+  Menu as MenuIcon,
+  Paintbrush,
+  PenLine,
+  RotateCw,
+  Star,
+  Table2,
+  TriangleAlert,
+  Vault as VaultIcon,
+  Waypoints,
+} from "lucide-react";
 import { getIdentity } from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, type RecentNote } from "./recentNotes";
@@ -93,20 +111,20 @@ type SidebarView = "all" | "journal" | "canvas" | "favorites";
 
 // Same icon set as the sidebar nav rows, so a type reads the same way
 // wherever it shows up (nav row, Recent list, etc).
-function noteTypeIcon(type: string | null): string {
+function NoteTypeIcon({ type }: { type: string | null }) {
   switch (type) {
     case "daily":
-      return "📅";
+      return <Calendar size={13} />;
     case "canvas":
-      return "🖌";
+      return <Paintbrush size={13} />;
     case "flashcard":
-      return "🧠";
+      return <Brain size={13} />;
     case "template":
-      return "📐";
+      return <LayoutTemplate size={13} />;
     case null:
-      return "📄";
+      return <FileText size={13} />;
     default:
-      return "🗂";
+      return <FileStack size={13} />;
   }
 }
 
@@ -764,7 +782,7 @@ export default function App() {
     <div className="app">
       {pendingUpdate && <UpdateBanner update={pendingUpdate} onDismiss={() => setPendingUpdate(null)} />}
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
-        ☰
+        <MenuIcon size={18} />
       </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
@@ -776,11 +794,11 @@ export default function App() {
               title="Switch to a different vault"
             >
               <span className="vault-icon" aria-hidden="true">
-                🗄
+                <VaultIcon size={14} />
               </span>
               {vaultName ?? "Vault"}
               <span className="vault-switch-caret" aria-hidden="true">
-                ▾
+                <ChevronDown size={12} />
               </span>
             </button>
             {!shareToken && (
@@ -791,10 +809,10 @@ export default function App() {
                   title="Import a folder (.md/.txt/.json)"
                   aria-label="Import a folder"
                 >
-                  ⇩
+                  <Download size={14} />
                 </button>
                 <button className="vault-reindex" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
-                  ↻
+                  <RotateCw size={14} />
                 </button>
               </>
             )}
@@ -828,7 +846,7 @@ export default function App() {
               onClick={() => selectView("all")}
             >
               <span className="nav-icon" aria-hidden="true">
-                📄
+                <FileText size={15} />
               </span>
               All Notes
             </button>
@@ -837,7 +855,7 @@ export default function App() {
               onClick={() => selectView("journal")}
             >
               <span className="nav-icon" aria-hidden="true">
-                📅
+                <Calendar size={15} />
               </span>
               Journal
             </button>
@@ -846,7 +864,7 @@ export default function App() {
               onClick={() => selectView("canvas")}
             >
               <span className="nav-icon" aria-hidden="true">
-                🖌
+                <Paintbrush size={15} />
               </span>
               Canvas
             </button>
@@ -860,7 +878,7 @@ export default function App() {
               }}
             >
               <span className="nav-icon" aria-hidden="true">
-                🕸
+                <Waypoints size={15} />
               </span>
               Graph
             </button>
@@ -874,7 +892,7 @@ export default function App() {
               }}
             >
               <span className="nav-icon" aria-hidden="true">
-                🗂
+                <Table2 size={15} />
               </span>
               Table
             </button>
@@ -888,7 +906,7 @@ export default function App() {
               }}
             >
               <span className="nav-icon" aria-hidden="true">
-                🧠
+                <Brain size={15} />
               </span>
               Flashcards
             </button>
@@ -946,7 +964,7 @@ export default function App() {
                   tabIndex={0}
                 >
                   <span className="note-type-icon" aria-hidden="true">
-                    {noteTypeIcon(n.type)}
+                    <NoteTypeIcon type={n.type} />
                   </span>
                   <div className="note-title">{n.title}</div>
                 </li>
@@ -957,7 +975,7 @@ export default function App() {
         {!results && sidebarView === "journal" && !displayedNotes.some((n) => n.title === todayIso) && (
           <button className="journal-today-cta" onClick={onDailyNote}>
             <span className="nav-icon" aria-hidden="true">
-              ✏️
+              <PenLine size={15} />
             </span>
             Write today's entry
           </button>
@@ -1003,7 +1021,7 @@ export default function App() {
                       aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
                       title={n.favorite ? "Remove from favorites" : "Add to favorites"}
                     >
-                      {n.favorite ? "★" : "☆"}
+                      <Star size={14} fill={n.favorite ? "currentColor" : "none"} />
                     </button>
                   )}
                 </li>
@@ -1021,7 +1039,7 @@ export default function App() {
             server/index.ts). */}
         {!shareToken && (
           <div className="sidebar-create">
-            <button className="create-button" onClick={() => setCreateMenuOpenState((o) => !o)}>
+            <button className="create-button btn-primary" onClick={() => setCreateMenuOpenState((o) => !o)}>
               + Create
             </button>
             {createMenuOpenState && (
@@ -1133,7 +1151,11 @@ export default function App() {
                 </>
               )}
               {role !== "owner" && <span className="role-badge">{role}</span>}
-              {role === "owner" && <button onClick={() => setDeleteConfirmOpen(true)}>Delete</button>}
+              {role === "owner" && (
+                <button className="btn-danger" onClick={() => setDeleteConfirmOpen(true)}>
+                  Delete
+                </button>
+              )}
             </div>
             {role === "owner" && (
               <div className="cloud-bar-wrap">
@@ -1179,9 +1201,9 @@ export default function App() {
                   )}
                 </div>
                 <p className="cloud-warning">
-                  ⚠ Cloud sync has no view/edit separation yet — anyone with this passphrase can read <em>and
-                  write</em>, unlike the Share panel's local roles below. Only share it with people you'd trust to
-                  edit.
+                  <TriangleAlert size={13} className="cloud-warning-icon" aria-hidden="true" /> Cloud sync has no
+                  view/edit separation yet — anyone with this passphrase can read <em>and write</em>, unlike the
+                  Share panel's local roles below. Only share it with people you'd trust to edit.
                 </p>
               </div>
             )}
@@ -1228,7 +1250,16 @@ export default function App() {
             )}
           </>
         ) : (
-          <div className="empty-state">Select a note or create a new one.</div>
+          <div className="empty-state">
+            <FileText size={36} className="empty-state-icon" aria-hidden="true" />
+            <p className="empty-state-title">No note open</p>
+            <p className="empty-state-hint">Pick one from the sidebar, or start a new one.</p>
+            {!shareToken && (
+              <button className="btn-primary" onClick={onNewNote}>
+                + New Note
+              </button>
+            )}
+          </div>
         )}
       </main>
       {deleteConfirmOpen && activePath && (

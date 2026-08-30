@@ -9,6 +9,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { fetchLinks, fetchNotes } from "./api";
+import { Waypoints } from "lucide-react";
 
 interface GraphNode extends SimulationNodeDatum {
   id: string;
@@ -113,7 +114,12 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   }, [rawNodes, rawLinks, mode, activePath]);
 
   if (rawNodes.length === 0) {
-    return <div className="graph-empty">No notes to graph yet.</div>;
+    return (
+      <div className="graph-empty">
+        <Waypoints size={32} aria-hidden="true" />
+        No notes to graph yet.
+      </div>
+    );
   }
 
   // A node only "connects" to another once one note links to the other
@@ -149,9 +155,15 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
         </div>
       </div>
       {mode === "local" && nodes.length <= 1 ? (
-        <div className="graph-empty">This note has no connections yet.</div>
+        <div className="graph-empty">
+          <Waypoints size={32} aria-hidden="true" />
+          This note has no connections yet.
+        </div>
       ) : nodes.length === 0 ? (
-        <div className="graph-empty">No notes to graph yet.</div>
+        <div className="graph-empty">
+          <Waypoints size={32} aria-hidden="true" />
+          No notes to graph yet.
+        </div>
       ) : (
         <svg className="graph-svg" data-tick={tick} viewBox={`${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`}>
           <g className="graph-links">
