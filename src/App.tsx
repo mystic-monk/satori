@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import {
   createNote,
@@ -9,6 +9,7 @@ import {
   fetchTypes,
   fetchVaultInfo,
   importFolder,
+  pickBibFile,
   reindex,
   search,
   switchVault,
@@ -17,6 +18,7 @@ import {
   type SearchResult,
   type ShareRole,
 } from "./api";
+import { parseBibtex } from "../shared/bibtex";
 import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
 // cloud-collab.ts pulls in crypto.ts -> libsodium-wrappers-sumo (~550KB of
 // WASM) — most users never touch cloud sync, so this is a dynamic import
@@ -152,6 +154,7 @@ export default function App() {
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
+  const bibFileInputRef = useRef<HTMLInputElement | null>(null);
   const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | "flashcard" | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templatePath, setTemplatePath] = useState<string | null>(null);
@@ -643,6 +646,52 @@ export default function App() {
     fetchTypes().then(setTypes);
   }
 
+  // One note per BibTeX entry, `type: reference` with the entry's fields
+  // spread directly into frontmatter (title/author/year/journal/etc,
+  // whatever the .bib file actually has) rather than a fixed whitelist —
+  // frontmatter is already schema-less everywhere else in the app (Table
+  // view, Properties panel), so a reference note follows the same rule.
+  // Body is left empty; the point is the citable metadata, not prose.
+  async function processBibImport(text: string) {
+    setStatus("importing references…");
+    const entries = parseBibtex(text);
+    const existingPaths = new Set(notes.map((n) => n.path));
+    let imported = 0;
+    let skipped = 0;
+    for (const entry of entries) {
+      const safeKey = entry.citekey.replace(/[^a-zA-Z0-9_-]+/g, "-");
+      const path = `references/${safeKey || "untitled"}.md`;
+      if (existingPaths.has(path)) {
+        skipped++;
+        continue;
+      }
+      const data: Record<string, unknown> = { type: "reference", citekey: entry.citekey, ...entry.fields };
+      if (!data.title) data.title = entry.citekey;
+      await createNote(path, stringifyFrontmatter(data, ""));
+      existingPaths.add(path);
+      imported++;
+    }
+    setStatus(`imported ${imported} reference${imported === 1 ? "" : "s"}, skipped ${skipped}`);
+    await loadNotes();
+    fetchTypes().then(setTypes);
+  }
+
+  async function onImportBib() {
+    if (IS_TAURI) {
+      const text = await pickBibFile();
+      if (text) await processBibImport(text);
+      return;
+    }
+    bibFileInputRef.current?.click();
+  }
+
+  async function onBibFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so picking the same file again still fires a change event
+    if (!file) return;
+    await processBibImport(await file.text());
+  }
+
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
@@ -685,6 +734,7 @@ export default function App() {
         { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
         { id: "reindex", label: "Reindex Vault", action: onReindex },
+        { id: "import-bib", label: "Import .bib References…", action: onImportBib },
         ...(IS_TAURI
           ? [
               { id: "switch-vault", label: "Switch Vault…", action: () => switchVault() },
@@ -1001,7 +1051,24 @@ export default function App() {
                     New From Template
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onImportBib();
+                  }}
+                >
+                  Import .bib References…
+                </button>
               </div>
+            )}
+            {!IS_TAURI && (
+              <input
+                ref={bibFileInputRef}
+                type="file"
+                accept=".bib"
+                className="visually-hidden"
+                onChange={onBibFileSelected}
+              />
             )}
           </div>
         )}

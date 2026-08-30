@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { fetchNote, type NoteListItem } from "./api";
-import { extractWikilinkRefs, renderNoteBody, type RenderEnv, type ResolvedNote } from "./markdown";
+import {
+  extractCitationKeys,
+  extractWikilinkRefs,
+  renderNoteBody,
+  type CitationInfo,
+  type RenderEnv,
+  type ResolvedNote,
+} from "./markdown";
 import { renderMermaidBlocks } from "./mermaid-render";
 import { parseFilterText, queryNotes } from "./noteQuery";
 import { applyTextDiff } from "./collab";
@@ -23,6 +30,38 @@ function toggleTaskLine(raw: string, line: number): string {
 function escapeHtml(s: string): string {
   const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
   return s.replace(/[&<>"]/g, (c) => map[c]);
+}
+
+// citekey -> reference note, built from any note with type: reference and
+// a citekey property — see CitationInfo's doc comment in markdown.ts.
+function buildCitations(notes: NoteListItem[]): Map<string, CitationInfo> {
+  const map = new Map<string, CitationInfo>();
+  for (const n of notes) {
+    if (n.type !== "reference") continue;
+    const key = n.properties.citekey;
+    if (typeof key !== "string" || !key) continue;
+    const author = n.properties.author;
+    const year = n.properties.year;
+    map.set(key, {
+      path: n.path,
+      title: n.title,
+      author: typeof author === "string" ? author : undefined,
+      year: typeof year === "string" || typeof year === "number" ? String(year) : undefined,
+    });
+  }
+  return map;
+}
+
+// "Author (Year). Title." for the ```bibliography block's reference
+// list — a plain, single citation-style format rather than trying to
+// support APA/MLA/Chicago switching, which is real scope beyond what a
+// first pass needs.
+function formatReferenceEntry(info: CitationInfo): string {
+  const parts: string[] = [];
+  if (info.author) parts.push(info.author);
+  if (info.year) parts.push(`(${info.year})`);
+  parts.push(info.title.endsWith(".") ? info.title : `${info.title}.`);
+  return parts.join(" ");
 }
 
 export function buildResolver(notes: NoteListItem[]) {
@@ -53,6 +92,7 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
   const [bodies, setBodies] = useState<Map<string, string>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const resolver = useMemo(() => buildResolver(notes), [notes]);
+  const citations = useMemo(() => buildCitations(notes), [notes]);
   const embedRefs = useMemo(() => extractWikilinkRefs(raw).filter((r) => r.embed), [raw]);
 
   useEffect(() => {
@@ -84,9 +124,9 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
   }, [embedRefs, resolver, bodies, shareToken]);
 
   const html = useMemo(() => {
-    const env: RenderEnv = { resolver, bodies, pathStack: new Set() };
+    const env: RenderEnv = { resolver, bodies, pathStack: new Set(), citations };
     return renderNoteBody(raw, env);
-  }, [raw, resolver, bodies]);
+  }, [raw, resolver, bodies, citations]);
 
   useEffect(() => {
     if (containerRef.current) renderMermaidBlocks(containerRef.current);
@@ -117,6 +157,32 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
               .join("")}</ul>`;
     }
   }, [html, notes]);
+
+  // Same placeholder-then-fill pattern as query blocks above: a
+  // ```bibliography block lists every [@citekey] actually used in this
+  // note's own source (not the whole vault), resolved through the same
+  // citations map the inline citation renderer used.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const bibBlocks = container.querySelectorAll<HTMLElement>(".bibliography-block");
+    if (bibBlocks.length === 0) return;
+    const entries = extractCitationKeys(raw)
+      .map((key) => citations.get(key))
+      .filter((info): info is CitationInfo => info !== undefined);
+    const listHtml =
+      entries.length === 0
+        ? `<div class="bibliography-empty">No citations in this note yet — cite one with [@citekey].</div>`
+        : `<ul class="bibliography-list">${entries
+            .map(
+              (e) =>
+                `<li><a class="wikilink" data-note-path="${escapeHtml(e.path)}" href="javascript:void(0)">${escapeHtml(
+                  formatReferenceEntry(e)
+                )}</a></li>`
+            )
+            .join("")}</ul>`;
+    for (const el of Array.from(bibBlocks)) el.innerHTML = listHtml;
+  }, [html, raw, citations]);
 
   function handleClick(e: React.MouseEvent) {
     const checkbox = (e.target as HTMLElement).closest<HTMLInputElement>(".task-checkbox");

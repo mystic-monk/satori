@@ -325,6 +325,7 @@ pub fn run() {
             commands::switch_vault,
             commands::import_folder,
             commands::save_export_file,
+            commands::pick_bib_file,
             commands::print_current_window,
             commands::get_due_cards,
             commands::record_card_review,

@@ -49,10 +49,22 @@ export interface NoteResolver {
   resolve(ref: string): ResolvedNote | null;
 }
 
+// A citation resolves to a reference note the same way a wikilink does
+// (path + title), but also needs author/year to render as "(Author,
+// Year)" rather than a bare title link — that extra shape is why this
+// is a separate map on RenderEnv rather than reusing `resolver`.
+export interface CitationInfo {
+  path: string;
+  title: string;
+  author?: string;
+  year?: string;
+}
+
 export interface RenderEnv {
   resolver: NoteResolver;
   bodies: Map<string, string>; // path -> raw body (frontmatter stripped), for transclusion
   pathStack: Set<string>; // cycle guard for nested transclusion
+  citations?: Map<string, CitationInfo>; // citekey -> reference note, for [@citekey] and ```bibliography
   [key: string]: unknown; // markdown-it's Env type is an open string-keyed bag
   [key: symbol]: unknown;
 }
@@ -328,6 +340,54 @@ function wikilinksPlugin(md: MDInstance) {
   };
 }
 
+// "(Author, Year)" from a CitationInfo — falls back to the reference
+// note's title when author/year are missing, since a reference note
+// created by hand (not via .bib import) might not have them filled in.
+function formatCitationLabel(info: CitationInfo): string {
+  if (!info.author && !info.year) return info.title;
+  const lastName = info.author ? info.author.split(/,| and /)[0].trim() : "";
+  const authorPart = lastName || info.title;
+  return info.year ? `${authorPart}, ${info.year}` : authorPart;
+}
+
+// [@citekey] — the standard Pandoc/academic-markdown citation syntax.
+// Deliberate scope cut: no locator suffix (`[@key, p. 12]`) and no
+// multi-citation grouping (`[@key1; @key2]`) — a first pass covers the
+// common "cite one source" case. Resolution is against env.citations
+// (built in Preview.tsx from notes with type: reference), not the
+// wikilink resolver — see CitationInfo's doc comment for why.
+function citationsPlugin(md: MDInstance) {
+  md.inline.ruler.before("link", "citation", (state, silent) => {
+    const src = state.src;
+    const pos = state.pos;
+    if (src[pos] !== "[" || src[pos + 1] !== "@") return false;
+    const end = src.indexOf("]", pos + 2);
+    if (end === -1) return false;
+    const key = src.slice(pos + 2, end).trim();
+    if (!key || /\s/.test(key)) return false;
+    if (!silent) {
+      const token = state.push("citation", "", 0);
+      token.meta = { key };
+    }
+    state.pos = end + 1;
+    return true;
+  });
+
+  md.renderer.rules.citation = (tokens, idx, _opts, envIn) => {
+    const env = envIn as unknown as RenderEnv;
+    const { key } = tokens[idx].meta as { key: string };
+    const info = env.citations?.get(key);
+    if (!info) {
+      return `<span class="citation citation-broken" title="No reference note with citekey: ${md.utils.escapeHtml(
+        key
+      )}">[@${md.utils.escapeHtml(key)}]</span>`;
+    }
+    return `<a class="citation" data-note-path="${md.utils.escapeHtml(info.path)}" href="javascript:void(0)">(${md.utils.escapeHtml(
+      formatCitationLabel(info)
+    )})</a>`;
+  };
+}
+
 export const md = new MarkdownIt({
   html: false, // never trust raw HTML from note content — see security note in README
   linkify: true,
@@ -347,6 +407,7 @@ export const md = new MarkdownIt({
 md.use(mathPlugin);
 md.use(calloutsPlugin);
 md.use(wikilinksPlugin);
+md.use(citationsPlugin);
 md.use(highlightsAndCommentsPlugin);
 md.use(taskListsPlugin);
 
@@ -372,6 +433,13 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const source = md.utils.escapeHtml(token.content);
     return `<div class="query-block" data-query-filter="${source}"><pre class="query-fallback">${source}</pre></div>`;
   }
+  if (lang === "bibliography") {
+    // Same placeholder pattern as query blocks: the list of citations
+    // actually used depends on the whole note's content and the citation
+    // map, neither of which the fence rule has access to — Preview.tsx's
+    // effect scans the rendered note for [@citekey]s and fills this in.
+    return `<div class="bibliography-block"></div>`;
+  }
   // A raw copy of the code, not the highlighted HTML — the copy button
   // needs the original text, and re-deriving it from the highlighted
   // markup (stripping hljs's <span> tags) would be more fragile than
@@ -382,6 +450,23 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 
 export function extractWikilinkRefs(raw: string): { ref: string; embed: boolean }[] {
   return extractWikilinkRefsFromBody(stripFrontmatter(raw));
+}
+
+// Every distinct [@citekey] in a note's body, in first-appearance order —
+// what a ```bibliography block in that note renders from (see Preview.tsx).
+export function extractCitationKeys(raw: string): string[] {
+  const body = stripFrontmatter(raw);
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const re = /\[@([^\s\]]+)\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    if (!seen.has(m[1])) {
+      seen.add(m[1]);
+      keys.push(m[1]);
+    }
+  }
+  return keys;
 }
 
 export function renderNoteBody(raw: string, env: RenderEnv): string {

@@ -233,6 +233,14 @@ export async function printCurrentWindow(): Promise<void> {
   await invoke("print_current_window");
 }
 
+// Tauri-only, same convention as saveExportFile above — the caller
+// (App.tsx's onImportBib) checks IS_TAURI and uses a plain <input
+// type="file"> for the browser deployment instead, since there's no
+// native picker to invoke there.
+export async function pickBibFile(): Promise<string | null> {
+  return invoke("pick_bib_file");
+}
+
 export type Rating = "again" | "hard" | "good" | "easy";
 
 export interface DueCard {

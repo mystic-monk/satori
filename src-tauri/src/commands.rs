@@ -204,6 +204,22 @@ pub fn print_current_window(window: tauri::WebviewWindow) -> Result<(), String> 
     window.print().map_err(|e| e.to_string())
 }
 
+// Parsing the .bib text itself happens in the frontend (shared/bibtex.ts)
+// so there's exactly one BibTeX parser rather than one per language
+// boundary — this command's only job is the native picker plus reading
+// the file, the same division of labor save_export_file above already
+// has for its side of the export flow.
+#[tauri::command]
+pub fn pick_bib_file() -> Result<Option<String>, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("BibTeX", &["bib"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_due_cards(state: State<AppState>) -> Result<Vec<db::DueCard>, String> {
     let conn = state.conn.lock().map_err(lock_err)?;
