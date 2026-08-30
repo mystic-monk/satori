@@ -14,7 +14,11 @@ export interface CollabHandle {
   ytext: Y.Text;
   awareness: awarenessProtocol.Awareness;
   provider: WebsocketProvider | null;
-  destroy: () => void;
+  // skipFlush: true means "this note is about to be deleted, don't write
+  // it back to disk" — see openTauriLocalSession's flush-on-destroy below
+  // for why this matters. Always safe to call more than once; only the
+  // first call has any effect.
+  destroy: (skipFlush?: boolean) => void;
 }
 
 export interface LocalCollabOptions {
@@ -47,12 +51,20 @@ export function openLocalCollab(notePath: string, opts: LocalCollabOptions = {})
       opts.onDenied?.();
     }
   });
+  let destroyed = false;
   return {
     doc,
     ytext,
     awareness: provider.awareness,
     provider,
+    // skipFlush is a no-op here — this session never writes anything on
+    // its own close (server/collab.ts's Room persists on its own schedule,
+    // and closeRoom() there already cancels it before a delete responds).
+    // Accepted anyway so callers don't need an "if Tauri" branch just to
+    // pass the flag correctly.
     destroy: () => {
+      if (destroyed) return;
+      destroyed = true;
       provider.destroy();
       doc.destroy();
     },
@@ -87,16 +99,27 @@ export function openTauriLocalSession(
   };
   doc.on("update", onUpdate);
 
+  let destroyed = false;
   return {
     doc,
     ytext,
     awareness,
     provider: null,
-    destroy: () => {
+    // skipFlush=true is how confirmDelete() (App.tsx) avoids a real race:
+    // it tears the session down through here directly, then deletes the
+    // file. Without this, the normal flush-on-close below would write the
+    // file straight back to disk moments after delete_note removed it —
+    // React's setActivePath(null) only *schedules* this same cleanup via
+    // the effect it's attached to, which isn't guaranteed to run before
+    // the delete request that follows it, so relying on that path alone
+    // left deletion racing its own debounced autosave.
+    destroy: (skipFlush = false) => {
+      if (destroyed) return;
+      destroyed = true;
       doc.off("update", onUpdate);
       if (saveTimer) {
         clearTimeout(saveTimer);
-        writeNoteApi(notePath, ytext.toString(), author); // flush on close, don't lose the last debounce window
+        if (!skipFlush) writeNoteApi(notePath, ytext.toString(), author); // flush on close, don't lose the last debounce window
       }
       awareness.destroy();
       doc.destroy();

@@ -696,7 +696,15 @@ export default function App() {
     setDeleteConfirmOpen(false);
     if (!activePath) return;
     const path = activePath;
-    setActivePath(null); // tears down the collab session before the file goes away
+    // Destroyed directly (not just via setActivePath(null) below, which
+    // only *schedules* the same teardown through the session-opening
+    // effect's cleanup) so this happens deterministically before the
+    // delete request — in Tauri mode, that cleanup normally flushes a
+    // pending debounced autosave by writing the note back to disk, which
+    // raced deleteNoteApi below and could resurrect a just-deleted note.
+    // skipFlush=true here means "this note is going away, don't write it."
+    localSession?.destroy(true);
+    setActivePath(null);
     await deleteNoteApi(path);
     await loadNotes();
   }
