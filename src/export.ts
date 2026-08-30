@@ -32,22 +32,36 @@ export async function exportMarkdown(path: string, raw: string): Promise<void> {
   downloadFile(filename, raw, "text/markdown");
 }
 
+// Scoped to .export-doc, not bare element selectors — this same CSS string
+// gets injected two different ways: as a real <body> in its own standalone
+// document (wrapHtmlDocument, browser-mode PDF/HTML export) where an
+// unscoped `body { }` rule would be fine, but also as a <style> tag inside
+// a div sitting in the *live app's own DOM* (printExportContainer, Tauri's
+// PDF export) — and a <style> element's rules apply document-wide the
+// moment they exist, regardless of whether their container is
+// display:none. An earlier, unscoped version of this file leaked its
+// white-background/narrow-column export styling onto the entire running
+// app the moment someone clicked PDF in the native app, because that
+// container is left in the DOM permanently rather than removed after use.
+// Both call sites now add the .export-doc class to whatever element is
+// standing in for this content's root, so the same string is genuinely
+// safe in either context.
 const EXPORT_CSS = `
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; background: #fff;
+  .export-doc { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; background: #fff;
          max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
-  h1, h2, h3 { line-height: 1.25; }
-  pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
-  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-  table { border-collapse: collapse; }
-  th, td { border: 1px solid #ddd; padding: 6px 10px; }
-  blockquote { border-left: 3px solid #ddd; margin: 0; padding-left: 12px; color: #555; }
-  .callout { border: 1px solid #ddd; border-left-width: 4px; border-radius: 6px; padding: 10px 14px; margin: 12px 0; background: #f6f8fa; }
-  .callout-title { font-weight: 600; margin-bottom: 4px; }
-  .transclusion { border: 1px dashed #ccc; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
-  .transclusion-title { font-weight: 600; font-size: 0.85em; color: #666; margin-bottom: 6px; }
-  .wikilink { color: #2563eb; text-decoration: none; }
-  .wikilink-broken { color: #b91c1c; }
-  @media print { body { margin: 0; max-width: none; } }
+  .export-doc h1, .export-doc h2, .export-doc h3 { line-height: 1.25; }
+  .export-doc pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
+  .export-doc code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .export-doc table { border-collapse: collapse; }
+  .export-doc th, .export-doc td { border: 1px solid #ddd; padding: 6px 10px; }
+  .export-doc blockquote { border-left: 3px solid #ddd; margin: 0; padding-left: 12px; color: #555; }
+  .export-doc .callout { border: 1px solid #ddd; border-left-width: 4px; border-radius: 6px; padding: 10px 14px; margin: 12px 0; background: #f6f8fa; }
+  .export-doc .callout-title { font-weight: 600; margin-bottom: 4px; }
+  .export-doc .transclusion { border: 1px dashed #ccc; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .export-doc .transclusion-title { font-weight: 600; font-size: 0.85em; color: #666; margin-bottom: 6px; }
+  .export-doc .wikilink { color: #2563eb; text-decoration: none; }
+  .export-doc .wikilink-broken { color: #b91c1c; }
+  @media print { .export-doc { margin: 0; max-width: none; } }
 `;
 
 function wrapHtmlDocument(title: string, bodyHtml: string): string {
@@ -60,7 +74,7 @@ function wrapHtmlDocument(title: string, bodyHtml: string): string {
 <style>${hljsCss}</style>
 <style>${EXPORT_CSS}</style>
 </head>
-<body>
+<body class="export-doc">
 <h1>${escapeHtml(title)}</h1>
 ${bodyHtml}
 </body>
@@ -92,6 +106,7 @@ function printExportContainer(title: string, bodyHtml: string): HTMLElement {
   if (!container) {
     container = document.createElement("div");
     container.id = "pkm-print-export";
+    container.className = "export-doc";
     document.body.appendChild(container);
   }
   container.innerHTML = `<style>${katexCss}</style><style>${hljsCss}</style><style>${EXPORT_CSS}</style><h1>${escapeHtml(title)}</h1>${bodyHtml}`;
