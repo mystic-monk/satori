@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { listNoteFiles, readNoteRaw, parseNote } from "./vault.js";
 import { extractWikilinkRefs } from "../shared/wikilinks.js";
 import { initialCardState, nextCardState, type CardState, type Rating } from "./srs.js";
+import { icsCalendar, reminderVevent, timetableVevent } from "../shared/ics.js";
+import { extractTimetableBlocks } from "../shared/timetable.js";
 
 const INDEX_DIR = path.resolve(process.cwd(), ".pkm");
 const INDEX_PATH = path.join(INDEX_DIR, "index.sqlite");
@@ -159,6 +161,20 @@ stateDb.exec(`
     created_by TEXT NOT NULL REFERENCES users(id),
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
+  );
+
+  -- One row, one long-lived secret: gates GET /api/calendar.ics, which a
+  -- calendar app hits with a plain unauthenticated GET on its own polling
+  -- schedule (it can't do the session-cookie/share-token dance every other
+  -- route uses) — same "put a hard-to-guess token in the URL itself"
+  -- pattern as per-note share links, just vault-wide instead of per-note.
+  -- Regenerating replaces this row, invalidating every previously-copied
+  -- feed URL at once, same revocation semantics DELETE /api/share/:token
+  -- already has for one note.
+  CREATE TABLE IF NOT EXISTS calendar_feed (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    token TEXT NOT NULL,
+    created_at INTEGER NOT NULL
   );
 `);
 
@@ -749,4 +765,61 @@ export function recordCardReview(notePath: string, rating: Rating): void {
          reviewed_at = excluded.reviewed_at`
     )
     .run(notePath, next.ease, next.intervalDays, next.repetitions, dueAt, now);
+}
+
+// See calendar_feed's own doc comment above (near its CREATE TABLE) for
+// why this is a single-row secret rather than per-note/per-user: a
+// calendar app subscribing to this URL polls it directly, with no
+// interactive login step to attach a session or share token to.
+export function getOrCreateFeedToken(): string {
+  const row = stateDb.prepare("SELECT token FROM calendar_feed WHERE id = 1").get() as { token: string } | undefined;
+  if (row) return row.token;
+  const token = randomToken();
+  stateDb.prepare("INSERT INTO calendar_feed (id, token, created_at) VALUES (1, ?, ?)").run(token, Date.now());
+  return token;
+}
+
+export function regenerateFeedToken(): string {
+  const token = randomToken();
+  stateDb
+    .prepare(
+      `INSERT INTO calendar_feed (id, token, created_at) VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET token = excluded.token, created_at = excluded.created_at`
+    )
+    .run(token, Date.now());
+  return token;
+}
+
+export function isValidFeedToken(token: string): boolean {
+  const row = stateDb.prepare("SELECT token FROM calendar_feed WHERE id = 1").get() as { token: string } | undefined;
+  return !!row && row.token === token;
+}
+
+// Every remind_at across the vault, plus every ```timetable entry found by
+// re-scanning each note's indexed body (the index only stores properties,
+// not a structured view of body content — see shared/timetable.ts's
+// extractTimetableBlocks doc comment). Rebuilt fresh on every request
+// rather than cached: personal-vault scale, same "a plain scan is fine
+// here" precedent as query blocks/rollups/related-notes.
+export function buildCalendarFeedIcs(): string {
+  const veventBlocks: string[] = [];
+
+  const noteRows = db.prepare("SELECT path, title, properties FROM notes").all() as {
+    path: string;
+    title: string;
+    properties: string;
+  }[];
+  for (const row of noteRows) {
+    const remindAt = parseProperties(row.properties).remind_at;
+    if (typeof remindAt === "string" && remindAt) {
+      veventBlocks.push(reminderVevent({ path: row.path, title: row.title, remindAt }));
+    }
+  }
+
+  const bodyRows = db.prepare("SELECT path, body FROM notes_fts").all() as { path: string; body: string }[];
+  for (const row of bodyRows) {
+    extractTimetableBlocks(row.body).forEach((entry, i) => veventBlocks.push(timetableVevent(row.path, entry, i)));
+  }
+
+  return icsCalendar(veventBlocks);
 }

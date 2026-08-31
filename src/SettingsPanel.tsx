@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { CloudStatus, CloudRole } from "./cloud-collab";
 import { THEMES } from "./themes";
 import { TriangleAlert } from "lucide-react";
+import { IS_TAURI } from "./platform";
+import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "./api";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -81,6 +83,33 @@ export default function SettingsPanel({
 }: SettingsPanelProps) {
   const [viewKeyPreview, setViewKeyPreview] = useState<string | null>(null);
   const [viewKeyCopied, setViewKeyCopied] = useState(false);
+  const [feedUrl, setFeedUrl] = useState<string | null>(null);
+  const [feedUrlCopied, setFeedUrlCopied] = useState(false);
+
+  function feedUrlFor(token: string): string {
+    return `${window.location.origin}/api/calendar.ics?token=${token}`;
+  }
+
+  async function onShowFeedUrl() {
+    setFeedUrl(feedUrlFor(await fetchCalendarFeedToken()));
+    setFeedUrlCopied(false);
+  }
+
+  async function onRegenerateFeedUrl() {
+    setFeedUrl(feedUrlFor(await regenerateCalendarFeedToken()));
+    setFeedUrlCopied(false);
+  }
+
+  async function onCopyFeedUrl() {
+    if (!feedUrl) return;
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+      setFeedUrlCopied(true);
+      setTimeout(() => setFeedUrlCopied(false), 2000);
+    } catch {
+      // clipboard permission denied or unavailable — the URL is still shown on screen to copy manually
+    }
+  }
 
   async function onShowViewKey() {
     const key = await onGetCloudViewKey();
@@ -277,6 +306,35 @@ export default function SettingsPanel({
               </button>
             </div>
             {compileStatus && <p className="settings-note">{compileStatus}</p>}
+          </div>
+        )}
+
+        {!IS_TAURI && (
+          <div className="settings-section">
+            <div className="settings-section-label">Calendar feed</div>
+            <p className="settings-note">
+              Subscribe Apple/Google/Outlook Calendar to this URL to get every reminder and{" "}
+              <code>​```timetable</code> entry across the vault, kept in sync automatically — each app re-fetches it
+              on its own schedule, no re-import needed. (For a one-off reminder or a single timetable, the .ics
+              button next to each is simpler — this is for "always up to date.")
+            </p>
+            {feedUrl ? (
+              <>
+                <div className="settings-export-row">
+                  <input className="type-filter" readOnly value={feedUrl} onFocus={(e) => e.target.select()} />
+                  <button className="btn-ghost" onClick={onCopyFeedUrl}>
+                    {feedUrlCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <button className="btn-ghost" onClick={onRegenerateFeedUrl}>
+                  Regenerate (invalidates the old URL)
+                </button>
+              </>
+            ) : (
+              <button className="btn-ghost" onClick={onShowFeedUrl}>
+                Get calendar feed URL
+              </button>
+            )}
           </div>
         )}
 

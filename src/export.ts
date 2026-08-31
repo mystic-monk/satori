@@ -32,6 +32,18 @@ export async function exportMarkdown(path: string, raw: string): Promise<void> {
   downloadFile(filename, raw, "text/markdown");
 }
 
+// One-off .ics export (a reminder, or a whole timetable block) — see
+// shared/ics.ts's doc comment for why this, not a per-vendor OAuth
+// integration, is the mechanism that reaches Apple/Google/Outlook alike.
+export async function exportIcs(title: string, content: string): Promise<void> {
+  const filename = `${slugify(title)}.ics`;
+  if (IS_TAURI) {
+    await saveExportFile(filename, content, "iCalendar", "ics");
+    return;
+  }
+  downloadFile(filename, content, "text/calendar");
+}
+
 // Scoped to .export-doc, not bare element selectors — this same CSS string
 // gets injected two different ways: as a real <body> in its own standalone
 // document (wrapHtmlDocument, browser-mode PDF/HTML export) where an
@@ -61,7 +73,7 @@ const EXPORT_CSS = `
   .export-doc .transclusion-title { font-weight: 600; font-size: 0.85em; color: #666; margin-bottom: 6px; }
   .export-doc .wikilink { color: #2563eb; text-decoration: none; }
   .export-doc .wikilink-broken { color: #b91c1c; }
-  .export-doc .timetable-fullscreen-btn { display: none; }
+  .export-doc .timetable-block-actions { display: none; }
   .export-doc .timetable-grid { display: grid; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; page-break-inside: avoid; }
   .export-doc .timetable-corner { border-bottom: 1px solid #ddd; border-right: 1px solid #ddd; }
   .export-doc .timetable-day-header { grid-row: 1; text-align: center; font-weight: 600; font-size: 12px; padding: 6px 4px; border-bottom: 1px solid #ddd; border-left: 1px solid #ddd; }

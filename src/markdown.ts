@@ -511,7 +511,10 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const source = md.utils.escapeHtml(token.content);
     const entries = parseTimetable(token.content);
     return `<div class="timetable-block" data-timetable-source="${source}">
-      <button type="button" class="timetable-fullscreen-btn" aria-label="Open full screen">⛶ Full screen</button>
+      <div class="timetable-block-actions">
+        <button type="button" class="timetable-ics-btn" title="Download as .ics — import into Apple/Google/Outlook Calendar">⤓ .ics</button>
+        <button type="button" class="timetable-fullscreen-btn" aria-label="Open full screen">⛶ Full screen</button>
+      </div>
       ${renderTimetableHtml(entries, md.utils.escapeHtml)}
     </div>`;
   }

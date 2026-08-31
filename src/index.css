@@ -1844,10 +1844,16 @@ button:disabled:hover {
   margin: 16px 0;
 }
 
-.timetable-fullscreen-btn {
+.timetable-block-actions {
   position: absolute;
   top: -28px;
   right: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.timetable-ics-btn,
+.timetable-fullscreen-btn {
   background: none;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1857,6 +1863,7 @@ button:disabled:hover {
   cursor: pointer;
 }
 
+.timetable-ics-btn:hover,
 .timetable-fullscreen-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
@@ -1959,7 +1966,7 @@ button:disabled:hover {
 }
 
 @media print {
-  .timetable-fullscreen-btn {
+  .timetable-block-actions {
     display: none;
   }
 }

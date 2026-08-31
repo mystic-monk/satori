@@ -329,3 +329,17 @@ export async function reviewCard(path: string, rating: Rating): Promise<void> {
     body: JSON.stringify({ path, rating }),
   });
 }
+
+// Server/browser deployment only — Tauri doesn't run server/ at all, so
+// there's nothing reachable to subscribe a calendar app to (see
+// SettingsPanel.tsx, which hides this section entirely in Tauri rather
+// than calling these and getting a confusing failure).
+export async function fetchCalendarFeedToken(): Promise<string> {
+  const res = await fetch("/api/calendar-feed-token");
+  return (await res.json()).token;
+}
+
+export async function regenerateCalendarFeedToken(): Promise<string> {
+  const res = await fetch("/api/calendar-feed-token/regenerate", { method: "POST" });
+  return (await res.json()).token;
+}

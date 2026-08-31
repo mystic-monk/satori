@@ -9,6 +9,8 @@ import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { buildResolver } from "./noteResolver";
 import { parseTimetable, renderTimetableHtml, timetableGridMetrics } from "./timetable";
+import { icsCalendar, timetableVevent } from "../shared/ics";
+import { exportIcs } from "./export";
 
 // The inverse of markdown.ts's taskListsPlugin: `line` is the checkbox's
 // list-item start line within the frontmatter-stripped body (same
@@ -52,9 +54,13 @@ interface PreviewProps {
   shareToken?: string | null;
   ytext?: Y.Text;
   readOnly?: boolean;
+  // Only used by the ```timetable block's .ics export button below — the
+  // note's own identity isn't otherwise needed to render its content.
+  notePath?: string | null;
+  noteTitle?: string | null;
 }
 
-export default function Preview({ raw, notes, onNavigate, shareToken, ytext, readOnly }: PreviewProps) {
+export default function Preview({ raw, notes, onNavigate, shareToken, ytext, readOnly, notePath, noteTitle }: PreviewProps) {
   const [bodies, setBodies] = useState<Map<string, string>>(new Map());
   const [fullscreenTimetable, setFullscreenTimetable] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -153,6 +159,15 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
       // — reading it back through .dataset already gives the decoded raw
       // text, same as .code-copy-btn's data-code a few branches up.
       if (source) setFullscreenTimetable(source);
+      return;
+    }
+    const icsBtn = (e.target as HTMLElement).closest<HTMLButtonElement>(".timetable-ics-btn");
+    if (icsBtn) {
+      const source = icsBtn.closest<HTMLElement>(".timetable-block")?.dataset.timetableSource;
+      if (source && notePath) {
+        const entries = parseTimetable(source);
+        exportIcs(noteTitle ?? notePath, icsCalendar(entries.map((entry, i) => timetableVevent(notePath, entry, i))));
+      }
       return;
     }
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");

@@ -1630,6 +1630,8 @@ export default function App() {
                       value={currentRemindAt}
                       onSet={(v) => setReminder(v)}
                       onClose={() => setReminderPopupOpen(false)}
+                      notePath={activePath}
+                      noteTitle={activeNote?.title ?? activePath}
                     />
                   )}
                 </div>
@@ -1696,6 +1698,8 @@ export default function App() {
                         shareToken={shareToken}
                         ytext={localSession.ytext}
                         readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
+                        notePath={activePath}
+                        noteTitle={activeNote?.title ?? activePath}
                       />
                     </div>
                   )}

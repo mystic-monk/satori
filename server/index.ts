@@ -27,6 +27,10 @@ import {
   addComment,
   getComments,
   findSimilar,
+  getOrCreateFeedToken,
+  regenerateFeedToken,
+  isValidFeedToken,
+  buildCalendarFeedIcs,
   type ShareRole,
 } from "./db.js";
 import type { Rating } from "./srs.js";
@@ -274,6 +278,29 @@ app.post("/api/flashcards/review", requireOwner, (req, res) => {
   }
   recordCardReview(relPath, rating);
   res.json({ ok: true });
+});
+
+// Owner-only, same as everything else vault-wide — this is what Settings
+// reads to build/display the feed URL, not the feed itself (see
+// GET /api/calendar.ics below, which is deliberately NOT behind
+// requireOwner: a calendar app polling the URL has no session/cookie to
+// present, only the token embedded in the URL itself).
+app.get("/api/calendar-feed-token", requireOwner, (_req, res) => {
+  res.json({ token: getOrCreateFeedToken() });
+});
+
+app.post("/api/calendar-feed-token/regenerate", requireOwner, (_req, res) => {
+  res.json({ token: regenerateFeedToken() });
+});
+
+app.get("/api/calendar.ics", (req, res) => {
+  const token = String(req.query.token ?? "");
+  if (!token || !isValidFeedToken(token)) {
+    res.status(403).send("invalid or missing token");
+    return;
+  }
+  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+  res.send(buildCalendarFeedIcs());
 });
 
 // Render (and most PaaS hosts) assign the port at runtime via $PORT and
