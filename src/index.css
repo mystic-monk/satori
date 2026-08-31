@@ -2864,6 +2864,38 @@ button:disabled:hover {
   background: var(--bg-hover);
 }
 
+.graph-panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+
+.graph-panel-toggle:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.graph-panel-toggle.active {
+  color: var(--text);
+  background: var(--bg-active);
+  border-color: var(--accent);
+}
+
+.graph-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .graph-svg {
   width: 100%;
   flex: 1;
@@ -2988,6 +3020,143 @@ button:disabled:hover {
   height: 100%;
   color: var(--text-dim);
   text-align: center;
+}
+
+/* Floats over the canvas (Logseq's graph-settings pattern) rather than
+   squeezing the SVG's width — panning/zooming stays framed the same way
+   whether or not this is open. */
+.graph-settings-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 240px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px 10px;
+  font-size: 12px;
+  z-index: 5;
+}
+
+.graph-panel-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.graph-panel-section:last-child {
+  border-bottom: none;
+}
+
+.graph-panel-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+
+.graph-panel-chevron {
+  flex-shrink: 0;
+  transition: transform 0.12s;
+  color: var(--text-dim);
+}
+
+.graph-panel-chevron.open {
+  transform: rotate(90deg);
+}
+
+.graph-panel-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 2px 10px;
+}
+
+.graph-panel-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.graph-panel-type-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.graph-panel-type-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.graph-panel-type-count {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-panel-link-btn {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+}
+
+.graph-panel-link-btn:hover {
+  text-decoration: underline;
+}
+
+.graph-panel-search {
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.graph-panel-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.graph-panel-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.graph-panel-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-hover);
+  align-self: flex-start;
+}
+
+.graph-panel-export-btn:hover {
+  background: var(--bg-active);
 }
 
 /* ---- Modal / confirm dialog ---- */

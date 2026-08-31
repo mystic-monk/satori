@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   forceSimulation,
   forceLink,
@@ -7,9 +7,12 @@ import {
   forceCollide,
   type Simulation,
   type SimulationNodeDatum,
+  type ForceLink,
+  type ForceManyBody,
 } from "d3-force";
 import { fetchLinks, fetchNotes } from "./api";
-import { Waypoints, Maximize2 } from "lucide-react";
+import { Waypoints, Maximize2, MoreHorizontal, ChevronRight, Download } from "lucide-react";
+import { IS_TAURI } from "./platform";
 
 interface GraphNode extends SimulationNodeDatum {
   id: string;
@@ -68,6 +71,51 @@ function truncateLabel(title: string): string {
   return title.length > MAX_LABEL_LEN ? `${title.slice(0, MAX_LABEL_LEN - 1)}…` : title;
 }
 
+// Sentinel for `type: null` (untyped notes) — used as a Set/Map key
+// wherever hiddenTypes/typeCounts need one, since a real Map/Set can't key
+// on null the way an object property could.
+const NONE_TYPE = "__none__";
+
+const TYPE_LABELS: Record<string, string> = {
+  daily: "Journal",
+  canvas: "Canvas",
+  flashcard: "Flashcards",
+  template: "Templates",
+  reference: "References",
+  [NONE_TYPE]: "Untyped",
+};
+
+function typeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+const DEFAULT_CHARGE = 140;
+const DEFAULT_LINK_DISTANCE = 70;
+
+// Same collapsible-section shape as Logseq's graph settings panel — each
+// section remembers its own open/closed state independently rather than
+// the whole panel being one flat list.
+function PanelSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="graph-panel-section">
+      <button className="graph-panel-section-header" onClick={() => setOpen((o) => !o)}>
+        <ChevronRight size={12} className={`graph-panel-chevron ${open ? "open" : ""}`} />
+        {title}
+      </button>
+      {open && <div className="graph-panel-section-body">{children}</div>}
+    </div>
+  );
+}
+
 // "Local" scope is just the active note plus whoever it directly links to
 // or is linked from — one hop, not a full traversal. A deeper radius
 // starts pulling in most of a well-connected vault anyway, defeating the
@@ -102,7 +150,19 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [isPanning, setIsPanning] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [chargeStrength, setChargeStrength] = useState(DEFAULT_CHARGE);
+  const [linkDistance, setLinkDistance] = useState(DEFAULT_LINK_DISTANCE);
   const simRef = useRef<Simulation<GraphNode, undefined> | null>(null);
+  // Persistent handles on the two tunable forces — Forces sliders call
+  // .strength()/.distance() straight on these rather than rebuilding the
+  // whole force pipeline per drag tick, which would also reset every
+  // node's accumulated position.
+  const chargeForceRef = useRef<ForceManyBody<GraphNode> | null>(null);
+  const linkForceRef = useRef<ForceLink<GraphNode, GraphLink> | null>(null);
+  const forceSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickCountRef = useRef(0);
   const svgRef = useRef<SVGSVGElement | null>(null);
   // Once someone drags a node, pans, or zooms, the auto-fit-to-content
@@ -119,6 +179,20 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const panRef = useRef<{ startClientX: number; startClientY: number; startVb: [number, number, number, number] } | null>(
     null
   );
+
+  // What the Nodes section's type checkboxes list and count — scoped by
+  // Full-vault/This-note the same way the actual rendered graph is, but
+  // deliberately NOT filtered by hiddenTypes itself, so unchecking a type
+  // doesn't make its own checkbox disappear.
+  const typeCounts = useMemo(() => {
+    const scoped = scopedGraph(rawNodes, rawLinks, mode, activePath);
+    const m = new Map<string, number>();
+    for (const n of scoped.nodes) {
+      const key = n.type ?? NONE_TYPE;
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return m;
+  }, [rawNodes, rawLinks, mode, activePath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,20 +222,23 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
       return;
     }
     const scoped = scopedGraph(rawNodes, rawLinks, mode, activePath);
-    const nodeList: GraphNode[] = scoped.nodes.map((n) => ({ id: n.id, title: n.title, type: n.type }));
+    const visibleScoped = scoped.nodes.filter((n) => !hiddenTypes.has(n.type ?? NONE_TYPE));
+    const nodeList: GraphNode[] = visibleScoped.map((n) => ({ id: n.id, title: n.title, type: n.type }));
     const byId = new Map(nodeList.map((n) => [n.id, n]));
     const linkList = scoped.links
       .filter((l) => byId.has(l.source) && byId.has(l.target))
       .map((l) => ({ source: byId.get(l.source)!, target: byId.get(l.target)! }));
 
+    const chargeForce = forceManyBody<GraphNode>().strength(-chargeStrength);
+    const linkForce = forceLink<GraphNode, GraphLink>(linkList)
+      .id((d) => d.id)
+      .distance(linkDistance);
+    chargeForceRef.current = chargeForce;
+    linkForceRef.current = linkForce;
+
     const sim = forceSimulation(nodeList)
-      .force("charge", forceManyBody().strength(-140))
-      .force(
-        "link",
-        forceLink<GraphNode, GraphLink>(linkList)
-          .id((d) => d.id)
-          .distance(70)
-      )
+      .force("charge", chargeForce)
+      .force("link", linkForce)
       .force("center", forceCenter(0, 0))
       .force("collide", forceCollide(32))
       .on("tick", () => {
@@ -204,7 +281,13 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     return () => {
       sim.stop();
     };
-  }, [rawNodes, rawLinks, mode, activePath]);
+    // chargeStrength/linkDistance deliberately excluded — they only seed
+    // the initial force values here; the Forces sliders update the live
+    // chargeForceRef/linkForceRef directly instead of forcing a full
+    // simulation rebuild (which would reset every node's position) on
+    // every drag tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawNodes, rawLinks, mode, activePath, hiddenTypes]);
 
   // Native (not React's onWheel) so preventDefault reliably stops the page
   // itself from scrolling while zooming the graph — React attaches wheel
@@ -349,6 +432,93 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     setTimeout(() => simRef.current?.alphaTarget(0), 300);
   }
 
+  // Reheat-then-settle, debounced — a slider fires many onChange events per
+  // drag, and each one nudging the simulation back to alphaTarget(0) after
+  // a fixed delay (rather than letting the first timer win) keeps it warm
+  // for the whole gesture instead of freezing mid-drag.
+  function reheatBriefly() {
+    simRef.current?.alphaTarget(0.3).restart();
+    if (forceSettleTimerRef.current) clearTimeout(forceSettleTimerRef.current);
+    forceSettleTimerRef.current = setTimeout(() => simRef.current?.alphaTarget(0), 300);
+  }
+
+  function onChargeChange(value: number) {
+    setChargeStrength(value);
+    chargeForceRef.current?.strength(-value);
+    reheatBriefly();
+  }
+
+  function onLinkDistanceChange(value: number) {
+    setLinkDistance(value);
+    linkForceRef.current?.distance(value);
+    reheatBriefly();
+  }
+
+  function resetForces() {
+    onChargeChange(DEFAULT_CHARGE);
+    onLinkDistanceChange(DEFAULT_LINK_DISTANCE);
+  }
+
+  function toggleType(type: string) {
+    setHiddenTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  // Rasterizes the current view (not the whole graph — whatever's actually
+  // in the viewBox right now, panned/zoomed/filtered as-is) to a PNG via an
+  // off-DOM canvas. Browser-only: an <a download> click is inert inside a
+  // Tauri webview (see export.ts's downloadFile doc comment) and this
+  // graph is view-only info, not a file worth wiring a native Save dialog
+  // for.
+  function exportPng() {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("width", String(rect.width));
+    clone.setAttribute("height", String(rect.height));
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const bg = getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#111318";
+    const [vx, vy, vw, vh] = parseViewBox(viewBox);
+    const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRect.setAttribute("x", String(vx));
+    bgRect.setAttribute("y", String(vy));
+    bgRect.setAttribute("width", String(vw));
+    bgRect.setAttribute("height", String(vh));
+    bgRect.setAttribute("fill", bg);
+    clone.insertBefore(bgRect, clone.firstChild);
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" }));
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = rect.width * scale;
+      canvas.height = rect.height * scale;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      }
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "graph.png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      }, "image/png");
+    };
+    img.src = url;
+  }
+
   if (rawNodes.length === 0) {
     return (
       <div className="graph-empty">
@@ -368,6 +538,15 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
       else if (l.target.id === hoveredId) connectedIds.add(l.source.id);
     }
   }
+
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const matchIds = trimmedQuery ? new Set(nodes.filter((n) => n.title.toLowerCase().includes(trimmedQuery)).map((n) => n.id)) : null;
+
+  const sortedTypes = Array.from(typeCounts.keys()).sort((a, b) => {
+    if (a === NONE_TYPE) return 1;
+    if (b === NONE_TYPE) return -1;
+    return typeLabel(a).localeCompare(typeLabel(b));
+  });
 
   return (
     <div className="graph-view">
@@ -392,11 +571,23 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
         <button className="graph-reset-view" onClick={resetView} title="Reset pan/zoom and unpin every node">
           <Maximize2 size={13} /> Reset view
         </button>
+        <button
+          className={`graph-panel-toggle ${panelOpen ? "active" : ""}`}
+          onClick={() => setPanelOpen((o) => !o)}
+          title="Graph settings"
+        >
+          <MoreHorizontal size={16} />
+        </button>
       </div>
       {mode === "local" && nodes.length <= 1 ? (
         <div className="graph-empty">
           <Waypoints size={32} aria-hidden="true" />
           This note has no connections yet.
+        </div>
+      ) : nodes.length === 0 && typeCounts.size > 0 ? (
+        <div className="graph-empty">
+          <Waypoints size={32} aria-hidden="true" />
+          Every note is filtered out — check the type filters in graph settings.
         </div>
       ) : nodes.length === 0 ? (
         <div className="graph-empty">
@@ -404,73 +595,151 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
           No notes to graph yet.
         </div>
       ) : (
-        <svg
-          ref={svgRef}
-          className={`graph-svg ${isPanning ? "graph-panning" : ""}`}
-          data-tick={tick}
-          viewBox={viewBox}
-          onPointerDown={onBackgroundPointerDown}
-          onPointerMove={onBackgroundPointerMove}
-          onPointerUp={onBackgroundPointerUp}
-        >
-          <g className="graph-links">
-            {links.map((l, i) => (
-              <line
-                key={i}
-                x1={l.source.x ?? 0}
-                y1={l.source.y ?? 0}
-                x2={l.target.x ?? 0}
-                y2={l.target.y ?? 0}
-                className={
-                  hoveredId && (l.source.id === hoveredId || l.target.id === hoveredId) ? "graph-link-highlight" : ""
-                }
-              />
-            ))}
-          </g>
-          <g className="graph-nodes">
-            {nodes.map((n) => (
-              <g
-                key={n.id}
-                transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
-                className={[
-                  "graph-node",
-                  graphNodeTypeClass(n.type),
-                  n.id === activePath ? "graph-node-active" : "",
-                  n.id === draggingId ? "graph-node-dragging" : "",
-                  pinnedIds.has(n.id) ? "graph-node-pinned" : "",
-                  hoveredId && n.id !== hoveredId && !connectedIds.has(n.id) ? "graph-node-dim" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => {
-                  if (dragMovedRef.current || clickTimerRef.current) return;
-                  clickTimerRef.current = setTimeout(() => {
-                    clickTimerRef.current = null;
-                    onNavigate(n.id);
-                  }, 220);
-                }}
-                onDoubleClick={(e) => {
-                  if (clickTimerRef.current) {
-                    clearTimeout(clickTimerRef.current);
-                    clickTimerRef.current = null;
+        <div className="graph-canvas-wrap">
+          <svg
+            ref={svgRef}
+            className={`graph-svg ${isPanning ? "graph-panning" : ""}`}
+            data-tick={tick}
+            viewBox={viewBox}
+            onPointerDown={onBackgroundPointerDown}
+            onPointerMove={onBackgroundPointerMove}
+            onPointerUp={onBackgroundPointerUp}
+          >
+            <g className="graph-links">
+              {links.map((l, i) => (
+                <line
+                  key={i}
+                  x1={l.source.x ?? 0}
+                  y1={l.source.y ?? 0}
+                  x2={l.target.x ?? 0}
+                  y2={l.target.y ?? 0}
+                  className={
+                    hoveredId && (l.source.id === hoveredId || l.target.id === hoveredId) ? "graph-link-highlight" : ""
                   }
-                  onNodeDoubleClick(e, n);
-                }}
-                onPointerDown={(e) => onNodePointerDown(e, n)}
-                onPointerMove={(e) => onNodePointerMove(e, n)}
-                onPointerUp={() => endNodeDrag(n)}
-                onPointerCancel={() => endNodeDrag(n)}
-                onMouseEnter={() => setHoveredId(n.id)}
-                onMouseLeave={() => setHoveredId(null)}
-              >
-                <title>{n.title}</title>
-                {pinnedIds.has(n.id) && <circle className="graph-node-pin-ring" r={(n.id === activePath ? 8 : 5) + 5} />}
-                <circle r={n.id === activePath ? 8 : 5} />
-                <text dy={-10}>{truncateLabel(n.title)}</text>
-              </g>
-            ))}
-          </g>
-        </svg>
+                />
+              ))}
+            </g>
+            <g className="graph-nodes">
+              {nodes.map((n) => {
+                const dim = hoveredId
+                  ? n.id !== hoveredId && !connectedIds.has(n.id)
+                  : matchIds
+                    ? !matchIds.has(n.id)
+                    : false;
+                return (
+                  <g
+                    key={n.id}
+                    transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
+                    className={[
+                      "graph-node",
+                      graphNodeTypeClass(n.type),
+                      n.id === activePath ? "graph-node-active" : "",
+                      n.id === draggingId ? "graph-node-dragging" : "",
+                      pinnedIds.has(n.id) ? "graph-node-pinned" : "",
+                      dim ? "graph-node-dim" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => {
+                      if (dragMovedRef.current || clickTimerRef.current) return;
+                      clickTimerRef.current = setTimeout(() => {
+                        clickTimerRef.current = null;
+                        onNavigate(n.id);
+                      }, 220);
+                    }}
+                    onDoubleClick={(e) => {
+                      if (clickTimerRef.current) {
+                        clearTimeout(clickTimerRef.current);
+                        clickTimerRef.current = null;
+                      }
+                      onNodeDoubleClick(e, n);
+                    }}
+                    onPointerDown={(e) => onNodePointerDown(e, n)}
+                    onPointerMove={(e) => onNodePointerMove(e, n)}
+                    onPointerUp={() => endNodeDrag(n)}
+                    onPointerCancel={() => endNodeDrag(n)}
+                    onMouseEnter={() => setHoveredId(n.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
+                    <title>{n.title}</title>
+                    {pinnedIds.has(n.id) && (
+                      <circle className="graph-node-pin-ring" r={(n.id === activePath ? 8 : 5) + 5} />
+                    )}
+                    <circle r={n.id === activePath ? 8 : 5} />
+                    <text dy={-10}>{truncateLabel(n.title)}</text>
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+          {panelOpen && (
+            <aside className="graph-settings-panel">
+              <PanelSection title={`Nodes · ${nodes.length}`}>
+                <div className="graph-panel-type-list">
+                  {sortedTypes.map((type) => (
+                    <label key={type} className="graph-panel-type-row">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenTypes.has(type)}
+                        onChange={() => toggleType(type)}
+                      />
+                      <span className={`graph-panel-type-dot ${graphNodeTypeClass(type === NONE_TYPE ? null : type)}`} />
+                      {typeLabel(type)}
+                      <span className="graph-panel-type-count">{typeCounts.get(type)}</span>
+                    </label>
+                  ))}
+                </div>
+                {hiddenTypes.size > 0 && (
+                  <button className="graph-panel-link-btn" onClick={() => setHiddenTypes(new Set())}>
+                    Show all types
+                  </button>
+                )}
+              </PanelSection>
+              <PanelSection title="Search" defaultOpen={false}>
+                <input
+                  className="graph-panel-search"
+                  type="text"
+                  placeholder="Find a note…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {trimmedQuery && <div className="graph-panel-hint">{matchIds?.size ?? 0} match{matchIds?.size === 1 ? "" : "es"}</div>}
+              </PanelSection>
+              <PanelSection title="Forces" defaultOpen={false}>
+                <label className="graph-panel-slider-row">
+                  Charge strength
+                  <input
+                    type="range"
+                    min={40}
+                    max={300}
+                    value={chargeStrength}
+                    onChange={(e) => onChargeChange(Number(e.target.value))}
+                  />
+                </label>
+                <label className="graph-panel-slider-row">
+                  Link distance
+                  <input
+                    type="range"
+                    min={30}
+                    max={160}
+                    value={linkDistance}
+                    onChange={(e) => onLinkDistanceChange(Number(e.target.value))}
+                  />
+                </label>
+                <button className="graph-panel-link-btn" onClick={resetForces}>
+                  Reset forces
+                </button>
+              </PanelSection>
+              {!IS_TAURI && (
+                <PanelSection title="Export" defaultOpen={false}>
+                  <button className="graph-panel-export-btn" onClick={exportPng}>
+                    <Download size={13} /> Export as PNG
+                  </button>
+                </PanelSection>
+              )}
+            </aside>
+          )}
+        </div>
       )}
     </div>
   );
