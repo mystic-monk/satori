@@ -153,12 +153,7 @@ body {
 
 .resize-handle {
   position: absolute;
-  /* Starts below the collapse-toggle button's row (top:14px, 28px tall)
-     rather than at 0 — both toggles sit right at this same edge when their
-     panel is expanded (deliberately, to stay clear of the panel's own
-     content on the opposite side), so a full-height handle would sit
-     on top of the button and steal its clicks/drags. */
-  top: 48px;
+  top: 0;
   bottom: 0;
   width: 6px;
   cursor: col-resize;
@@ -394,15 +389,30 @@ body {
    already know the app) and reads as a too-literal copy of VSCode's
    activity bar, which this isn't trying to be. */
 .sidebar-rail {
-  width: 190px;
+  position: relative;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
-  padding: 8px 6px;
+  transition: width var(--transition-base);
+}
+
+.sidebar-rail.resizing {
+  transition: none;
+}
+
+/* Scrolling (and the space-between push that keeps rail-bottom pinned
+   down) lives here, one level in from .sidebar-rail itself — see the JSX
+   comment in App.tsx for why the outer element can't have overflow set
+   without breaking the resize handle's hit area. */
+.sidebar-rail-scroll {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   overflow-y: auto;
+  padding: 8px 6px;
 }
 
 .sidebar-rail-top,

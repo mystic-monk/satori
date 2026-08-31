@@ -6,30 +6,38 @@ interface ResizableWidth {
   onHandleMouseDown: (e: React.MouseEvent) => void;
 }
 
-// Backs the drag-to-resize handle on the sidebar and the right panel — a
-// plain col-resize drag, not a library, since it's just "track mouse X
+// Backs the drag-to-resize handle on the rail, sidebar, and right panel —
+// a plain col-resize drag, not a library, since it's just "track mouse X
 // while a flag is set" with no other moving parts. `edge` is which side of
-// the viewport the panel is anchored to: the sidebar hangs off the left
-// (its width is the mouse's raw clientX), the right panel hangs off the
-// right (its width is the distance from the mouse to the *right* edge of
-// the window instead).
+// the viewport the panel is anchored to: the rail/sidebar hang off the
+// left (width is the mouse's clientX), the right panel hangs off the
+// right (width is the distance from the mouse to the *right* edge of the
+// window instead). `offset` (left edge only) is how much of that clientX
+// belongs to something already occupying space before this panel's own
+// left edge — the sidebar sits to the right of the rail now, not flush
+// against the viewport, so its width has to subtract however wide the
+// rail currently is, not just read raw clientX the way the rail itself
+// (offset 0, genuinely flush left) still does.
 export function useResizableWidth(
   storageKey: string,
   defaultWidth: number,
   min: number,
   max: number,
-  edge: "left" | "right"
+  edge: "left" | "right",
+  offset = 0
 ): ResizableWidth {
   const [width, setWidth] = useState(() => {
     const stored = Number(localStorage.getItem(storageKey));
     return stored >= min && stored <= max ? stored : defaultWidth;
   });
   const [resizing, setResizing] = useState(false);
-  // Avoids the drag handlers closing over a stale `edge`/`min`/`max` from
-  // the render that started the drag — they're static per-call anyway, but
-  // this keeps the effect below from needing them in its dependency array.
-  const configRef = useRef({ min, max, edge });
-  configRef.current = { min, max, edge };
+  // Avoids the drag handlers closing over a stale `edge`/`min`/`max`/
+  // `offset` from the render that started the drag — `offset` in
+  // particular can genuinely change mid-drag if two panels sharing an
+  // edge were somehow both resized at once, so this has to stay live
+  // rather than being captured once at drag-start.
+  const configRef = useRef({ min, max, edge, offset });
+  configRef.current = { min, max, edge, offset };
 
   const onHandleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -40,8 +48,8 @@ export function useResizableWidth(
     if (!resizing) return;
 
     function onMouseMove(e: MouseEvent) {
-      const { min, max, edge } = configRef.current;
-      const raw = edge === "left" ? e.clientX : window.innerWidth - e.clientX;
+      const { min, max, edge, offset } = configRef.current;
+      const raw = edge === "left" ? e.clientX - offset : window.innerWidth - e.clientX;
       setWidth(Math.min(max, Math.max(min, raw)));
     }
     function onMouseUp() {

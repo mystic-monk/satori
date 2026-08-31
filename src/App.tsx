@@ -258,7 +258,12 @@ export default function App() {
       return !collapsed;
     });
   }
-  const sidebarResize = useResizableWidth("pkm-sidebar-width", 280, 200, 480, "left");
+  const railResize = useResizableWidth("pkm-rail-width", 190, 140, 320, "left");
+  // offset by the rail's own current width — the sidebar no longer sits
+  // flush against the viewport's left edge the rail does now, so its
+  // width has to subtract however much of the mouse's clientX the rail
+  // itself already accounts for (see useResizableWidth's own doc comment).
+  const sidebarResize = useResizableWidth("pkm-sidebar-width", 280, 200, 480, "left", railResize.width);
   const rightPanelResize = useResizableWidth("pkm-right-panel-width", 300, 220, 480, "right");
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [spellcheckMode, setSpellcheckMode] = useState<"auto" | "off">(
@@ -1231,7 +1236,21 @@ export default function App() {
           else. Same owner-only gating the old nav row had — a share-link
           guest gets none of this, just Settings at the bottom (still
           meaningful: theme). */}
-      <nav className={`sidebar-rail ${sidebarOpen ? "open" : ""}`}>
+      <nav
+        className={`sidebar-rail ${sidebarOpen ? "open" : ""} ${railResize.resizing ? "resizing" : ""}`}
+        style={{ width: railResize.width }}
+      >
+        <div
+          className={`resize-handle resize-handle-left ${railResize.resizing ? "resizing" : ""}`}
+          onMouseDown={railResize.onHandleMouseDown}
+        />
+        {/* Scrolling lives on this inner wrapper, not .sidebar-rail itself —
+            that element needs overflow: visible so the resize handle above
+            (position: absolute, right: -3px, deliberately straddling the
+            rail's own right edge) stays hit-testable; overflow: auto/hidden
+            clips a positioned descendant's painted-and-hit-testable area to
+            the padding box, silently eating the handle's outer half. */}
+        <div className="sidebar-rail-scroll">
         <div className="sidebar-rail-top">
           {!results && !shareToken && (
             <>
@@ -1346,6 +1365,7 @@ export default function App() {
               </span>
             </button>
           )}
+        </div>
         </div>
       </nav>
       <aside
