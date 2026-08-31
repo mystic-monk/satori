@@ -3,6 +3,8 @@ import { fetchNote, type NoteListItem } from "./api";
 import { renderNoteBody } from "./markdown";
 import { buildResolver } from "./noteResolver";
 import { buildCitations } from "./Preview";
+import { parseFrontmatter } from "../shared/frontmatter";
+import { parseBlockDoc, renderBlockTreeHtml } from "./blockTree";
 import { PenLine } from "lucide-react";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -136,7 +138,16 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
                   <div
                     className="preview journal-entry-body"
                     dangerouslySetInnerHTML={{
-                      __html: renderNoteBody(raw, { resolver, bodies: new Map(), pathStack: new Set(), citations }),
+                      __html: (() => {
+                        const env = { resolver, bodies: new Map<string, string>(), pathStack: new Set<string>(), citations };
+                        // A block-outline entry's body is JSON, not prose —
+                        // render it as a nested read-only bullet list
+                        // (respecting each block's stored collapsed state)
+                        // instead of feeding raw JSON through the markdown
+                        // renderer.
+                        const outline = parseBlockDoc(parseFrontmatter(raw).body);
+                        return outline ? renderBlockTreeHtml(outline, env) : renderNoteBody(raw, env);
+                      })(),
                     }}
                   />
                 )}

@@ -51,6 +51,7 @@ import JournalView from "./JournalView";
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
 const CanvasNote = lazy(() => import("./CanvasNote"));
+import BlockOutline from "./BlockOutline";
 import SharePanel from "./SharePanel";
 import HistoryPanel from "./HistoryPanel";
 import CommentsPanel from "./CommentsPanel";
@@ -68,6 +69,7 @@ import { requestNotificationPermission, fireNotification } from "./reminders";
 import { dueReminders } from "./reminderSchedule";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { resolveFragment } from "../shared/blockrefs";
+import { parseBlockDoc, flattenAllBlockText, createBlock, serializeBlockDoc } from "./blockTree";
 import {
   Bell,
   BookOpen,
@@ -822,7 +824,12 @@ export default function App() {
     try {
       await fetchNote(p); // already exists — just open it
     } catch {
-      const template = `---\ntitle: ${date}\ntype: daily\n---\n\n`;
+      // New daily notes get the block outliner; only new ones — a
+      // pre-existing daily note whose body isn't valid block-JSON (prose
+      // written before this feature existed) keeps opening as a normal
+      // note, see isOutline above.
+      const seed = serializeBlockDoc({ blocks: [createBlock()] });
+      const template = `---\ntitle: ${date}\ntype: daily\n---\n${seed}`;
       await createNote(p, template);
       await loadNotes();
       fetchTypes().then(setTypes);
@@ -914,6 +921,13 @@ export default function App() {
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
+  // A daily note whose body is valid block-JSON — falls back to the normal
+  // Editor/Preview path for any daily note whose body ISN'T (existing
+  // prose journal entries, or a not-yet-written empty one), so nothing
+  // already in the vault is force-migrated; only new entries (see
+  // onDailyNote below) get the outliner.
+  const isOutline = raw ? parseFrontmatter(raw).data.type === "daily" && parseBlockDoc(parseFrontmatter(raw).body) !== null : false;
+  const outlineDoc = useMemo(() => (isOutline && raw ? parseBlockDoc(parseFrontmatter(raw).body) : null), [isOutline, raw]);
   // True for the four "list-based" sidebar views (All Notes/Journal/
   // Canvas/Tutorials), false for the five full-width special panels
   // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
@@ -922,7 +936,12 @@ export default function App() {
   const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory && !showJournal;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
-  const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
+  // For an outline note, body text is spread across many small block
+  // strings rather than one buffer — flattenAllBlockText joins them first.
+  const bodyWordCount = useMemo(() => {
+    if (outlineDoc) return countWords(flattenAllBlockText(outlineDoc));
+    return raw ? countWords(parseFrontmatter(raw).body) : 0;
+  }, [raw, outlineDoc]);
   const currentRemindAt = useMemo(() => {
     if (!raw) return null;
     const v = parseFrontmatter(raw).data.remind_at;
@@ -1163,7 +1182,7 @@ export default function App() {
           cloudStatus={cloudStatus}
           activePath={activePath}
           canConnectCloud={role === "owner" && !!activePath && !!localSession}
-          canExport={!!activePath && !isCanvas}
+          canExport={!!activePath && !isCanvas && !isOutline}
           onExportMd={onExportMd}
           onExportHtml={onExportHtml}
           onExportPdf={onExportPdf}
@@ -1247,7 +1266,7 @@ export default function App() {
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>
               {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
-              {!isCanvas && (
+              {!isCanvas && !isOutline && (
                 <div className="view-mode-toggle">
                   {(["source", "split", "preview"] as ViewMode[]).map((m) => (
                     <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
@@ -1653,6 +1672,20 @@ export default function App() {
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
                 <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
               </Suspense>
+            ) : isOutline ? (
+              <>
+                <BlockOutline key={activePath} raw={raw} ytext={localSession.ytext} notes={notes} />
+                <div className="backlinks-panel">
+                  <div className="backlinks-header">Backlinks</div>
+                  <Backlinks path={activePath} onNavigate={openNote} shareToken={shareToken} />
+                </div>
+                {!IS_TAURI && (
+                  <div className="backlinks-panel">
+                    <div className="backlinks-header">Related</div>
+                    <RelatedNotes path={activePath} onNavigate={openNote} shareToken={shareToken} />
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <div className={`editor-body view-${viewMode}`}>
