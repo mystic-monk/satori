@@ -31,7 +31,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
-- Templates with `{{date}}`/`{{title}}` placeholder substitution
+- Templates with `{{date}}`/`{{title}}` placeholder substitution — including a ready-made Book / Chapter / Character / Scene set for long-form fiction and screenwriting, built entirely from existing features (`​```query` blocks, table rollups, the link graph), see [[tutorial/writing-books-and-scripts]] in the starter vault
 - Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
 - Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing

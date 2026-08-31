@@ -30,4 +30,4 @@ A few things worth knowing about what actually gets exported:
 
 ---
 
-You've reached the end of the tutorial. From here, the fastest way to keep learning is just to use the app — favorite a note, try the graph, invite someone if you're running a server. Back to [[tutorial|Tutorial]].
+Next: [[tutorial/writing-books-and-scripts|Writing books & scripts →]]
