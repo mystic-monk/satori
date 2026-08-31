@@ -3,6 +3,7 @@ import { createShare, fetchShares, revokeShareApi, type Share, type ShareRole } 
 
 interface SharePanelProps {
   path: string;
+  noteTitle: string;
   isOwner: boolean;
   open: boolean;
   onClose: () => void;
@@ -21,7 +22,7 @@ const ROLE_LABEL: Record<ShareRole, string> = {
 // all of that: no positioning math, no fighting the viewport edge, and
 // it's the same pattern already proven to work for two other panels this
 // same size.
-export default function SharePanel({ path, isOwner, open, onClose }: SharePanelProps) {
+export default function SharePanel({ path, noteTitle, isOwner, open, onClose }: SharePanelProps) {
   const [shares, setShares] = useState<Share[]>([]);
   const [role, setRole] = useState<ShareRole>("view");
   const [label, setLabel] = useState("");
@@ -69,7 +70,10 @@ export default function SharePanel({ path, isOwner, open, onClose }: SharePanelP
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal share-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h3 className="modal-title">Share{shares.length > 0 ? ` (${shares.length})` : ""}</h3>
+        <h3 className="modal-title">Share "{noteTitle}"{shares.length > 0 ? ` (${shares.length})` : ""}</h3>
+        <p className="settings-note">
+          Anyone with a link below sees only this one note — nothing else in your vault.
+        </p>
 
         <div className="share-create">
           <select value={role} onChange={(e) => setRole(e.target.value as ShareRole)} aria-label="New share link role">

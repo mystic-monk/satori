@@ -45,6 +45,7 @@ import GraphView from "./GraphView";
 import TableView from "./TableView";
 import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
+import HistoryView from "./HistoryView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
@@ -72,13 +73,10 @@ import {
   Calendar,
   ChevronDown,
   Download,
-  FileStack,
   FileText,
-  LayoutTemplate,
+  History,
   Menu as MenuIcon,
   Paintbrush,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   PenLine,
@@ -129,27 +127,6 @@ type ViewMode = "source" | "preview" | "split";
 // the hood (see selectView) — "favorites" is a pure client-side filter
 // over whatever's already loaded, since a favorited note can be any type.
 type SidebarView = "all" | "journal" | "canvas" | "favorites" | "tutorials";
-
-// Same icon set as the sidebar nav rows, so a type reads the same way
-// wherever it shows up (nav row, Recent list, etc).
-function NoteTypeIcon({ type }: { type: string | null }) {
-  switch (type) {
-    case "daily":
-      return <Calendar size={13} className="type-color-daily" />;
-    case "canvas":
-      return <Paintbrush size={13} className="type-color-canvas" />;
-    case "flashcard":
-      return <Brain size={13} className="type-color-flashcard" />;
-    case "template":
-      return <LayoutTemplate size={13} className="type-color-template" />;
-    case "reference":
-      return <BookOpen size={13} className="type-color-reference" />;
-    case null:
-      return <FileText size={13} />;
-    default:
-      return <FileStack size={13} className="type-color-other" />;
-  }
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -212,6 +189,7 @@ export default function App() {
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -226,6 +204,41 @@ export default function App() {
       localStorage.setItem("pkm-sidebar-collapsed", collapsed ? "0" : "1");
       return !collapsed;
     });
+  }
+
+  // Single source of truth for "which of the full-width special panels (if
+  // any) is showing" — replaces four separate setShowX(false) calls
+  // repeated at every switch point, which is exactly the shape of bug that
+  // once left the Calendar view stuck on-screen after navigating away from
+  // it (a forgotten reset at just one of those call sites).
+  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "history" | null;
+  // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
+  // effect, so its closures never see a fresh `showGraph`) can still read
+  // the live value instead of whatever it was at mount — same problem
+  // Editor.tsx's onCommentOnSelectionRef solves the same way.
+  const specialPanelRef = useRef<SpecialPanel>(null);
+  function showSpecialPanel(panel: SpecialPanel) {
+    specialPanelRef.current = panel;
+    setShowGraph(panel === "graph");
+    setShowTable(panel === "table");
+    setShowCalendar(panel === "calendar");
+    setShowFlashcards(panel === "flashcards");
+    setShowHistory(panel === "history");
+  }
+
+  // The rail's click gesture (VSCode's activity bar): clicking whichever
+  // icon is already active toggles the wide sidebar panel open/closed
+  // in place, without changing what it would show; clicking a different
+  // icon switches to it and makes sure the panel is open, even if it was
+  // collapsed a moment ago.
+  function railClick(isActive: boolean, activate: () => void) {
+    setSidebarOpen(false);
+    if (isActive) {
+      toggleSidebarCollapsed();
+      return;
+    }
+    activate();
+    if (sidebarCollapsed) toggleSidebarCollapsed();
   }
   // Mirrors sidebarCollapsed above, same reasoning — Properties/Comments/
   // History used to sit stacked above the editor, eating vertical space
@@ -394,7 +407,7 @@ export default function App() {
       listen("menu:today", () => onDailyNote()),
       listen("menu:reindex", () => onReindex()),
       listen("menu:toggle-sidebar", () => setSidebarOpen((o) => !o)),
-      listen("menu:toggle-graph", () => setShowGraph((g) => !g)),
+      listen("menu:toggle-graph", () => showSpecialPanel(specialPanelRef.current === "graph" ? null : "graph")),
       listen("menu:view-source", () => setViewMode("source")),
       listen("menu:view-split", () => setViewMode("split")),
       listen("menu:view-preview", () => setViewMode("preview")),
@@ -662,10 +675,7 @@ export default function App() {
   // from `notes`/`results` here would silently fall back to the raw file
   // path for a note opened immediately after creation.
   function openNote(p: string, knownTitle?: string, knownType?: string | null, fragment?: string) {
-    setShowGraph(false);
-    setShowTable(false);
-    setShowFlashcards(false);
-    setShowCalendar(false);
+    showSpecialPanel(null);
     setShareToken(null); // navigating from within the app is always as the owner
     setSidebarOpen(false); // closes the mobile drawer after picking a note
     const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
@@ -687,10 +697,7 @@ export default function App() {
 
   function selectView(view: SidebarView) {
     setSidebarView(view);
-    setShowGraph(false);
-    setShowTable(false);
-    setShowFlashcards(false);
-    setShowCalendar(false);
+    showSpecialPanel(null);
     if (view === "journal") setTypeFilter("daily");
     else if (view === "canvas") setTypeFilter("canvas");
     else setTypeFilter(""); // "all", "favorites", and "tutorials" all draw from the full set
@@ -924,6 +931,12 @@ export default function App() {
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
+  // True for the four "list-based" sidebar views (All Notes/Journal/
+  // Canvas/Tutorials), false for the five full-width special panels
+  // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
+  // and the wide panel below to avoid repeating all five negations at
+  // every active-state check.
+  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
@@ -1080,17 +1093,17 @@ export default function App() {
         { id: "new-note", label: "New Note", shortcut: IS_TAURI ? "⌘N" : undefined, action: onNewNote },
         { id: "new-canvas", label: "New Canvas", action: onNewCanvas },
         { id: "today", label: "Today's Journal Entry", action: onDailyNote },
-        { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => setShowGraph((g) => !g) },
-        { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => setShowTable((t) => !t) },
+        { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => showSpecialPanel(showGraph ? null : "graph") },
+        { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => showSpecialPanel(showTable ? null : "table") },
         {
           id: "toggle-calendar",
           label: showCalendar ? "Show Editor" : "Show Calendar",
-          action: () => setShowCalendar((c) => !c),
+          action: () => showSpecialPanel(showCalendar ? null : "calendar"),
         },
         {
           id: "toggle-flashcards",
           label: showFlashcards ? "Show Editor" : "Review Flashcards",
-          action: () => setShowFlashcards((f) => !f),
+          action: () => showSpecialPanel(showFlashcards ? null : "flashcards"),
         },
         { id: "view-source", label: "View: Source", action: () => setViewMode("source") },
         { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
@@ -1181,6 +1194,7 @@ export default function App() {
       {activePath && (
         <SharePanel
           path={activePath}
+          noteTitle={activeNote?.title ?? activePath}
           isOwner={role === "owner"}
           open={sharePanelOpen}
           onClose={() => setSharePanelOpen(false)}
@@ -1189,16 +1203,106 @@ export default function App() {
       <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
         <MenuIcon size={18} />
       </button>
-      <button
-        className={`sidebar-collapse-toggle ${sidebarCollapsed ? "collapsed" : ""}`}
-        style={sidebarCollapsed ? undefined : { left: sidebarResize.width - 16 }}
-        onClick={toggleSidebarCollapsed}
-        aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-      >
-        {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-      </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      {/* Always-visible icon rail (VSCode's activity bar) — the sidebar's
+          actual navigation now lives here, not in the wide panel below,
+          which just shows whatever content the active icon selected.
+          Clicking the already-active icon toggles the wide panel itself
+          open/closed in place (railClick); clicking a different one
+          switches to it and makes sure the panel is open. Same owner-only
+          gating the old nav row had — a share-link guest gets none of
+          this, just Settings at the bottom (still meaningful: theme). */}
+      <nav className={`sidebar-rail ${sidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-rail-top">
+          {!results && !shareToken && (
+            <>
+              <button
+                className={sidebarView === "all" && isListView ? "active" : ""}
+                onClick={() => railClick(sidebarView === "all" && isListView, () => selectView("all"))}
+                title="All Notes"
+              >
+                <FileText size={18} />
+              </button>
+              <button
+                className={sidebarView === "journal" && isListView ? "active" : ""}
+                onClick={() => railClick(sidebarView === "journal" && isListView, () => selectView("journal"))}
+                title="Journal"
+              >
+                <Calendar size={18} className="type-color-daily" />
+              </button>
+              <button
+                className={sidebarView === "canvas" && isListView ? "active" : ""}
+                onClick={() => railClick(sidebarView === "canvas" && isListView, () => selectView("canvas"))}
+                title="Canvas"
+              >
+                <Paintbrush size={18} className="type-color-canvas" />
+              </button>
+              <button
+                className={showGraph ? "active" : ""}
+                onClick={() => railClick(showGraph, () => showSpecialPanel("graph"))}
+                title="Graph"
+              >
+                <Waypoints size={18} />
+              </button>
+              <button
+                className={showTable ? "active" : ""}
+                onClick={() => railClick(showTable, () => showSpecialPanel("table"))}
+                title="Table"
+              >
+                <Table2 size={18} />
+              </button>
+              <button
+                className={showCalendar ? "active" : ""}
+                onClick={() => railClick(showCalendar, () => showSpecialPanel("calendar"))}
+                title="Calendar"
+              >
+                <Calendar size={18} className="type-color-daily" />
+              </button>
+              <button
+                className={showFlashcards ? "active" : ""}
+                onClick={() => railClick(showFlashcards, () => showSpecialPanel("flashcards"))}
+                title="Flashcards"
+              >
+                <Brain size={18} className="type-color-flashcard" />
+              </button>
+              <button
+                className={showHistory ? "active" : ""}
+                onClick={() => railClick(showHistory, () => showSpecialPanel("history"))}
+                title="History"
+              >
+                <History size={18} />
+              </button>
+              <button
+                className={sidebarView === "tutorials" && isListView ? "active" : ""}
+                onClick={() => railClick(sidebarView === "tutorials" && isListView, () => selectView("tutorials"))}
+                title="Tutorials"
+              >
+                <BookOpen size={18} className="type-color-tutorial" />
+              </button>
+            </>
+          )}
+        </div>
+        <div className="sidebar-rail-bottom">
+          <button onClick={() => setSettingsPanelOpen(true)} title="Settings">
+            <SettingsIcon size={18} />
+          </button>
+          {!IS_TAURI && !shareToken && authStatus && (
+            <button
+              className={authStatus.user ? "active" : ""}
+              onClick={() => setWorkspacePanelOpen(true)}
+              title={
+                authStatus.configured
+                  ? authStatus.user?.role === "admin"
+                    ? "Manage workspace members"
+                    : "Workspace"
+                  : "Set up team access"
+              }
+            >
+              <Users size={18} />
+            </button>
+          )}
+        </div>
+      </nav>
       <aside
         className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""} ${sidebarResize.resizing ? "resizing" : ""}`}
         style={sidebarCollapsed ? undefined : { width: sidebarResize.width }}
@@ -1242,26 +1346,6 @@ export default function App() {
           </div>
         )}
         <IdentityPanel />
-        <button className="settings-panel-trigger" onClick={() => setSettingsPanelOpen(true)} title="Settings">
-          <SettingsIcon size={14} />
-          Settings
-        </button>
-        {!IS_TAURI && !shareToken && authStatus && (
-          <button
-            className="workspace-panel-trigger"
-            onClick={() => setWorkspacePanelOpen(true)}
-            title={
-              authStatus.configured
-                ? authStatus.user?.role === "admin"
-                  ? "Manage workspace members"
-                  : "Workspace"
-                : "Set up team access"
-            }
-          >
-            <Users size={14} />
-            {authStatus.configured ? (authStatus.user ? `${authStatus.user.name} (${authStatus.user.role})` : "Workspace") : "Set up team access"}
-          </button>
-        )}
         <div className="sidebar-header">
           {!shareToken && (
             <input
@@ -1272,135 +1356,26 @@ export default function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
+          {!results && !shareToken && isListView && types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
+            <select
+              className="type-filter nav-more-types"
+              value={["", "daily", "canvas"].includes(typeFilter) ? "" : typeFilter}
+              onChange={(e) => {
+                setSidebarView("all");
+                setTypeFilter(e.target.value);
+              }}
+            >
+              <option value="">More types…</option>
+              {types
+                .filter((t) => t.type !== "daily" && t.type !== "canvas")
+                .map((t) => (
+                  <option key={t.type} value={t.type}>
+                    {t.type} ({t.count})
+                  </option>
+                ))}
+            </select>
+          )}
         </div>
-        {/* Vault-wide browsing/organization — same category as New note/
-            Reindex/search, all already owner-only — not just Graph (which
-            was the only row gated before this fix): a guest viewing one
-            shared note shouldn't be presented with a full vault-browsing
-            nav, even though the underlying note list they'd filter is
-            already visible to them for wikilink-resolution reasons (see
-            the requireOwner comment in server/index.ts) — showing the
-            affordance anyway is inconsistent with how every other
-            vault-wide action is already hidden from guests. */}
-        {!results && !shareToken && (
-          <nav className="sidebar-nav">
-            <button
-              className={sidebarView === "all" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
-              onClick={() => selectView("all")}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <FileText size={15} />
-              </span>
-              All Notes
-            </button>
-            <button
-              className={sidebarView === "journal" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
-              onClick={() => selectView("journal")}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Calendar size={15} className="type-color-daily" />
-              </span>
-              Journal
-            </button>
-            <button
-              className={sidebarView === "canvas" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
-              onClick={() => selectView("canvas")}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Paintbrush size={15} className="type-color-canvas" />
-              </span>
-              Canvas
-            </button>
-            <button
-              className={showGraph ? "active" : ""}
-              onClick={() => {
-                setShowGraph((g) => !g);
-                setShowTable(false);
-                setShowFlashcards(false);
-                setShowCalendar(false);
-                setSidebarOpen(false);
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Waypoints size={15} />
-              </span>
-              Graph
-            </button>
-            <button
-              className={showTable ? "active" : ""}
-              onClick={() => {
-                setShowTable((t) => !t);
-                setShowGraph(false);
-                setShowFlashcards(false);
-                setShowCalendar(false);
-                setSidebarOpen(false);
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Table2 size={15} />
-              </span>
-              Table
-            </button>
-            <button
-              className={showCalendar ? "active" : ""}
-              onClick={() => {
-                setShowCalendar((c) => !c);
-                setShowGraph(false);
-                setShowTable(false);
-                setShowFlashcards(false);
-                setSidebarOpen(false);
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Calendar size={15} className="type-color-daily" />
-              </span>
-              Calendar
-            </button>
-            <button
-              className={showFlashcards ? "active" : ""}
-              onClick={() => {
-                setShowFlashcards((f) => !f);
-                setShowGraph(false);
-                setShowTable(false);
-                setShowCalendar(false);
-                setSidebarOpen(false);
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Brain size={15} className="type-color-flashcard" />
-              </span>
-              Flashcards
-            </button>
-            <button
-              className={sidebarView === "tutorials" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
-              onClick={() => selectView("tutorials")}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <BookOpen size={15} className="type-color-tutorial" />
-              </span>
-              Tutorials
-            </button>
-            {types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
-              <select
-                className="type-filter nav-more-types"
-                value={["", "daily", "canvas"].includes(typeFilter) ? "" : typeFilter}
-                onChange={(e) => {
-                  setSidebarView("all");
-                  setTypeFilter(e.target.value);
-                }}
-              >
-                <option value="">More types…</option>
-                {types
-                  .filter((t) => t.type !== "daily" && t.type !== "canvas")
-                  .map((t) => (
-                    <option key={t.type} value={t.type}>
-                      {t.type} ({t.count})
-                    </option>
-                  ))}
-              </select>
-            )}
-          </nav>
-        )}
         {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
           <div className="sidebar-section">
             <div className="sidebar-section-label">Favorites</div>
@@ -1414,28 +1389,6 @@ export default function App() {
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="note-title">{n.title}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {!results && sidebarView === "all" && !typeFilter && recentNotes.length > 0 && (
-          <div className="sidebar-section">
-            <div className="sidebar-section-label">Recent</div>
-            <ul className="note-list-compact">
-              {recentNotes.map((n) => (
-                <li
-                  key={n.path}
-                  className={n.path === activePath ? "active" : ""}
-                  onClick={() => openNote(n.path, undefined, n.type)}
-                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path, undefined, n.type))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="note-type-icon" aria-hidden="true">
-                    <NoteTypeIcon type={n.type} />
-                  </span>
                   <div className="note-title">{n.title}</div>
                 </li>
               ))}
@@ -1594,6 +1547,8 @@ export default function App() {
           <CalendarView notes={notes} onNavigate={openNote} />
         ) : showFlashcards ? (
           <FlashcardReview shareToken={shareToken} />
+        ) : showHistory ? (
+          <HistoryView recentNotes={recentNotes} onNavigate={(path, title, type) => openNote(path, title, type)} />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.
@@ -1637,7 +1592,7 @@ export default function App() {
                 </div>
               )}
               {role === "owner" && (
-                <button onClick={() => setSharePanelOpen(true)}>
+                <button onClick={() => setSharePanelOpen(true)} title="Share this note — generates a link scoped to just this note">
                   <Share2 size={13} /> Share
                 </button>
               )}
