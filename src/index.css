@@ -382,42 +382,58 @@ body {
   background: var(--bg-hover);
 }
 
-/* Always-visible icon rail (VSCode's activity bar) — a real flex child
-   (not a floating overlay the way .sidebar-collapse-toggle used to be),
-   so its own width naturally reserves the space next to it; nothing else
-   needs to compensate for it the way .editor-pane.sidebar-collapsed's old
-   padding-left hack did. */
+/* Always-visible left nav — a real flex child (not a floating overlay the
+   way .sidebar-collapse-toggle used to be), so its own width naturally
+   reserves the space next to it; nothing else needs to compensate for it
+   the way .editor-pane.sidebar-collapsed's old padding-left hack did.
+   Icon + label, deliberately not icon-only: a compact icon-only strip
+   needed a hover to identify anything (bad for anyone who doesn't
+   already know the app) and reads as a too-literal copy of VSCode's
+   activity bar, which this isn't trying to be. */
 .sidebar-rail {
-  width: 48px;
+  width: 190px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
-  padding: 8px 0;
+  padding: 8px 6px;
+  overflow-y: auto;
 }
 
 .sidebar-rail-top,
 .sidebar-rail-bottom {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
+}
+
+.sidebar-rail-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 6px;
 }
 
 .sidebar-rail button {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  gap: 10px;
+  padding: 7px 8px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text-dim);
+  font-size: 13px;
+  text-align: left;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sidebar-rail button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-rail button:hover {
@@ -427,7 +443,8 @@ body {
 
 .sidebar-rail button.active {
   background: var(--bg-active);
-  color: var(--accent);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .nav-icon {
@@ -1994,8 +2011,13 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+/* Same 760px reading width as .preview, not an arbitrary narrower one —
+   consistent with the rest of the app's content-width convention now
+   that the note-list panel auto-collapses for this view (railClick,
+   App.tsx) instead of sitting open next to it as a second, unrelated
+   list. */
 .history-view {
-  max-width: 640px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -2422,11 +2444,15 @@ button:disabled:hover {
   }
 
   /* The rail slides in together with the wide panel below, docked to its
-     left edge (left: 48px, not 0) so the two compose into one drawer —
-     same z-index/transform/transition, both keyed off sidebarOpen. */
+     left edge so the two compose into one drawer — same z-index/
+     transform/transition, both keyed off sidebarOpen. Narrower than the
+     190px desktop rail (labels still fit, just tighter) so the two
+     panels together don't overflow a narrow phone viewport — .sidebar's
+     width below is computed against this same 130px. */
   .sidebar-rail {
     position: fixed;
     inset: 0 auto 0 0;
+    width: 130px;
     height: 100%;
     z-index: 15;
     transform: translateX(-100%);
@@ -2441,7 +2467,7 @@ button:disabled:hover {
 
   /* Clears the hamburger (fixed top:10px/left:10px, 34px square, always
      visible on mobile including while the drawer is open) so it doesn't
-     sit on top of the rail's first one or two icons. */
+     sit on top of the rail's first one or two items. */
   .sidebar-rail-top {
     margin-top: 44px;
   }
@@ -2449,8 +2475,8 @@ button:disabled:hover {
   .sidebar,
   .sidebar.collapsed {
     position: fixed;
-    inset: 0 auto 0 48px;
-    width: 78vw;
+    inset: 0 auto 0 130px;
+    width: calc(100vw - 130px);
     max-width: 300px;
     height: 100%;
     z-index: 15;
@@ -2606,10 +2632,33 @@ button:disabled:hover {
   cursor: default;
 }
 
+.graph-reset-view {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+
+.graph-reset-view:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
 .graph-svg {
   width: 100%;
   flex: 1;
   min-height: 0;
+  cursor: grab;
+}
+
+.graph-svg.graph-panning {
+  cursor: grabbing;
 }
 
 .graph-links line {
@@ -2627,8 +2676,38 @@ button:disabled:hover {
 
 .graph-node circle {
   fill: var(--accent);
-  cursor: pointer;
-  transition: opacity 0.15s;
+  cursor: grab;
+  transition: opacity 0.15s, r 0.15s;
+}
+
+.graph-node:hover circle {
+  r: 7;
+}
+
+.graph-node-active:hover circle {
+  r: 10;
+}
+
+/* Dragging reheats the simulation (GraphView.tsx), so position already
+   updates every tick without any help from CSS — this is purely a tactile
+   "you're holding this one" signal layered on top: a grabbing cursor and
+   a glow, not a transform (which would fight the physics-driven position
+   the tick loop is already setting every frame). */
+.graph-node-dragging circle {
+  cursor: grabbing;
+  filter: drop-shadow(0 0 6px var(--accent));
+}
+
+/* A dashed outer ring for a double-click-pinned node — the visual
+   difference between "dragged to this last known spot, will pop back
+   into the simulation's own layout when nudged" (unpinned) and "held
+   here on purpose" (pinned). */
+.graph-node-pin-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
 }
 
 /* Same category colors as App.tsx's NoteTypeIcon — declared after the

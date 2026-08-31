@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reminders: a 🔔 toolbar button sets a `remind_at` date/time on the open note; a native notification (Tauri, via `tauri-plugin-notification`) or browser notification fires when it's due, checked every 20s against the notes list (`src/reminders.ts`, `src/reminderSchedule.ts`). Only fires while Satori is open — not a background/push notification, see README's Roadmap
 - Sidebar: Recent/Favorites now only show in the default "All Notes" view — switching to Tutorials/Journal/Canvas/a type filter previously left them sitting above the filtered list, taking up space and making the filter look like it hadn't done anything
 - Calendar sync (`.ics`, universal — no OAuth or API keys with any vendor): a `.ics` button on the reminder popup and on every `​```timetable` block downloads a standard iCalendar file Apple/Google/Outlook Calendar all import (`shared/ics.ts`). If you're running the optional server, Settings → Calendar feed also exposes a live, token-gated `GET /api/calendar.ics` URL — subscribe once in any calendar app and it re-fetches on its own schedule, picking up new/changed reminders and timetable entries automatically
+- Graph view is interactive now: drag a node to nudge the force layout (neighbors react rather than the one node just relocating), double-click to pin a node in place, scroll to zoom toward the cursor, drag the background to pan, and a "Reset view" button clears pins and returns to the auto-fit framing
+- Left sidebar navigation moved into an always-visible rail (icon + label) — Settings and Workspace moved off the note list into the rail's bottom, and Recent moved into its own History view (rail icon) instead of always sitting above the note list
+
+### Changed
+
+- The rail's icon-only first pass (still icon + no label) was hard to read without hovering and read as too close a copy of VSCode's activity bar — icon + text label now, and switching to a full-panel view (Graph/Table/Calendar/Flashcards/History) auto-collapses the note-list panel instead of leaving two unrelated lists on screen at once
 
 ### Fixed
 

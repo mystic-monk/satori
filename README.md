@@ -21,7 +21,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Syntax-highlighted code blocks with a one-click copy button; the editor itself syntax-highlights ~180 languages as you type
 - Interactive task/checkbox lists (`- [ ]`) — click to toggle, right in preview
 - Excalidraw canvas notes, embedded natively
-- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections
+- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections. Nodes are draggable (reheats the layout, so neighbors nudge out of the way rather than just repositioning the one node), double-click to pin one in place, scroll to zoom toward the cursor, drag the background to pan
 - Section and block references: `[[Note#Heading]]` links/embeds just that section, `[[Note#^block-id]]` links/embeds one specific line — not just whole-note transclusion
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)

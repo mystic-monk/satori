@@ -9,7 +9,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { fetchLinks, fetchNotes } from "./api";
-import { Waypoints } from "lucide-react";
+import { Waypoints, Maximize2 } from "lucide-react";
 
 interface GraphNode extends SimulationNodeDatum {
   id: string;
@@ -39,6 +39,8 @@ const WIDTH = 800;
 const HEIGHT = 560;
 const DEFAULT_VIEWBOX = `${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`;
 const MAX_LABEL_LEN = 28;
+const MIN_ZOOM_W = 80;
+const MAX_ZOOM_W = 6000;
 
 // Same category set as App.tsx's NoteTypeIcon, so a type reads the same
 // color wherever it shows up — a class per type rather than an inline
@@ -83,6 +85,11 @@ function scopedGraph(rawNodes: RawNode[], rawLinks: RawLink[], mode: "full" | "l
   };
 }
 
+function parseViewBox(vb: string): [number, number, number, number] {
+  const [x, y, w, h] = vb.split(" ").map(Number);
+  return [x, y, w, h];
+}
+
 export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [rawNodes, setRawNodes] = useState<RawNode[]>([]);
   const [rawLinks, setRawLinks] = useState<RawLink[]>([]);
@@ -91,9 +98,27 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [tick, setTick] = useState(0);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
   const simRef = useRef<Simulation<GraphNode, undefined> | null>(null);
   const tickCountRef = useRef(0);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  // Once someone drags a node, pans, or zooms, the auto-fit-to-content
+  // behavior below (which recomputes viewBox every tick) would otherwise
+  // fight whatever they just did — a dragged node reheats the simulation,
+  // which would keep re-centering the view around it. A ref (not state):
+  // read inside the tick closure, set from event handlers, no re-render
+  // of its own needed either way.
+  const userAdjustedViewRef = useRef(false);
+  // Background-pan tracking, plain mutable object rather than state — high-
+  // frequency pointermove updates during a pan shouldn't each trigger a
+  // full re-render bookkeeping pass on top of the setViewBox they already
+  // cause.
+  const panRef = useRef<{ startClientX: number; startClientY: number; startVb: [number, number, number, number] } | null>(
+    null
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +139,8 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   useEffect(() => {
     simRef.current?.stop();
     tickCountRef.current = 0;
+    userAdjustedViewRef.current = false;
+    setPinnedIds(new Set());
     setViewBox(DEFAULT_VIEWBOX);
     if (rawNodes.length === 0) {
       setNodes([]);
@@ -149,7 +176,10 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
         // tick 40 the simulation's own per-tick movement is already small
         // (alpha decays geometrically), so continuously refitting doesn't
         // read as jittery — it just tracks the last bit of settling.
-        if (tickCountRef.current > 40) {
+        // Skipped entirely once the user has manually framed their own
+        // view (dragged/panned/zoomed) — seeing that gesture immediately
+        // overridden by an auto-fit would feel broken, not helpful.
+        if (tickCountRef.current > 40 && !userAdjustedViewRef.current) {
           const xs = nodeList.map((n) => n.x ?? 0);
           const ys = nodeList.map((n) => n.y ?? 0);
           const pad = 70;
@@ -176,6 +206,149 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     };
   }, [rawNodes, rawLinks, mode, activePath]);
 
+  // Native (not React's onWheel) so preventDefault reliably stops the page
+  // itself from scrolling while zooming the graph — React attaches wheel
+  // listeners as passive by default, which silently no-ops preventDefault.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      userAdjustedViewRef.current = true;
+      const [vbX, vbY, vbW, vbH] = parseViewBox(viewBox);
+      const rect = svg!.getBoundingClientRect();
+      const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+      const newW = Math.min(MAX_ZOOM_W, Math.max(MIN_ZOOM_W, vbW * factor));
+      const newH = newW * (vbH / vbW);
+      // Zoom toward the cursor, not the box center — the point under the
+      // mouse stays under the mouse, same feel as Figma/Miro/any canvas
+      // app rather than a plain "zoom in place" that drifts the content
+      // out from under you.
+      const cx = vbX + ((e.clientX - rect.left) / rect.width) * vbW;
+      const cy = vbY + ((e.clientY - rect.top) / rect.height) * vbH;
+      const newX = cx - (cx - vbX) * (newW / vbW);
+      const newY = cy - (cy - vbY) * (newH / vbH);
+      setViewBox(`${newX} ${newY} ${newW} ${newH}`);
+    }
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewBox]);
+
+  function clientToSvgPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = svgRef.current!.getBoundingClientRect();
+    const [vbX, vbY, vbW, vbH] = parseViewBox(viewBox);
+    return {
+      x: vbX + ((clientX - rect.left) / rect.width) * vbW,
+      y: vbY + ((clientY - rect.top) / rect.height) * vbH,
+    };
+  }
+
+  // Dragging reheats the simulation (alphaTarget) instead of just moving
+  // the one node — neighbors nudge out of the way and springs stretch, the
+  // actual "pull the nodes" playfulness this was asked for, not a static
+  // repositioning. fx/fy (d3-force's pinned-position fields) are released
+  // on pointerup unless the node's been explicitly double-click-pinned.
+  // Click still needs to open the note — a plain click is a pointerdown
+  // and pointerup at essentially the same spot, so onClick can't just
+  // check "did a drag happen" via draggingId (already cleared to null by
+  // the pointerup handler that runs before the click fires). Tracked by
+  // distance instead: past a few px of movement it's a drag, and the
+  // click that follows the eventual pointerup is suppressed.
+  const dragMovedRef = useRef(false);
+  // A real double-click fires click, click, then dblclick in sequence —
+  // navigating on the first click (as a plain click handler would)
+  // leaves the graph before the second click or the dblclick ever
+  // register, so double-click-to-pin could never fire. Standard fix:
+  // delay navigation briefly and cancel it if a second click (handled by
+  // onDoubleClick below) arrives first.
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onNodePointerDown(e: React.PointerEvent, n: GraphNode) {
+    e.stopPropagation();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    dragMovedRef.current = false;
+    setDraggingId(n.id);
+    userAdjustedViewRef.current = true;
+    n.fx = n.x;
+    n.fy = n.y;
+    simRef.current?.alphaTarget(0.3).restart();
+  }
+
+  function onNodePointerMove(e: React.PointerEvent, n: GraphNode) {
+    if (draggingId !== n.id) return;
+    const p = clientToSvgPoint(e.clientX, e.clientY);
+    if (Math.hypot(p.x - (n.fx ?? p.x), p.y - (n.fy ?? p.y)) > 1) dragMovedRef.current = true;
+    n.fx = p.x;
+    n.fy = p.y;
+  }
+
+  function endNodeDrag(n: GraphNode) {
+    setDraggingId(null);
+    simRef.current?.alphaTarget(0);
+    if (!pinnedIds.has(n.id)) {
+      n.fx = null;
+      n.fy = null;
+    }
+  }
+
+  function onNodeDoubleClick(e: React.MouseEvent, n: GraphNode) {
+    e.stopPropagation();
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(n.id)) {
+        next.delete(n.id);
+        n.fx = null;
+        n.fy = null;
+      } else {
+        next.add(n.id);
+        n.fx = n.x;
+        n.fy = n.y;
+      }
+      return next;
+    });
+  }
+
+  function onBackgroundPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    userAdjustedViewRef.current = true;
+    panRef.current = { startClientX: e.clientX, startClientY: e.clientY, startVb: parseViewBox(viewBox) };
+    setIsPanning(true);
+  }
+
+  function onBackgroundPointerMove(e: React.PointerEvent) {
+    if (!panRef.current) return;
+    const { startClientX, startClientY, startVb } = panRef.current;
+    const rect = svgRef.current!.getBoundingClientRect();
+    const [vbX, vbY, vbW, vbH] = startVb;
+    const dx = ((e.clientX - startClientX) / rect.width) * vbW;
+    const dy = ((e.clientY - startClientY) / rect.height) * vbH;
+    setViewBox(`${vbX - dx} ${vbY - dy} ${vbW} ${vbH}`);
+  }
+
+  function onBackgroundPointerUp() {
+    panRef.current = null;
+    setIsPanning(false);
+  }
+
+  function resetView() {
+    userAdjustedViewRef.current = false;
+    tickCountRef.current = 0;
+    setViewBox(DEFAULT_VIEWBOX);
+    setPinnedIds((prev) => {
+      for (const n of nodes) {
+        if (prev.has(n.id)) {
+          n.fx = null;
+          n.fy = null;
+        }
+      }
+      return new Set();
+    });
+    simRef.current?.alphaTarget(0.3).restart();
+    setTimeout(() => simRef.current?.alphaTarget(0), 300);
+  }
+
   if (rawNodes.length === 0) {
     return (
       <div className="graph-empty">
@@ -200,8 +373,8 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     <div className="graph-view">
       <div className="graph-caption">
         <span>
-          Lines connect notes through <code>[[wikilinks]]</code> — hover a note to trace its connections, click to
-          open it.
+          Lines connect notes through <code>[[wikilinks]]</code> — hover a note to trace its connections, drag one to
+          nudge the layout, double-click to pin it in place, click to open it.
         </span>
         <div className="graph-mode-toggle">
           <button className={mode === "full" ? "active" : ""} onClick={() => setMode("full")}>
@@ -216,6 +389,9 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
             This note
           </button>
         </div>
+        <button className="graph-reset-view" onClick={resetView} title="Reset pan/zoom and unpin every node">
+          <Maximize2 size={13} /> Reset view
+        </button>
       </div>
       {mode === "local" && nodes.length <= 1 ? (
         <div className="graph-empty">
@@ -228,7 +404,15 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
           No notes to graph yet.
         </div>
       ) : (
-        <svg className="graph-svg" data-tick={tick} viewBox={viewBox}>
+        <svg
+          ref={svgRef}
+          className={`graph-svg ${isPanning ? "graph-panning" : ""}`}
+          data-tick={tick}
+          viewBox={viewBox}
+          onPointerDown={onBackgroundPointerDown}
+          onPointerMove={onBackgroundPointerMove}
+          onPointerUp={onBackgroundPointerUp}
+        >
           <g className="graph-links">
             {links.map((l, i) => (
               <line
@@ -252,15 +436,35 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
                   "graph-node",
                   graphNodeTypeClass(n.type),
                   n.id === activePath ? "graph-node-active" : "",
+                  n.id === draggingId ? "graph-node-dragging" : "",
+                  pinnedIds.has(n.id) ? "graph-node-pinned" : "",
                   hoveredId && n.id !== hoveredId && !connectedIds.has(n.id) ? "graph-node-dim" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => onNavigate(n.id)}
+                onClick={() => {
+                  if (dragMovedRef.current || clickTimerRef.current) return;
+                  clickTimerRef.current = setTimeout(() => {
+                    clickTimerRef.current = null;
+                    onNavigate(n.id);
+                  }, 220);
+                }}
+                onDoubleClick={(e) => {
+                  if (clickTimerRef.current) {
+                    clearTimeout(clickTimerRef.current);
+                    clickTimerRef.current = null;
+                  }
+                  onNodeDoubleClick(e, n);
+                }}
+                onPointerDown={(e) => onNodePointerDown(e, n)}
+                onPointerMove={(e) => onNodePointerMove(e, n)}
+                onPointerUp={() => endNodeDrag(n)}
+                onPointerCancel={() => endNodeDrag(n)}
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
                 <title>{n.title}</title>
+                {pinnedIds.has(n.id) && <circle className="graph-node-pin-ring" r={(n.id === activePath ? 8 : 5) + 5} />}
                 <circle r={n.id === activePath ? 8 : 5} />
                 <text dy={-10}>{truncateLabel(n.title)}</text>
               </g>

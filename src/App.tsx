@@ -226,19 +226,23 @@ export default function App() {
     setShowHistory(panel === "history");
   }
 
-  // The rail's click gesture (VSCode's activity bar): clicking whichever
-  // icon is already active toggles the wide sidebar panel open/closed
-  // in place, without changing what it would show; clicking a different
-  // icon switches to it and makes sure the panel is open, even if it was
-  // collapsed a moment ago.
-  function railClick(isActive: boolean, activate: () => void) {
+  // Clicking whichever nav item is already active toggles the wide note-
+  // list panel open/closed in place. Clicking a different item switches to
+  // it and sets the panel's visibility based on what that item actually
+  // is: a list view (All Notes/Journal/Canvas/Tutorials) opens it, since
+  // that's where its content lives; a special full-panel view (Graph/
+  // Table/Calendar/Flashcards/History) closes it — its own content
+  // already fills the main area, so leaving the note list open too just
+  // showed two unrelated lists on screen at once with no visible
+  // connection between them.
+  function railClick(isActive: boolean, activate: () => void, isSpecialView: boolean) {
     setSidebarOpen(false);
     if (isActive) {
       toggleSidebarCollapsed();
       return;
     }
     activate();
-    if (sidebarCollapsed) toggleSidebarCollapsed();
+    setSidebarCollapsed(isSpecialView);
   }
   // Mirrors sidebarCollapsed above, same reasoning — Properties/Comments/
   // History used to sit stacked above the editor, eating vertical space
@@ -1209,96 +1213,91 @@ export default function App() {
           which just shows whatever content the active icon selected.
           Clicking the already-active icon toggles the wide panel itself
           open/closed in place (railClick); clicking a different one
-          switches to it and makes sure the panel is open. Same owner-only
-          gating the old nav row had — a share-link guest gets none of
-          this, just Settings at the bottom (still meaningful: theme). */}
+          switches to it. Icon + label, not icon-only — a compact
+          icon-only rail needed a hover to identify anything, which reads
+          fine to someone who already knows the app and badly to anyone
+          else. Same owner-only gating the old nav row had — a share-link
+          guest gets none of this, just Settings at the bottom (still
+          meaningful: theme). */}
       <nav className={`sidebar-rail ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-rail-top">
           {!results && !shareToken && (
             <>
               <button
                 className={sidebarView === "all" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "all" && isListView, () => selectView("all"))}
-                title="All Notes"
+                onClick={() => railClick(sidebarView === "all" && isListView, () => selectView("all"), false)}
               >
-                <FileText size={18} />
+                <FileText size={17} />
+                <span>All Notes</span>
               </button>
               <button
                 className={sidebarView === "journal" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "journal" && isListView, () => selectView("journal"))}
-                title="Journal"
+                onClick={() => railClick(sidebarView === "journal" && isListView, () => selectView("journal"), false)}
               >
-                <Calendar size={18} className="type-color-daily" />
+                <Calendar size={17} className="type-color-daily" />
+                <span>Journal</span>
               </button>
               <button
                 className={sidebarView === "canvas" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "canvas" && isListView, () => selectView("canvas"))}
-                title="Canvas"
+                onClick={() => railClick(sidebarView === "canvas" && isListView, () => selectView("canvas"), false)}
               >
-                <Paintbrush size={18} className="type-color-canvas" />
+                <Paintbrush size={17} className="type-color-canvas" />
+                <span>Canvas</span>
               </button>
-              <button
-                className={showGraph ? "active" : ""}
-                onClick={() => railClick(showGraph, () => showSpecialPanel("graph"))}
-                title="Graph"
-              >
-                <Waypoints size={18} />
+              <button className={showGraph ? "active" : ""} onClick={() => railClick(showGraph, () => showSpecialPanel("graph"), true)}>
+                <Waypoints size={17} />
+                <span>Graph</span>
               </button>
-              <button
-                className={showTable ? "active" : ""}
-                onClick={() => railClick(showTable, () => showSpecialPanel("table"))}
-                title="Table"
-              >
-                <Table2 size={18} />
+              <button className={showTable ? "active" : ""} onClick={() => railClick(showTable, () => showSpecialPanel("table"), true)}>
+                <Table2 size={17} />
+                <span>Table</span>
               </button>
               <button
                 className={showCalendar ? "active" : ""}
-                onClick={() => railClick(showCalendar, () => showSpecialPanel("calendar"))}
-                title="Calendar"
+                onClick={() => railClick(showCalendar, () => showSpecialPanel("calendar"), true)}
               >
-                <Calendar size={18} className="type-color-daily" />
+                <Calendar size={17} className="type-color-daily" />
+                <span>Calendar</span>
               </button>
               <button
                 className={showFlashcards ? "active" : ""}
-                onClick={() => railClick(showFlashcards, () => showSpecialPanel("flashcards"))}
-                title="Flashcards"
+                onClick={() => railClick(showFlashcards, () => showSpecialPanel("flashcards"), true)}
               >
-                <Brain size={18} className="type-color-flashcard" />
+                <Brain size={17} className="type-color-flashcard" />
+                <span>Flashcards</span>
               </button>
               <button
                 className={showHistory ? "active" : ""}
-                onClick={() => railClick(showHistory, () => showSpecialPanel("history"))}
-                title="History"
+                onClick={() => railClick(showHistory, () => showSpecialPanel("history"), true)}
               >
-                <History size={18} />
+                <History size={17} />
+                <span>History</span>
               </button>
               <button
                 className={sidebarView === "tutorials" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "tutorials" && isListView, () => selectView("tutorials"))}
-                title="Tutorials"
+                onClick={() => railClick(sidebarView === "tutorials" && isListView, () => selectView("tutorials"), false)}
               >
-                <BookOpen size={18} className="type-color-tutorial" />
+                <BookOpen size={17} className="type-color-tutorial" />
+                <span>Tutorials</span>
               </button>
             </>
           )}
         </div>
         <div className="sidebar-rail-bottom">
-          <button onClick={() => setSettingsPanelOpen(true)} title="Settings">
-            <SettingsIcon size={18} />
+          <button onClick={() => setSettingsPanelOpen(true)}>
+            <SettingsIcon size={17} />
+            <span>Settings</span>
           </button>
           {!IS_TAURI && !shareToken && authStatus && (
-            <button
-              className={authStatus.user ? "active" : ""}
-              onClick={() => setWorkspacePanelOpen(true)}
-              title={
-                authStatus.configured
-                  ? authStatus.user?.role === "admin"
-                    ? "Manage workspace members"
+            <button className={authStatus.user ? "active" : ""} onClick={() => setWorkspacePanelOpen(true)}>
+              <Users size={17} />
+              <span>
+                {authStatus.configured
+                  ? authStatus.user
+                    ? `${authStatus.user.name} (${authStatus.user.role})`
                     : "Workspace"
-                  : "Set up team access"
-              }
-            >
-              <Users size={18} />
+                  : "Set up team access"}
+              </span>
             </button>
           )}
         </div>
