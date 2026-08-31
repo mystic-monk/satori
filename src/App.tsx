@@ -76,13 +76,13 @@ import {
   FileText,
   History,
   Menu as MenuIcon,
+  MessageSquare,
   Paintbrush,
-  PanelRightClose,
-  PanelRightOpen,
   PenLine,
   RotateCw,
   Settings as SettingsIcon,
   Share2,
+  SlidersHorizontal,
   Star,
   Table2,
   Users,
@@ -1689,17 +1689,28 @@ export default function App() {
           </div>
         )}
       </main>
-      {!showGraph && !showTable && !showFlashcards && !showCalendar && role !== "denied" && activePath && localSession && (
+      {isListView && role !== "denied" && activePath && localSession && (
         <>
-          <button
-            className={`right-panel-collapse-toggle ${rightPanelCollapsed ? "collapsed" : ""}`}
-            style={rightPanelCollapsed ? undefined : { right: rightPanelResize.width - 16 }}
-            onClick={toggleRightPanelCollapsed}
-            aria-label={rightPanelCollapsed ? "Show properties panel" : "Hide properties panel"}
-            title={rightPanelCollapsed ? "Show properties panel" : "Hide properties panel"}
-          >
-            {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </button>
+          {/* Mirrors the left sidebar-rail's visual language — a real
+              flex child, always visible, rather than a floating overlay
+              button. Properties/Comments/History still all show together
+              when open (an accordion, not separate views the way the
+              left rail's icons are), so there's no per-icon active state
+              to track here; every icon just opens the panel if it's
+              collapsed, or collapses it if it's already open — the same
+              "one gesture, in the same reachable place either way"
+              simplicity the left rail's click-to-toggle has. */}
+          <nav className="right-panel-rail">
+            <button onClick={toggleRightPanelCollapsed} title={rightPanelCollapsed ? "Show properties" : "Hide properties"}>
+              <SlidersHorizontal size={18} />
+            </button>
+            <button onClick={toggleRightPanelCollapsed} title={rightPanelCollapsed ? "Show comments" : "Hide comments"}>
+              <MessageSquare size={18} />
+            </button>
+            <button onClick={toggleRightPanelCollapsed} title={rightPanelCollapsed ? "Show history" : "Hide history"}>
+              <History size={18} />
+            </button>
+          </nav>
           <aside
             className={`right-panel ${rightPanelCollapsed ? "collapsed" : ""} ${rightPanelResize.resizing ? "resizing" : ""}`}
             style={rightPanelCollapsed ? undefined : { width: rightPanelResize.width }}
