@@ -21,6 +21,36 @@ export interface Identity {
   // email on a different device deterministically reproduces the same
   // `id`, which is the actual point: portability without an export file.
   email?: string;
+  // Self-declared, optional — one of PERSONAS' ids, or unset. Purely a
+  // display label (the topbar tag, IdentityPanel) and a shortcut into the
+  // matching section of tutorial/who-its-for; nothing else reads it.
+  persona?: string;
+}
+
+// Mirrors the section headings in starter-vault/tutorial/who-its-for.md —
+// `heading` is that section's exact heading text, used to deep-link the
+// topbar persona tag into the matching part of the tutorial.
+export interface Persona {
+  id: string;
+  label: string;
+  heading: string;
+}
+
+export const PERSONAS: Persona[] = [
+  { id: "author", label: "Author / Screenwriter", heading: "Script & screenwriters, novelists" },
+  { id: "researcher", label: "Researcher", heading: "Researchers & academics" },
+  { id: "student", label: "Student", heading: "Students" },
+  { id: "team", label: "Team member", heading: "Teams & small orgs" },
+  { id: "planner", label: "Planner", heading: "Project managers & planners" },
+  { id: "journaler", label: "Journaler", heading: "Journalers & personal note-takers" },
+  { id: "developer", label: "Developer", heading: "Developers & technical writers" },
+  { id: "consultant", label: "Consultant", heading: "Consultants & freelancers" },
+  { id: "privacy", label: "Privacy-focused", heading: "Privacy-conscious professionals" },
+  { id: "visual", label: "Visual thinker", heading: "Visual thinkers" },
+];
+
+export function getPersona(id: string | undefined): Persona | undefined {
+  return PERSONAS.find((p) => p.id === id);
 }
 
 const IDENTITY_KEY = "pkm-identity";
@@ -92,6 +122,12 @@ export function getIdentity(): Identity {
 
 export function setDisplayName(name: string): Identity {
   return save({ ...getIdentity(), name });
+}
+
+// Pass undefined to clear back to "not set" — a real, distinct choice from
+// any persona, not just the initial default.
+export function setPersona(persona: string | undefined): Identity {
+  return save({ ...getIdentity(), persona });
 }
 
 // Public info only (id/name/color) — safe to paste anywhere, unlike a

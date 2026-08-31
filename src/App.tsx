@@ -89,7 +89,7 @@ import {
   Vault as VaultIcon,
   Waypoints,
 } from "lucide-react";
-import { getIdentity } from "./identity";
+import { getIdentity, getPersona } from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, pruneDeleted, type RecentNote } from "./recentNotes";
 import { queryNotes } from "./noteQuery";
@@ -1296,6 +1296,15 @@ export default function App() {
             <span className="identity-color-dot" style={{ background: getIdentity().color }} aria-hidden="true" />
             You: {getIdentity().name}
           </button>
+          {getPersona(getIdentity().persona) && (
+            <button
+              className="app-topbar-persona"
+              title={`${getPersona(getIdentity().persona)!.label} — open the matching part of the tutorial`}
+              onClick={() => openNote("tutorial/who-its-for.md", undefined, undefined, getPersona(getIdentity().persona)!.heading)}
+            >
+              {getPersona(getIdentity().persona)!.label}
+            </button>
+          )}
         </div>
       </header>
       <div className="app-body">

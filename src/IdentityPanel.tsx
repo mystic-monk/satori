@@ -4,8 +4,10 @@ import {
   exportIdentity,
   getIdentity,
   importIdentity,
+  PERSONAS,
   setDisplayName,
   setIdentityFromEmail,
+  setPersona,
   type Identity,
 } from "./identity";
 import PromptDialog from "./PromptDialog";
@@ -79,6 +81,10 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
     setIdentity(clearEmailIdentity());
   }
 
+  function onPersonaChange(value: string) {
+    setIdentity(setPersona(value || undefined));
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal identity-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -101,6 +107,26 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
           A pseudonym is fine — this is just what shows up next to your edits and comments. Stored only in this
           browser; renaming keeps your history attributed to you, but switching to a new device or browser doesn't
           carry it automatically unless you use email or export/import below.
+        </p>
+        <label className="identity-name-label" htmlFor="identity-persona-select">
+          What kind of user are you?
+        </label>
+        <select
+          id="identity-persona-select"
+          className="identity-persona-select"
+          value={identity.persona ?? ""}
+          onChange={(e) => onPersonaChange(e.target.value)}
+        >
+          <option value="">Not set</option>
+          {PERSONAS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <p className="identity-note">
+          Shown as a tag next to your name in the top bar. Purely a label for you and collaborators — it also picks
+          out the part of the tutorial most relevant to you.
         </p>
         <div className="identity-email">
           {identity.email ? (
