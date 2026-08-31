@@ -1333,7 +1333,7 @@ export default function App() {
             )}
           </nav>
         )}
-        {!results && favoriteNotes.length > 0 && (
+        {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
           <div className="sidebar-section">
             <div className="sidebar-section-label">Favorites</div>
             <ul className="note-list-compact">
@@ -1352,7 +1352,7 @@ export default function App() {
             </ul>
           </div>
         )}
-        {!results && recentNotes.length > 0 && (
+        {!results && sidebarView === "all" && !typeFilter && recentNotes.length > 0 && (
           <div className="sidebar-section">
             <div className="sidebar-section-label">Recent</div>
             <ul className="note-list-compact">
