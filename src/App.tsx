@@ -42,6 +42,7 @@ import RelatedNotes from "./RelatedNotes";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
 import TableView from "./TableView";
+import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
@@ -194,6 +195,7 @@ export default function App() {
   const [showGraph, setShowGraph] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -625,6 +627,7 @@ export default function App() {
     setShowGraph(false);
     setShowTable(false);
     setShowFlashcards(false);
+    setShowCalendar(false);
     setShareToken(null); // navigating from within the app is always as the owner
     setSidebarOpen(false); // closes the mobile drawer after picking a note
     const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
@@ -649,6 +652,7 @@ export default function App() {
     setShowGraph(false);
     setShowTable(false);
     setShowFlashcards(false);
+    setShowCalendar(false);
     if (view === "journal") setTypeFilter("daily");
     else if (view === "canvas") setTypeFilter("canvas");
     else setTypeFilter(""); // "all", "favorites", and "tutorials" all draw from the full set
@@ -970,6 +974,11 @@ export default function App() {
         { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => setShowGraph((g) => !g) },
         { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => setShowTable((t) => !t) },
         {
+          id: "toggle-calendar",
+          label: showCalendar ? "Show Editor" : "Show Calendar",
+          action: () => setShowCalendar((c) => !c),
+        },
+        {
           id: "toggle-flashcards",
           label: showFlashcards ? "Show Editor" : "Review Flashcards",
           action: () => setShowFlashcards((f) => !f),
@@ -1146,7 +1155,7 @@ export default function App() {
         {!results && !shareToken && (
           <nav className="sidebar-nav">
             <button
-              className={sidebarView === "all" && !showGraph && !showTable && !showFlashcards ? "active" : ""}
+              className={sidebarView === "all" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
               onClick={() => selectView("all")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -1155,7 +1164,7 @@ export default function App() {
               All Notes
             </button>
             <button
-              className={sidebarView === "journal" && !showGraph && !showTable && !showFlashcards ? "active" : ""}
+              className={sidebarView === "journal" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
               onClick={() => selectView("journal")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -1164,7 +1173,7 @@ export default function App() {
               Journal
             </button>
             <button
-              className={sidebarView === "canvas" && !showGraph && !showTable && !showFlashcards ? "active" : ""}
+              className={sidebarView === "canvas" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
               onClick={() => selectView("canvas")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -1178,6 +1187,7 @@ export default function App() {
                 setShowGraph((g) => !g);
                 setShowTable(false);
                 setShowFlashcards(false);
+                setShowCalendar(false);
                 setSidebarOpen(false);
               }}
             >
@@ -1192,6 +1202,7 @@ export default function App() {
                 setShowTable((t) => !t);
                 setShowGraph(false);
                 setShowFlashcards(false);
+                setShowCalendar(false);
                 setSidebarOpen(false);
               }}
             >
@@ -1201,11 +1212,27 @@ export default function App() {
               Table
             </button>
             <button
+              className={showCalendar ? "active" : ""}
+              onClick={() => {
+                setShowCalendar((c) => !c);
+                setShowGraph(false);
+                setShowTable(false);
+                setShowFlashcards(false);
+                setSidebarOpen(false);
+              }}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <Calendar size={15} className="type-color-daily" />
+              </span>
+              Calendar
+            </button>
+            <button
               className={showFlashcards ? "active" : ""}
               onClick={() => {
                 setShowFlashcards((f) => !f);
                 setShowGraph(false);
                 setShowTable(false);
+                setShowCalendar(false);
                 setSidebarOpen(false);
               }}
             >
@@ -1215,7 +1242,7 @@ export default function App() {
               Flashcards
             </button>
             <button
-              className={sidebarView === "tutorials" && !showGraph && !showTable && !showFlashcards ? "active" : ""}
+              className={sidebarView === "tutorials" && !showGraph && !showTable && !showFlashcards && !showCalendar ? "active" : ""}
               onClick={() => selectView("tutorials")}
             >
               <span className="nav-icon" aria-hidden="true">
@@ -1429,6 +1456,12 @@ export default function App() {
           <GraphView activePath={activePath} onNavigate={openNote} />
         ) : showTable ? (
           <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
+        ) : showCalendar ? (
+          // Deliberately the full vault, not displayedNotes — a calendar's
+          // whole point is aggregating across whatever's dated regardless
+          // of the sidebar's current type filter, unlike Table view which
+          // is meant to reflect "whatever you've already narrowed to".
+          <CalendarView notes={notes} onNavigate={openNote} />
         ) : showFlashcards ? (
           <FlashcardReview shareToken={shareToken} />
         ) : role === "denied" ? (
@@ -1546,7 +1579,7 @@ export default function App() {
           </div>
         )}
       </main>
-      {!showGraph && !showTable && !showFlashcards && role !== "denied" && activePath && localSession && (
+      {!showGraph && !showTable && !showFlashcards && !showCalendar && role !== "denied" && activePath && localSession && (
         <>
           <button
             className={`right-panel-collapse-toggle ${rightPanelCollapsed ? "collapsed" : ""}`}
