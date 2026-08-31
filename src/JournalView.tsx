@@ -104,6 +104,7 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
 
   return (
     <div className="journal-view">
+      <h1 className="journal-view-title">Journal</h1>
       {!hasToday && (
         <button className="journal-today-cta" onClick={onWriteToday}>
           <PenLine size={15} aria-hidden="true" />
@@ -117,7 +118,11 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
           {visible.map((n) => {
             const raw = bodies.get(n.path);
             return (
-              <article key={n.path} className="journal-entry" onClick={(e) => handleClick(e, n.path, n.title)}>
+              <article
+                key={n.path}
+                className={`journal-entry ${n.title === todayIso ? "journal-entry-today" : ""}`}
+                onClick={(e) => handleClick(e, n.path, n.title)}
+              >
                 <header className="journal-entry-header">
                   <h2>{formatJournalHeading(n.title)}</h2>
                   <span className="journal-entry-time">

@@ -2165,9 +2165,18 @@ button:disabled:hover {
 /* A continuous scrollable page of daily entries, most recent first —
    same 760px reading width as .history-view/.preview. */
 .journal-view {
-  max-width: 760px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 40px 24px 60px;
+}
+
+.journal-view-title {
+  margin: 0 0 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .journal-view-empty {
@@ -2175,27 +2184,49 @@ button:disabled:hover {
 }
 
 .journal-entry {
-  padding: 20px 0;
+  margin: 0 -16px;
+  padding: 28px 16px;
   border-bottom: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.journal-entry:hover {
+  background: var(--bg-hover);
 }
 
 .journal-entry:first-of-type {
-  padding-top: 0;
+  padding-top: 8px;
+}
+
+/* Today reads as the "live" entry — a bit of accent weight, the same way
+   Logseq's journals feed visually leads with the current day even though
+   every entry uses the same markup underneath. */
+.journal-entry-today .journal-entry-header h2 {
+  color: var(--accent);
 }
 
 .journal-entry-header {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
 
 .journal-entry-header h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .journal-entry-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .journal-entry-loading {
@@ -2206,18 +2237,20 @@ button:disabled:hover {
 .journal-entry-body {
   padding: 0;
   font-size: 14px;
+  line-height: 1.65;
 }
 
 .journal-load-more {
   display: block;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 20px;
   padding: 10px;
   text-align: center;
+  font-size: 12px;
   color: var(--text-dim);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 6px;
-  background: var(--bg-elevated);
+  background: transparent;
 }
 
 .journal-load-more:hover {
@@ -2226,8 +2259,22 @@ button:disabled:hover {
 }
 
 .journal-view .journal-today-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   width: 100%;
-  margin: 0 0 20px;
+  margin: 0 0 28px;
+  padding: 12px;
+  font-weight: 500;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+}
+
+.journal-view .journal-today-cta:hover {
+  filter: brightness(1.08);
 }
 
 .history-view-title {
