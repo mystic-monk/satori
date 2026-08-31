@@ -45,6 +45,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Real-time multi-cursor editing (CRDT-based, via Yjs) on your local network
 - Optional end-to-end encrypted cloud sync for collaborating over the internet — with real view/edit role separation: a view-only key lets someone read without ever being able to write, enforced by signature verification the relay can check without decrypting anything
 - Per-note share links with view / comment / edit roles, enforced server-side — a "comment" link lets someone leave feedback on a note without being able to edit it
+- Project-level sharing: a note made from the **Project** template shares every note tagged `project: [[Project Title]]` under one link instead of one at a time — add or remove a note from the project any time without recreating the share
 - A persistent (portable, exportable) identity so your edit history stays attributed to you across devices — not just a random per-browser label
 - Per-note change history
 - **Team/Workspace** (self-hosted server deployment): real accounts and standing, vault-wide membership on top of the per-note sharing above — opt-in and purely additive, a solo self-hosted vault behaves exactly as it always has until someone deliberately sets this up from the sidebar's "Set up team access" entry. An admin invites people with a link (same UX as note sharing); once anyone signs up, that server requires signing in from then on. See Roadmap for what this deliberately doesn't cover yet

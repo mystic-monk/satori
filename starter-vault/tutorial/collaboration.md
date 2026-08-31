@@ -27,6 +27,10 @@ Open the **Share** panel and create a link with a role:
 
 Copy the generated link to hand to someone else on your network. Revoke it any time from the same panel.
 
+### Sharing a whole project at once
+
+A share link normally covers just the one note it was created from. Create a note from the **Project** template (**+ Create → New From Template**) instead, and its Share button behaves differently: the link covers every note tagged `project: [[Your Project Title]]`, not just the project note itself — a live `​```query` block on the project note is what lists them, same mechanism as the Book template's chapter list. Add or remove a note from the project any time by editing its `project` property; the share link doesn't need to be recreated, and someone already using it picks up the change on their next visit. Revoking the link removes access to every note in the project at once, the same as revoking a single-note share does for just that one note.
+
 ## Comments
 
 Open the **Comments** panel (in the right-hand panel — the icon next to the note title toggles it) on any note to leave a threaded comment without touching the note's actual content — separate from the `%%inline comment%%` syntax in [[tutorial/formatting|Formatting]], which edits the text itself. Someone with the **Can comment** share role can post here even though they can't edit the note.

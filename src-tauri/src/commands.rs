@@ -100,9 +100,10 @@ pub fn create_share(
     path: String,
     role: String,
     label: String,
+    scope: Option<String>,
 ) -> Result<db::Share, String> {
     let conn = state.state_conn.lock().map_err(lock_err)?;
-    db::create_share(&conn, &path, &role, &label)
+    db::create_share(&conn, &path, &role, &label, scope.as_deref().unwrap_or("note"))
 }
 
 #[tauri::command]

@@ -85,6 +85,59 @@ describe("resolveShareRole (P0 regression: must fail closed, not open)", () => {
   });
 });
 
+describe("resolveShareRole with a project-scoped share", () => {
+  it("grants access to a note whose project property points at the shared project", () => {
+    vault.writeNoteRaw("proj.md", "---\ntitle: Website Redesign\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("task1.md", "---\ntitle: Task 1\nproject: \"[[Website Redesign]]\"\n---\nBody.");
+    db.upsertNoteIndex("proj.md");
+    db.upsertNoteIndex("task1.md");
+
+    const share = db.createShare("proj.md", "view", "team", "project");
+    expect(db.resolveShareRole("task1.md", share.token)).toBe("view");
+  });
+
+  it("also grants access to the project note itself", () => {
+    vault.writeNoteRaw("proj2.md", "---\ntitle: Launch\ntype: project\n---\nBody.");
+    db.upsertNoteIndex("proj2.md");
+    const share = db.createShare("proj2.md", "edit", "team", "project");
+    expect(db.resolveShareRole("proj2.md", share.token)).toBe("edit");
+  });
+
+  it("denies a note that belongs to a different project", () => {
+    vault.writeNoteRaw("projA.md", "---\ntitle: Project A\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("projB.md", "---\ntitle: Project B\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("taskB.md", "---\ntitle: Task B\nproject: \"[[Project B]]\"\n---\nBody.");
+    db.upsertNoteIndex("projA.md");
+    db.upsertNoteIndex("projB.md");
+    db.upsertNoteIndex("taskB.md");
+
+    const share = db.createShare("projA.md", "view", "team", "project");
+    expect(db.resolveShareRole("taskB.md", share.token)).toBe("denied");
+  });
+
+  it("denies a note with no project property at all", () => {
+    vault.writeNoteRaw("projC.md", "---\ntitle: Project C\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("unrelated.md", "---\ntitle: Unrelated\n---\nBody.");
+    db.upsertNoteIndex("projC.md");
+    db.upsertNoteIndex("unrelated.md");
+
+    const share = db.createShare("projC.md", "view", "team", "project");
+    expect(db.resolveShareRole("unrelated.md", share.token)).toBe("denied");
+  });
+
+  it("does not let a project-scoped token satisfy a note-scoped lookup at the wrong path, and vice versa", () => {
+    vault.writeNoteRaw("projD.md", "---\ntitle: Project D\ntype: project\n---\nBody.");
+    db.upsertNoteIndex("projD.md");
+    const noteShare = db.createShare("projD.md", "view", "solo", "note");
+    // A note-scoped share for the project's own path only covers that
+    // exact path — it must NOT also transitively cover member notes the
+    // way a project-scoped share does.
+    vault.writeNoteRaw("taskD.md", "---\ntitle: Task D\nproject: \"[[Project D]]\"\n---\nBody.");
+    db.upsertNoteIndex("taskD.md");
+    expect(db.resolveShareRole("taskD.md", noteShare.token)).toBe("denied");
+  });
+});
+
 // Regression test for the persistent-identity change: history rows written
 // before it are a bare string[] of display names; rows written after it are
 // {id, name}[]. getHistory() must read both without crashing, since there's

@@ -70,12 +70,20 @@ db.exec(`
 `);
 
 stateDb.exec(`
+  -- scope: 'note' (path is the shared note itself, the only kind that
+  -- existed before project sharing) or 'project' (path is a type: project
+  -- note; the grant covers that note plus every note whose own "project"
+  -- property points back at it — see noteBelongsToProject below). Kept as
+  -- one table rather than a separate one for project shares: listShares/
+  -- revokeShare/the whole revocation UI already work per-path regardless
+  -- of what that path's note actually is.
   CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
     path TEXT NOT NULL,
     role TEXT NOT NULL,
     label TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'note'
   );
   CREATE INDEX IF NOT EXISTS shares_path ON shares(path);
 
@@ -194,6 +202,7 @@ function ensureColumn(table: string, column: string, ddl: string) {
 }
 ensureColumn("comments", "anchor_start", "anchor_start TEXT");
 ensureColumn("comments", "anchor_end", "anchor_end TEXT");
+ensureColumn("shares", "scope", "scope TEXT NOT NULL DEFAULT 'note'");
 
 function deleteFromIndex(relPath: string) {
   db.prepare("DELETE FROM notes WHERE path = ?").run(relPath);
@@ -562,6 +571,7 @@ export function searchNotes(query: string): SearchResult[] {
 // the note in relay.ts.
 
 export type ShareRole = "view" | "comment" | "edit";
+export type ShareScope = "note" | "project";
 
 export interface Share {
   token: string;
@@ -569,33 +579,52 @@ export interface Share {
   role: ShareRole;
   label: string;
   createdAt: number;
+  scope: ShareScope;
 }
 
 function randomToken(): string {
   return Array.from({ length: 24 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
 }
 
-export function createShare(notePath: string, role: ShareRole, label: string): Share {
-  const share: Share = { token: randomToken(), path: notePath, role, label, createdAt: Date.now() };
-  stateDb.prepare("INSERT INTO shares (token, path, role, label, created_at) VALUES (?, ?, ?, ?, ?)").run(
-    share.token,
-    share.path,
-    share.role,
-    share.label,
-    share.createdAt
-  );
+export function createShare(notePath: string, role: ShareRole, label: string, scope: ShareScope = "note"): Share {
+  const share: Share = { token: randomToken(), path: notePath, role, label, createdAt: Date.now(), scope };
+  stateDb
+    .prepare("INSERT INTO shares (token, path, role, label, created_at, scope) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(share.token, share.path, share.role, share.label, share.createdAt, share.scope);
   return share;
 }
 
 export function listShares(notePath: string): Share[] {
   const rows = stateDb
-    .prepare("SELECT token, path, role, label, created_at as createdAt FROM shares WHERE path = ? ORDER BY created_at DESC")
+    .prepare(
+      "SELECT token, path, role, label, created_at as createdAt, scope FROM shares WHERE path = ? ORDER BY created_at DESC"
+    )
     .all(notePath) as Share[];
   return rows;
 }
 
 export function revokeShare(token: string): void {
   stateDb.prepare("DELETE FROM shares WHERE token = ?").run(token);
+}
+
+// A note "belongs to" a project the same way a chapter belongs to a book
+// (see starter-vault/templates/book.md) — a `project: [[Project Title]]`
+// frontmatter property, matched by exact string equality against the
+// project note's title, same convention noteQuery.ts's matchesFilter
+// uses client-side. The project note itself is always included (it's
+// what a project share is fundamentally "of" — its own query block is
+// how a member browses to everything else in it).
+function noteBelongsToProject(notePath: string, projectPath: string): boolean {
+  if (notePath === projectPath) return true;
+  const noteRow = db.prepare("SELECT properties FROM notes WHERE path = ?").get(notePath) as
+    | { properties: string }
+    | undefined;
+  const projectRow = db.prepare("SELECT title FROM notes WHERE path = ?").get(projectPath) as
+    | { title: string }
+    | undefined;
+  if (!noteRow || !projectRow) return false;
+  const project = parseProperties(noteRow.properties).project;
+  return project === `[[${projectRow.title}]]`;
 }
 
 // No token at all means the request is the local app itself (the owner
@@ -607,10 +636,15 @@ export function revokeShare(token: string): void {
 // share-role system for anyone who guessed or mistyped a token.
 export function resolveShareRole(notePath: string, token: string | null): ShareRole | "owner" | "denied" {
   if (!token) return "owner";
-  const row = stateDb.prepare("SELECT role FROM shares WHERE token = ? AND path = ?").get(token, notePath) as
-    | { role: ShareRole }
+  const direct = stateDb
+    .prepare("SELECT role FROM shares WHERE token = ? AND path = ? AND scope = 'note'")
+    .get(token, notePath) as { role: ShareRole } | undefined;
+  if (direct) return direct.role;
+  const projectShare = stateDb.prepare("SELECT role, path FROM shares WHERE token = ? AND scope = 'project'").get(token) as
+    | { role: ShareRole; path: string }
     | undefined;
-  return row?.role ?? "denied";
+  if (projectShare && noteBelongsToProject(notePath, projectShare.path)) return projectShare.role;
+  return "denied";
 }
 
 // ---- Change history ----

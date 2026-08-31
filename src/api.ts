@@ -30,12 +30,15 @@ export interface LinkEdge {
 
 export type ShareRole = "view" | "comment" | "edit";
 
+export type ShareScope = "note" | "project";
+
 export interface Share {
   token: string;
   path: string;
   role: ShareRole;
   label: string;
   createdAt: number;
+  scope: ShareScope;
 }
 
 export interface AuthorRef {
@@ -179,12 +182,12 @@ export async function fetchRole(p: string, token: string | null): Promise<ShareR
   return data.role;
 }
 
-export async function createShare(p: string, role: ShareRole, label: string): Promise<Share> {
-  if (IS_TAURI) return invoke("create_share", { path: p, role, label });
+export async function createShare(p: string, role: ShareRole, label: string, scope: ShareScope = "note"): Promise<Share> {
+  if (IS_TAURI) return invoke("create_share", { path: p, role, label, scope });
   const res = await fetch("/api/share", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: p, role, label }),
+    body: JSON.stringify({ path: p, role, label, scope }),
   });
   return res.json();
 }

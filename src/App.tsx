@@ -680,7 +680,16 @@ export default function App() {
   // path for a note opened immediately after creation.
   function openNote(p: string, knownTitle?: string, knownType?: string | null, fragment?: string) {
     showSpecialPanel(null);
-    setShareToken(null); // navigating from within the app is always as the owner
+    // Deliberately NOT clearing shareToken here (an earlier version did,
+    // on the assumption navigating within the app is always as the
+    // owner) — a guest reading their one shared note can click a
+    // wikilink inside it (Preview wires onNavigate to this regardless of
+    // guest/owner status), and that click must keep trying the SAME
+    // token against the new path, not silently drop it and attempt the
+    // fetch as if they were the owner. fetchRole/fetchNote already
+    // re-resolve per the (activePath, shareToken) pair below — a target
+    // note the token doesn't cover (e.g. outside a shared project's
+    // scope) correctly falls through to the existing role==="denied" UI.
     setSidebarOpen(false); // closes the mobile drawer after picking a note
     const title = knownTitle ?? notes.find((n) => n.path === p)?.title ?? results?.find((r) => r.path === p)?.title ?? p;
     // Same "state update hasn't landed in this closure yet" issue as
@@ -1199,6 +1208,7 @@ export default function App() {
         <SharePanel
           path={activePath}
           noteTitle={activeNote?.title ?? activePath}
+          isProject={activeNote?.type === "project"}
           isOwner={role === "owner"}
           open={sharePanelOpen}
           onClose={() => setSharePanelOpen(false)}

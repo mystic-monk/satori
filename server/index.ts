@@ -32,6 +32,7 @@ import {
   isValidFeedToken,
   buildCalendarFeedIcs,
   type ShareRole,
+  type ShareScope,
 } from "./db.js";
 import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
@@ -202,12 +203,21 @@ app.get("/api/role/*", (req, res) => {
 const SHARE_ROLES: ShareRole[] = ["view", "comment", "edit"];
 
 app.post("/api/share", requireOwner, (req, res) => {
-  const { path: relPath, role, label } = req.body as { path: string; role: ShareRole; label?: string };
+  const { path: relPath, role, label, scope } = req.body as {
+    path: string;
+    role: ShareRole;
+    label?: string;
+    scope?: ShareScope;
+  };
   if (!SHARE_ROLES.includes(role)) {
     res.status(400).json({ error: "invalid role" });
     return;
   }
-  res.json(createShare(relPath, role, label?.trim() || role));
+  if (scope && scope !== "note" && scope !== "project") {
+    res.status(400).json({ error: "invalid scope" });
+    return;
+  }
+  res.json(createShare(relPath, role, label?.trim() || role, scope));
 });
 
 app.get("/api/shares/*", requireOwner, (req, res) => {

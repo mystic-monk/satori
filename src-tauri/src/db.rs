@@ -3,7 +3,7 @@ use crate::{
     srs::{initial_card_state, next_card_state, CardState, Rating},
     vault::Vault,
 };
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -110,6 +110,7 @@ pub fn open_state(path: &std::path::Path) -> Result<Connection, String> {
     // ensureColumn (kept in sync with that function deliberately).
     ensure_column(&conn, "comments", "anchor_start", "anchor_start TEXT")?;
     ensure_column(&conn, "comments", "anchor_end", "anchor_end TEXT")?;
+    ensure_column(&conn, "shares", "scope", "scope TEXT NOT NULL DEFAULT 'note'")?;
     Ok(conn)
 }
 
@@ -410,6 +411,7 @@ pub struct Share {
     pub label: String,
     #[serde(rename = "createdAt")]
     pub created_at: f64,
+    pub scope: String,
 }
 
 pub fn create_share(
@@ -417,12 +419,13 @@ pub fn create_share(
     path: &str,
     role: &str,
     label: &str,
+    scope: &str,
 ) -> Result<Share, String> {
     let token = uuid::Uuid::new_v4().simple().to_string();
     let created_at = chrono::Utc::now().timestamp_millis() as f64;
     conn.execute(
-        "INSERT INTO shares (token, path, role, label, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![token, path, role, label, created_at],
+        "INSERT INTO shares (token, path, role, label, created_at, scope) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![token, path, role, label, created_at, scope],
     )
     .map_err(|e| e.to_string())?;
     Ok(Share {
@@ -431,12 +434,13 @@ pub fn create_share(
         role: role.to_string(),
         label: label.to_string(),
         created_at,
+        scope: scope.to_string(),
     })
 }
 
 pub fn list_shares(conn: &Connection, path: &str) -> Result<Vec<Share>, String> {
     let mut stmt = conn
-        .prepare("SELECT token, path, role, label, created_at FROM shares WHERE path = ?1 ORDER BY created_at DESC")
+        .prepare("SELECT token, path, role, label, created_at, scope FROM shares WHERE path = ?1 ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![path], |row| {
@@ -446,6 +450,7 @@ pub fn list_shares(conn: &Connection, path: &str) -> Result<Vec<Share>, String> 
                 role: row.get(2)?,
                 label: row.get(3)?,
                 created_at: row.get(4)?,
+                scope: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -456,6 +461,39 @@ pub fn revoke_share(conn: &Connection, token: &str) -> Result<(), String> {
     conn.execute("DELETE FROM shares WHERE token = ?1", params![token])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// Mirrors server/db.ts's noteBelongsToProject exactly — a note belongs to
+// a project via a `project: [[Project Title]]` frontmatter property,
+// matched by exact string equality against the project note's title
+// (same convention the ```query block DSL uses). The project note itself
+// always belongs to its own project share.
+fn note_belongs_to_project(conn: &Connection, note_path: &str, project_path: &str) -> Result<bool, String> {
+    if note_path == project_path {
+        return Ok(true);
+    }
+    let properties_json: Option<String> = conn
+        .query_row(
+            "SELECT properties FROM notes WHERE path = ?1",
+            params![note_path],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let project_title: Option<String> = conn
+        .query_row("SELECT title FROM notes WHERE path = ?1", params![project_path], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let (Some(properties_json), Some(project_title)) = (properties_json, project_title) else {
+        return Ok(false);
+    };
+    let props = parse_properties(&properties_json);
+    let Some(project_value) = props.get("project").and_then(|v| v.as_str()) else {
+        return Ok(false);
+    };
+    Ok(project_value == format!("[[{project_title}]]"))
 }
 
 // A genuinely absent token means the local app itself is asking (the
@@ -479,13 +517,29 @@ pub fn resolve_share_role(
     let Some(t) = token else {
         return Ok("owner".to_string());
     };
-    let result: rusqlite::Result<String> = conn.query_row(
-        "SELECT role FROM shares WHERE token = ?1 AND path = ?2",
+    let direct: rusqlite::Result<String> = conn.query_row(
+        "SELECT role FROM shares WHERE token = ?1 AND path = ?2 AND scope = 'note'",
         params![t, path],
         |r| r.get(0),
     );
-    match result {
-        Ok(role) => Ok(role),
+    match direct {
+        Ok(role) => return Ok(role),
+        Err(rusqlite::Error::QueryReturnedNoRows) => {}
+        Err(e) => return Err(e.to_string()),
+    }
+    let project_share: rusqlite::Result<(String, String)> = conn.query_row(
+        "SELECT role, path FROM shares WHERE token = ?1 AND scope = 'project'",
+        params![t],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    );
+    match project_share {
+        Ok((role, project_path)) => {
+            if note_belongs_to_project(conn, path, &project_path)? {
+                Ok(role)
+            } else {
+                Ok("denied".to_string())
+            }
+        }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok("denied".to_string()),
         Err(e) => Err(e.to_string()),
     }

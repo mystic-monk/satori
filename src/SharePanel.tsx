@@ -4,6 +4,11 @@ import { createShare, fetchShares, revokeShareApi, type Share, type ShareRole } 
 interface SharePanelProps {
   path: string;
   noteTitle: string;
+  // "project" note gets a project-scoped share instead of a note-scoped
+  // one — same role/label UI, but the resulting link covers every note
+  // whose own `project` property points back at this one (server/db.ts's
+  // noteBelongsToProject), not just this single note.
+  isProject: boolean;
   isOwner: boolean;
   open: boolean;
   onClose: () => void;
@@ -22,7 +27,7 @@ const ROLE_LABEL: Record<ShareRole, string> = {
 // all of that: no positioning math, no fighting the viewport edge, and
 // it's the same pattern already proven to work for two other panels this
 // same size.
-export default function SharePanel({ path, noteTitle, isOwner, open, onClose }: SharePanelProps) {
+export default function SharePanel({ path, noteTitle, isProject, isOwner, open, onClose }: SharePanelProps) {
   const [shares, setShares] = useState<Share[]>([]);
   const [role, setRole] = useState<ShareRole>("view");
   const [label, setLabel] = useState("");
@@ -36,7 +41,7 @@ export default function SharePanel({ path, noteTitle, isOwner, open, onClose }: 
   if (!isOwner || !open) return null;
 
   async function onCreate() {
-    const share = await createShare(path, role, label);
+    const share = await createShare(path, role, label, isProject ? "project" : "note");
     setJustCreated(share);
     setLabel("");
     setCopied(false);
@@ -72,7 +77,11 @@ export default function SharePanel({ path, noteTitle, isOwner, open, onClose }: 
       <div className="modal share-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h3 className="modal-title">Share "{noteTitle}"{shares.length > 0 ? ` (${shares.length})` : ""}</h3>
         <p className="settings-note">
-          Anyone with a link below sees only this one note — nothing else in your vault.
+          {isProject
+            ? "Anyone with a link below sees every note tagged to this project (project: [[" +
+              noteTitle +
+              "]]) — nothing else in your vault. Add or remove a note from the project any time by editing its project property."
+            : "Anyone with a link below sees only this one note — nothing else in your vault."}
         </p>
 
         <div className="share-create">

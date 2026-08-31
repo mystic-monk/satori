@@ -30,10 +30,10 @@ Flashcards (SM-2 spaced repetition) turn any note into a review deck. A daily jo
 
 ## Teams & small orgs
 
-Team/Workspace turns a self-hosted server into a real shared vault — standing accounts, not just one-off share links, with an admin who invites people. Per-note sharing still exists underneath for scoping a guest (client, contractor) to exactly one note. Comments anchor to a specific sentence, not just a flat per-note thread, so feedback is unambiguous. Real-time multi-cursor editing means two people in the same note see each other type.
+Team/Workspace turns a self-hosted server into a real shared vault — standing accounts, not just one-off share links, with an admin who invites people. Per-note sharing still exists underneath for scoping a guest (client, contractor) to exactly one note — or, via the **Project** template, to every note tagged into one project at once, without re-sharing each one individually. Comments anchor to a specific sentence, not just a flat per-note thread, so feedback is unambiguous. Real-time multi-cursor editing means two people in the same note see each other type.
 
-> [!tip] Two systems, two jobs
-> Workspace membership is "you're on the team, full access." A per-note share link is "this one person gets exactly this one note." Use both — they don't conflict.
+> [!tip] Three systems, three jobs
+> Workspace membership is "you're on the team, full access." A per-note share link is "this one person gets exactly this one note." A project share is "this one person gets exactly this group of notes, and it grows/shrinks as I tag notes into or out of the project." Use whichever matches the actual boundary you want.
 
 → [[tutorial/team-workspace|Team, Workspace & self-hosting]], [[tutorial/collaboration|Collaboration & sharing]]
 
