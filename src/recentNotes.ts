@@ -32,3 +32,14 @@ export function recordOpened(path: string, title: string, type: string | null): 
   localStorage.setItem(KEY, JSON.stringify(next));
   return next;
 }
+
+// Deleting a note doesn't touch this list at all — it's a separate,
+// per-browser cache with no link back to the vault. Left unpruned, a
+// deleted note's entry lingers in History/Recent indefinitely and 404s
+// if clicked. Called whenever the notes list refreshes (App.tsx), so a
+// stale entry disappears the next time it would have gone stale.
+export function pruneDeleted(existingPaths: Set<string>): RecentNote[] {
+  const pruned = getRecent().filter((n) => existingPaths.has(n.path));
+  localStorage.setItem(KEY, JSON.stringify(pruned));
+  return pruned;
+}

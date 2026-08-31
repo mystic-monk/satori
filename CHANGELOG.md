@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The rail is drag-to-resize now (140–320px), same handle-and-persistence pattern the note-list and right panels already had (`useResizableWidth`'s `offset` parameter)
 - Rail trimmed to three permanent items (All Notes, Journal, Graph) plus a "More" button opening the other six (Canvas, Table, Calendar, Flashcards, History, Tutorials) — nine permanent items was crowded, and a growing feature set means it would only get more crowded over time. Fewer pinned items also meant real room to give each one more padding without widening the rail
+- Rethought the whole left column: the rail-plus-note-list split and the "More" overflow menu both drew real complaints (a new panel popping open for six of nine views; nav crowded together at the bottom). Back to one unified, resizable sidebar listing all nine views directly — drag it narrow enough (~130px) and labels drop to icon-only automatically, so the collapse gesture is the resize itself, not a separate mode switched on by something else. Vault name/switcher and identity ("You: name") moved again too, this time into a new persistent top bar (`.app-topbar`) alongside the per-note toolbar (path/status/word count/view mode/reminder/share/delete, moved out of `<main>`) — all "who/where/which note" context lives in one place now, visible in every view, not just while a note happens to be open
+- Identity's name field is now explicitly labeled "Name or screen name," with a note that a pseudonym is fine — the field's purpose (attribution on edits/comments, not a legal name) wasn't obvious before
 
 ### Fixed
 

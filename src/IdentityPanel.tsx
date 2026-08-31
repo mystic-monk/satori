@@ -84,19 +84,23 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
       <div className="modal identity-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h3 className="modal-title">Your identity</h3>
         <div className="identity-body">
+        <label className="identity-name-label" htmlFor="identity-name-input">
+          Name or screen name
+        </label>
         <div className="identity-row">
           <span className="identity-color-dot" style={{ background: identity.color }} aria-hidden="true" />
           <input
+            id="identity-name-input"
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={commitName}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            aria-label="Your display name"
           />
         </div>
         <p className="identity-note">
-          Stored only in this browser. Renaming keeps your history attributed to you; switching to a new device or
-          browser doesn't carry it automatically unless you use email or export/import below.
+          A pseudonym is fine — this is just what shows up next to your edits and comments. Stored only in this
+          browser; renaming keeps your history attributed to you, but switching to a new device or browser doesn't
+          carry it automatically unless you use email or export/import below.
         </p>
         <div className="identity-email">
           {identity.email ? (

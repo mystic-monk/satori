@@ -77,7 +77,6 @@ import {
   History,
   Menu as MenuIcon,
   MessageSquare,
-  MoreHorizontal,
   Paintbrush,
   PenLine,
   RotateCw,
@@ -92,7 +91,7 @@ import {
 } from "lucide-react";
 import { getIdentity } from "./identity";
 import IdentityPanel from "./IdentityPanel";
-import { getRecent, recordOpened, type RecentNote } from "./recentNotes";
+import { getRecent, recordOpened, pruneDeleted, type RecentNote } from "./recentNotes";
 import { queryNotes } from "./noteQuery";
 import TemplatePickerDialog from "./TemplatePickerDialog";
 import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
@@ -170,22 +169,6 @@ export default function App() {
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [identityPanelOpen, setIdentityPanelOpen] = useState(false);
-  // Only Canvas/Table/Calendar/Flashcards/History/Tutorials live behind
-  // this — All Notes/Journal/Graph are common enough to stay permanently
-  // pinned in the rail. Reset per note-switch effect below, same as the
-  // other transient panel-open states, so it doesn't linger open across
-  // an unrelated navigation.
-  const [railMoreOpen, setRailMoreOpen] = useState(false);
-  // Positioned fixed at these exact viewport coordinates rather than
-  // absolute relative to the "More" button — the button lives inside
-  // .sidebar-rail-scroll (overflow-y: auto, for a long nav list), and an
-  // absolutely-positioned popover extending past that container's own
-  // edge gets clipped to invisibility the same way the rail's resize
-  // handle did before that got the same fix. Computed fresh on open, not
-  // tracked continuously, since the button's position doesn't change
-  // while the menu is up.
-  const [moreMenuPos, setMoreMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   // Set right before opening Settings' export section, not persisted —
   // just "what did compiling just produce", reset per open note the same
@@ -211,18 +194,6 @@ export default function App() {
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Desktop-only: the mobile off-canvas drawer above (sidebarOpen) already
-  // handles small viewports, so this stays permanently false there (see the
-  // sidebar-collapse-toggle button's mobile media query). A plain UI
-  // preference, not app state, so localStorage rather than server-side —
-  // same category as pkm-relay-url below.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("pkm-sidebar-collapsed") === "1");
-  function toggleSidebarCollapsed() {
-    setSidebarCollapsed((collapsed) => {
-      localStorage.setItem("pkm-sidebar-collapsed", collapsed ? "0" : "1");
-      return !collapsed;
-    });
-  }
 
   // Single source of truth for "which of the full-width special panels (if
   // any) is showing" — replaces four separate setShowX(false) calls
@@ -242,41 +213,12 @@ export default function App() {
     setShowCalendar(panel === "calendar");
     setShowFlashcards(panel === "flashcards");
     setShowHistory(panel === "history");
-  }
-
-  // Clicking whichever nav item is already active toggles the wide note-
-  // list panel open/closed in place. Clicking a different item switches to
-  // it and sets the panel's visibility based on what that item actually
-  // is: a list view (All Notes/Journal/Canvas/Tutorials) opens it, since
-  // that's where its content lives; a special full-panel view (Graph/
-  // Table/Calendar/Flashcards/History) closes it — its own content
-  // already fills the main area, so leaving the note list open too just
-  // showed two unrelated lists on screen at once with no visible
-  // connection between them.
-  function railClick(isActive: boolean, activate: () => void, isSpecialView: boolean) {
     setSidebarOpen(false);
-    if (isActive) {
-      toggleSidebarCollapsed();
-      return;
-    }
-    activate();
-    setSidebarCollapsed(isSpecialView);
   }
-
-  // Same activation logic as railClick, minus the click-the-active-icon-
-  // again-to-toggle gesture — that doesn't translate cleanly to an item
-  // living inside a menu that's about to close anyway. Always activates
-  // and closes the "More" menu behind it.
-  function selectFromMoreMenu(activate: () => void, isSpecialView: boolean) {
-    setSidebarOpen(false);
-    setRailMoreOpen(false);
-    activate();
-    setSidebarCollapsed(isSpecialView);
-  }
-  // Mirrors sidebarCollapsed above, same reasoning — Properties/Comments/
-  // History used to sit stacked above the editor, eating vertical space
-  // before you'd even started writing; moved to their own collapsible rail
-  // on the right so that space goes back to the note by default.
+  // Properties/Comments/History used to sit stacked above the editor,
+  // eating vertical space before you'd even started writing; moved to
+  // their own collapsible rail on the right so that space goes back to
+  // the note by default.
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(
     () => localStorage.getItem("pkm-right-panel-collapsed") !== "0"
   );
@@ -286,12 +228,17 @@ export default function App() {
       return !collapsed;
     });
   }
-  const railResize = useResizableWidth("pkm-rail-width", 190, 140, 320, "left");
-  // offset by the rail's own current width — the sidebar no longer sits
-  // flush against the viewport's left edge the rail does now, so its
-  // width has to subtract however much of the mouse's clientX the rail
-  // itself already accounts for (see useResizableWidth's own doc comment).
-  const sidebarResize = useResizableWidth("pkm-sidebar-width", 280, 200, 480, "left", railResize.width);
+  // 64px floor is deliberately an "icon-only" width, not just a small
+  // number — dragging the sidebar narrow enough drops nav labels (see
+  // sidebarIconOnly below), so the collapse gesture is the drag itself,
+  // not a separate button toggling a boolean.
+  const sidebarResize = useResizableWidth("pkm-sidebar-width", 240, 64, 480, "left");
+  // Below this, a label would either get clipped or crowd the icon —
+  // hide it instead and let the icon (plus its title tooltip) carry the
+  // meaning, the same tradeoff a deliberately-narrowed VSCode sidebar
+  // makes, except here it's a direct consequence of a drag the user just
+  // did, not a fixed always-icon-only mode imposed on them.
+  const sidebarIconOnly = sidebarResize.width < 130;
   const rightPanelResize = useResizableWidth("pkm-right-panel-width", 300, 220, 480, "right");
   const [themeId, setThemeId] = useState(() => getStoredTheme());
   const [spellcheckMode, setSpellcheckMode] = useState<"auto" | "off">(
@@ -375,6 +322,16 @@ export default function App() {
     loadNotes();
     fetchTypes().then(setTypes);
   }, [loadNotes]);
+
+  // Self-heals a stale History/Recent entry left behind by a deleted note
+  // (recentNotes.ts's own localStorage cache has no link back to the
+  // vault, so deleting a note doesn't touch it) — guarded on notes.length
+  // so this can't wipe the list out on the very first render, before the
+  // initial fetch above has actually landed.
+  useEffect(() => {
+    if (notes.length === 0) return;
+    setRecentNotes(pruneDeleted(new Set(notes.map((n) => n.path))));
+  }, [notes]);
 
   // Team/Workspace v1 is a server/browser-only concept — Tauri's local
   // vault has no accounts at all, so this never even makes the request
@@ -643,7 +600,6 @@ export default function App() {
       setPendingCommentAnchor(null);
       setCompileStatus(null);
       setReminderPopupOpen(false);
-      setRailMoreOpen(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
@@ -985,17 +941,6 @@ export default function App() {
   // and the wide panel below to avoid repeating all five negations at
   // every active-state check.
   const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory;
-  // Drives the "More" rail button's active state — true whenever the
-  // current view is one of the six tucked into that overflow menu, so
-  // it's still clear you're in a non-primary view even though the
-  // specific item isn't visible in the rail itself.
-  const isSecondaryViewActive =
-    showTable ||
-    showCalendar ||
-    showFlashcards ||
-    showHistory ||
-    (sidebarView === "canvas" && isListView) ||
-    (sidebarView === "tutorials" && isListView);
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
@@ -1261,298 +1206,321 @@ export default function App() {
           onClose={() => setSharePanelOpen(false)}
         />
       )}
-      <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
-        <MenuIcon size={18} />
-      </button>
-      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      {/* Always-visible icon rail (VSCode's activity bar) — the sidebar's
-          actual navigation now lives here, not in the wide panel below,
-          which just shows whatever content the active icon selected.
-          Clicking the already-active icon toggles the wide panel itself
-          open/closed in place (railClick); clicking a different one
-          switches to it. Icon + label, not icon-only — a compact
-          icon-only rail needed a hover to identify anything, which reads
-          fine to someone who already knows the app and badly to anyone
-          else. Same owner-only gating the old nav row had — a share-link
-          guest gets none of this, just Settings at the bottom (still
-          meaningful: theme). */}
-      <nav
-        className={`sidebar-rail ${sidebarOpen ? "open" : ""} ${railResize.resizing ? "resizing" : ""}`}
-        style={{ width: railResize.width }}
-      >
-        <div
-          className={`resize-handle resize-handle-left ${railResize.resizing ? "resizing" : ""}`}
-          onMouseDown={railResize.onHandleMouseDown}
-        />
-        {/* Scrolling lives on this inner wrapper, not .sidebar-rail itself —
-            that element needs overflow: visible so the resize handle above
-            (position: absolute, right: -3px, deliberately straddling the
-            rail's own right edge) stays hit-testable; overflow: auto/hidden
-            clips a positioned descendant's painted-and-hit-testable area to
-            the padding box, silently eating the handle's outer half. */}
-        <div className="sidebar-rail-scroll">
-        <div className="sidebar-rail-top">
-          {!results && !shareToken && (
-            <>
-              <button
-                className={sidebarView === "all" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "all" && isListView, () => selectView("all"), false)}
-              >
-                <FileText size={17} />
-                <span>All Notes</span>
-              </button>
-              <button
-                className={sidebarView === "journal" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "journal" && isListView, () => selectView("journal"), false)}
-              >
-                <Calendar size={17} className="type-color-daily" />
-                <span>Journal</span>
-              </button>
-              <button className={showGraph ? "active" : ""} onClick={() => railClick(showGraph, () => showSpecialPanel("graph"), true)}>
-                <Waypoints size={17} />
-                <span>Graph</span>
-              </button>
-              <div className="sidebar-rail-more-wrap">
-                <button
-                  ref={moreButtonRef}
-                  className={isSecondaryViewActive ? "active" : ""}
-                  onClick={() => {
-                    if (railMoreOpen) {
-                      setRailMoreOpen(false);
-                      return;
-                    }
-                    const rect = moreButtonRef.current!.getBoundingClientRect();
-                    setMoreMenuPos({ top: rect.top, left: rect.right + 4 });
-                    setRailMoreOpen(true);
-                  }}
-                  aria-expanded={railMoreOpen}
-                >
-                  <MoreHorizontal size={17} />
-                  <span>More</span>
-                </button>
-                {/* Invisible, click-anywhere-to-dismiss — same idea as
-                    .sidebar-backdrop but without the dark tint, since this
-                    is a small in-page menu, not a full mobile drawer. */}
-                {railMoreOpen && <div className="sidebar-rail-more-backdrop" onClick={() => setRailMoreOpen(false)} />}
-                {railMoreOpen && moreMenuPos && (
-                  <div className="sidebar-rail-more-menu" style={{ top: moreMenuPos.top, left: moreMenuPos.left }}>
-                    <button
-                      className={sidebarView === "canvas" && isListView ? "active" : ""}
-                      onClick={() => selectFromMoreMenu(() => selectView("canvas"), false)}
-                    >
-                      <Paintbrush size={16} className="type-color-canvas" />
-                      <span>Canvas</span>
-                    </button>
-                    <button className={showTable ? "active" : ""} onClick={() => selectFromMoreMenu(() => showSpecialPanel("table"), true)}>
-                      <Table2 size={16} />
-                      <span>Table</span>
-                    </button>
-                    <button
-                      className={showCalendar ? "active" : ""}
-                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("calendar"), true)}
-                    >
-                      <Calendar size={16} className="type-color-daily" />
-                      <span>Calendar</span>
-                    </button>
-                    <button
-                      className={showFlashcards ? "active" : ""}
-                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("flashcards"), true)}
-                    >
-                      <Brain size={16} className="type-color-flashcard" />
-                      <span>Flashcards</span>
-                    </button>
-                    <button
-                      className={showHistory ? "active" : ""}
-                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("history"), true)}
-                    >
-                      <History size={16} />
-                      <span>History</span>
-                    </button>
-                    <button
-                      className={sidebarView === "tutorials" && isListView ? "active" : ""}
-                      onClick={() => selectFromMoreMenu(() => selectView("tutorials"), false)}
-                    >
-                      <BookOpen size={16} className="type-color-tutorial" />
-                      <span>Tutorials</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-        <div className="sidebar-rail-bottom">
-          {/* Vault name/switcher and identity used to sit as two full rows
-              at the very top of the wide note-list panel, above the
-              search box — real estate spent on chrome you look at once
-              per session, not the note list you scan constantly. Both
-              moved down here instead, next to Settings/Workspace, which
-              were already exactly this kind of "occasional, not
-              per-note" action living in the rail. */}
+      {/* A real top bar, not scrolled-away-with-the-content — vault and
+          identity used to live buried at the bottom of the sidebar (or,
+          before that, as two rows above the note list); both are "who/
+          where" context that's meaningful in every view, not just while
+          browsing notes, so they live here now, always in the same place.
+          The per-note toolbar (path/status/word count/view mode/reminder/
+          share/delete) also moved here from inside <main> — same reasoning,
+          it's about the open note specifically, and only rendered when a
+          list-view note is genuinely open (isListView; Graph/Table/etc.
+          have nothing here to show). */}
+      <header className="app-topbar">
+        <div className="app-topbar-left">
           {IS_TAURI && (
-            <div className="sidebar-rail-vault-row">
-              <button className="sidebar-rail-vault-name" onClick={() => switchVault()} title="Switch to a different vault">
-                <VaultIcon size={17} />
+            <>
+              <button className="app-topbar-vault" onClick={() => switchVault()} title="Switch to a different vault">
+                <VaultIcon size={15} />
                 <span>{vaultName ?? "Vault"}</span>
               </button>
               {!shareToken && (
                 <>
                   <button
-                    className="sidebar-rail-icon-btn"
+                    className="app-topbar-icon-btn"
                     onClick={onImportFolder}
                     title="Import a folder (.md/.txt/.json)"
                     aria-label="Import a folder"
                   >
                     <Download size={14} />
                   </button>
-                  <button className="sidebar-rail-icon-btn" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
+                  <button className="app-topbar-icon-btn" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
                     <RotateCw size={14} />
                   </button>
                 </>
               )}
+            </>
+          )}
+        </div>
+        <div className="app-topbar-note">
+          {isListView && activePath && localSession && role !== "denied" && (
+            <>
+              <span className="editor-path">{activePath}</span>
+              <span className={`editor-status ${status !== "synced" && status !== "connected" ? "editor-status-offline" : ""}`}>
+                {status}
+                {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
+              </span>
+              {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
+              {!isCanvas && (
+                <div className="view-mode-toggle">
+                  {(["source", "split", "preview"] as ViewMode[]).map((m) => (
+                    <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {role !== "view" && role !== "comment" && !isCanvas && (
+                <div className="reminder-trigger-wrap">
+                  <button
+                    className={currentRemindAt ? "active" : ""}
+                    onClick={() => setReminderPopupOpen((o) => !o)}
+                    title={currentRemindAt ? `Reminder set for ${new Date(currentRemindAt).toLocaleString()}` : "Set a reminder"}
+                  >
+                    <Bell size={13} />
+                    {currentRemindAt ? ` ${new Date(currentRemindAt).toLocaleDateString()}` : ""}
+                  </button>
+                  {reminderPopupOpen && (
+                    <ReminderPopup
+                      value={currentRemindAt}
+                      onSet={(v) => setReminder(v)}
+                      onClose={() => setReminderPopupOpen(false)}
+                      notePath={activePath}
+                      noteTitle={activeNote?.title ?? activePath}
+                    />
+                  )}
+                </div>
+              )}
+              {role === "owner" && (
+                <button onClick={() => setSharePanelOpen(true)} title="Share this note — generates a link scoped to just this note">
+                  <Share2 size={13} /> Share
+                </button>
+              )}
+              {role !== "owner" && <span className="role-badge">{role}</span>}
+              {role === "owner" && (
+                <button className="btn-danger" onClick={() => setDeleteConfirmOpen(true)}>
+                  Delete
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <div className="app-topbar-right">
+          <button className="app-topbar-identity" onClick={() => setIdentityPanelOpen(true)}>
+            <span className="identity-color-dot" style={{ background: getIdentity().color }} aria-hidden="true" />
+            You: {getIdentity().name}
+          </button>
+        </div>
+      </header>
+      <div className="app-body">
+      <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Toggle sidebar">
+        <MenuIcon size={18} />
+      </button>
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside
+        className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarResize.resizing ? "resizing" : ""} ${sidebarIconOnly ? "icon-only" : ""}`}
+        style={{ width: sidebarResize.width }}
+      >
+        <div
+          className={`resize-handle resize-handle-left ${sidebarResize.resizing ? "resizing" : ""}`}
+          onMouseDown={sidebarResize.onHandleMouseDown}
+        />
+        {/* Scrolling lives on this inner wrapper, not .sidebar itself — that
+            element needs overflow: visible so the resize handle above
+            (position: absolute, right: -3px, deliberately straddling the
+            sidebar's own right edge) stays hit-testable; overflow: auto/
+            hidden clips a positioned descendant's hit-testable area to the
+            padding box, silently eating the handle's outer half (the exact
+            bug the rail's own handle and "More" menu both had before this
+            same fix). */}
+        <div className="sidebar-scroll">
+          {/* All nine views, always listed — no separate rail, no overflow
+              "More" menu hiding most of them behind an extra click. Narrow
+              the sidebar (drag the handle above) past ~130px and labels
+              drop, icon-only, same idea as VSCode's activity bar but as a
+              direct consequence of a resize the user did themselves, not a
+              fixed mode imposed on them from the start. */}
+          {!results && !shareToken && (
+            <nav className="sidebar-nav">
+              <button
+                className={sidebarView === "all" && isListView ? "active" : ""}
+                onClick={() => selectView("all")}
+                title="All Notes"
+              >
+                <FileText size={17} />
+                <span>All Notes</span>
+              </button>
+              <button
+                className={sidebarView === "journal" && isListView ? "active" : ""}
+                onClick={() => selectView("journal")}
+                title="Journal"
+              >
+                <Calendar size={17} className="type-color-daily" />
+                <span>Journal</span>
+              </button>
+              <button
+                className={sidebarView === "canvas" && isListView ? "active" : ""}
+                onClick={() => selectView("canvas")}
+                title="Canvas"
+              >
+                <Paintbrush size={17} className="type-color-canvas" />
+                <span>Canvas</span>
+              </button>
+              <button
+                className={showGraph ? "active" : ""}
+                onClick={() => showSpecialPanel(showGraph ? null : "graph")}
+                title="Graph"
+              >
+                <Waypoints size={17} />
+                <span>Graph</span>
+              </button>
+              <button
+                className={showTable ? "active" : ""}
+                onClick={() => showSpecialPanel(showTable ? null : "table")}
+                title="Table"
+              >
+                <Table2 size={17} />
+                <span>Table</span>
+              </button>
+              <button
+                className={showCalendar ? "active" : ""}
+                onClick={() => showSpecialPanel(showCalendar ? null : "calendar")}
+                title="Calendar"
+              >
+                <Calendar size={17} className="type-color-daily" />
+                <span>Calendar</span>
+              </button>
+              <button
+                className={showFlashcards ? "active" : ""}
+                onClick={() => showSpecialPanel(showFlashcards ? null : "flashcards")}
+                title="Flashcards"
+              >
+                <Brain size={17} className="type-color-flashcard" />
+                <span>Flashcards</span>
+              </button>
+              <button
+                className={showHistory ? "active" : ""}
+                onClick={() => showSpecialPanel(showHistory ? null : "history")}
+                title="History"
+              >
+                <History size={17} />
+                <span>History</span>
+              </button>
+              <button
+                className={sidebarView === "tutorials" && isListView ? "active" : ""}
+                onClick={() => selectView("tutorials")}
+                title="Tutorials"
+              >
+                <BookOpen size={17} className="type-color-tutorial" />
+                <span>Tutorials</span>
+              </button>
+            </nav>
+          )}
+          {isListView && (
+            <div className="sidebar-header">
+              {!shareToken && (
+                <input
+                  className="search-input"
+                  placeholder="Search notes…"
+                  aria-label="Search notes"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              )}
+              {!results && !shareToken && types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
+                <select
+                  className="type-filter nav-more-types"
+                  value={["", "daily", "canvas"].includes(typeFilter) ? "" : typeFilter}
+                  onChange={(e) => {
+                    setSidebarView("all");
+                    setTypeFilter(e.target.value);
+                  }}
+                >
+                  <option value="">More types…</option>
+                  {types
+                    .filter((t) => t.type !== "daily" && t.type !== "canvas")
+                    .map((t) => (
+                      <option key={t.type} value={t.type}>
+                        {t.type} ({t.count})
+                      </option>
+                    ))}
+                </select>
+              )}
             </div>
           )}
-          <button onClick={() => setIdentityPanelOpen(true)}>
-            <span className="identity-color-dot" style={{ background: getIdentity().color }} aria-hidden="true" />
-            <span>You: {getIdentity().name}</span>
-          </button>
-          <button onClick={() => setSettingsPanelOpen(true)}>
-            <SettingsIcon size={17} />
-            <span>Settings</span>
-          </button>
-          {!IS_TAURI && !shareToken && authStatus && (
-            <button className={authStatus.user ? "active" : ""} onClick={() => setWorkspacePanelOpen(true)}>
-              <Users size={17} />
-              <span>
-                {authStatus.configured
-                  ? authStatus.user
-                    ? `${authStatus.user.name} (${authStatus.user.role})`
-                    : "Workspace"
-                  : "Set up team access"}
-              </span>
-            </button>
-          )}
-        </div>
-        </div>
-      </nav>
-      <aside
-        className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""} ${sidebarResize.resizing ? "resizing" : ""}`}
-        style={sidebarCollapsed ? undefined : { width: sidebarResize.width }}
-      >
-        {!sidebarCollapsed && (
-          <div
-            className={`resize-handle resize-handle-left ${sidebarResize.resizing ? "resizing" : ""}`}
-            onMouseDown={sidebarResize.onHandleMouseDown}
-          />
-        )}
-        <div className="sidebar-header">
-          {!shareToken && (
-            <input
-              className="search-input"
-              placeholder="Search notes…"
-              aria-label="Search notes"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
-          {!results && !shareToken && isListView && types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
-            <select
-              className="type-filter nav-more-types"
-              value={["", "daily", "canvas"].includes(typeFilter) ? "" : typeFilter}
-              onChange={(e) => {
-                setSidebarView("all");
-                setTypeFilter(e.target.value);
-              }}
-            >
-              <option value="">More types…</option>
-              {types
-                .filter((t) => t.type !== "daily" && t.type !== "canvas")
-                .map((t) => (
-                  <option key={t.type} value={t.type}>
-                    {t.type} ({t.count})
-                  </option>
-                ))}
-            </select>
-          )}
-        </div>
-        {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
-          <div className="sidebar-section">
-            <div className="sidebar-section-label">Favorites</div>
-            <ul className="note-list-compact">
-              {favoriteNotes.map((n) => (
-                <li
-                  key={n.path}
-                  className={n.path === activePath ? "active" : ""}
-                  onClick={() => openNote(n.path)}
-                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="note-title">{n.title}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {!results && sidebarView === "journal" && !displayedNotes.some((n) => n.title === todayIso) && (
-          <button className="journal-today-cta" onClick={onDailyNote}>
-            <span className="nav-icon" aria-hidden="true">
-              <PenLine size={15} />
-            </span>
-            Write today's entry
-          </button>
-        )}
-        <ul className="note-list">
-          {results
-            ? results.map((r) => (
-                <li
-                  key={r.path}
-                  className={r.path === activePath ? "active" : ""}
-                  onClick={() => openNote(r.path)}
-                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(r.path))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="note-title">{r.title}</div>
-                  <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
-                </li>
-              ))
-            : displayedNotes.map((n) => (
-                <li
-                  key={n.path}
-                  className={n.path === activePath ? "active" : ""}
-                  onClick={() => openNote(n.path)}
-                  onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="note-title">
-                    {sidebarView === "journal" ? formatJournalTitle(n.title) : n.title}
-                  </div>
-                  {sidebarView === "journal" && n.title !== formatJournalTitle(n.title) && (
-                    <div className="note-tags">{n.title}</div>
-                  )}
-                  {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
-                  {canFavorite && (
-                    <button
-                      className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(n.path);
-                      }}
-                      aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
-                      title={n.favorite ? "Remove from favorites" : "Add to favorites"}
+        {isListView && (
+          <>
+            {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
+              <div className="sidebar-section">
+                <div className="sidebar-section-label">Favorites</div>
+                <ul className="note-list-compact">
+                  {favoriteNotes.map((n) => (
+                    <li
+                      key={n.path}
+                      className={n.path === activePath ? "active" : ""}
+                      onClick={() => openNote(n.path)}
+                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                      role="button"
+                      tabIndex={0}
                     >
-                      <Star size={14} fill={n.favorite ? "currentColor" : "none"} />
-                    </button>
-                  )}
-                </li>
-              ))}
-          {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
-          {!results && displayedNotes.length === 0 && (
-            <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
-          )}
-        </ul>
+                      <div className="note-title">{n.title}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!results && sidebarView === "journal" && !displayedNotes.some((n) => n.title === todayIso) && (
+              <button className="journal-today-cta" onClick={onDailyNote}>
+                <span className="nav-icon" aria-hidden="true">
+                  <PenLine size={15} />
+                </span>
+                Write today's entry
+              </button>
+            )}
+            <ul className="note-list">
+              {results
+                ? results.map((r) => (
+                    <li
+                      key={r.path}
+                      className={r.path === activePath ? "active" : ""}
+                      onClick={() => openNote(r.path)}
+                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(r.path))}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="note-title">{r.title}</div>
+                      <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
+                    </li>
+                  ))
+                : displayedNotes.map((n) => (
+                    <li
+                      key={n.path}
+                      className={n.path === activePath ? "active" : ""}
+                      onClick={() => openNote(n.path)}
+                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="note-title">
+                        {sidebarView === "journal" ? formatJournalTitle(n.title) : n.title}
+                      </div>
+                      {sidebarView === "journal" && n.title !== formatJournalTitle(n.title) && (
+                        <div className="note-tags">{n.title}</div>
+                      )}
+                      {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
+                      {canFavorite && (
+                        <button
+                          className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(n.path);
+                          }}
+                          aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
+                          title={n.favorite ? "Remove from favorites" : "Add to favorites"}
+                        >
+                          <Star size={14} fill={n.favorite ? "currentColor" : "none"} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+              {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
+              {!results && displayedNotes.length === 0 && (
+                <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
+              )}
+            </ul>
+          </>
+        )}
+        </div>
         {/* Vault-wide actions — creating notes — are for the owner's own
             vault, not something a share-link recipient should see, so
             they're hidden in guest (shareToken) mode even though the note
@@ -1629,11 +1597,41 @@ export default function App() {
             )}
           </div>
         )}
+        {/* Settings/Workspace — Vault/Identity moved to the top bar
+            (App.tsx's app-topbar), but these two stay here: neither is
+            "always visible, every view" chrome the way vault/identity are,
+            they're closer in kind to the nav items just above them. */}
+        <div className="sidebar-bottom">
+          <button onClick={() => setSettingsPanelOpen(true)} title="Settings">
+            <SettingsIcon size={17} />
+            <span>Settings</span>
+          </button>
+          {!IS_TAURI && !shareToken && authStatus && (
+            <button
+              className={authStatus.user ? "active" : ""}
+              onClick={() => setWorkspacePanelOpen(true)}
+              title={
+                authStatus.configured
+                  ? authStatus.user?.role === "admin"
+                    ? "Manage workspace members"
+                    : "Workspace"
+                  : "Set up team access"
+              }
+            >
+              <Users size={17} />
+              <span>
+                {authStatus.configured
+                  ? authStatus.user
+                    ? `${authStatus.user.name} (${authStatus.user.role})`
+                    : "Workspace"
+                  : "Set up team access"}
+              </span>
+            </button>
+          )}
+        </div>
         <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
-      <main
-        className={`editor-pane ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelCollapsed ? "right-panel-collapsed" : ""}`}
-      >
+      <main className={`editor-pane ${rightPanelCollapsed ? "right-panel-collapsed" : ""}`}>
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} />
         ) : showTable ? (
@@ -1654,55 +1652,6 @@ export default function App() {
           </div>
         ) : activePath && localSession ? (
           <>
-            <div className="editor-toolbar">
-              <span className="editor-path">{activePath}</span>
-              <span className={`editor-status ${status !== "synced" && status !== "connected" ? "editor-status-offline" : ""}`}>
-                {status}
-                {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
-              </span>
-              {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
-              {!isCanvas && (
-                <div className="view-mode-toggle">
-                  {(["source", "split", "preview"] as ViewMode[]).map((m) => (
-                    <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {role !== "view" && role !== "comment" && !isCanvas && (
-                <div className="reminder-trigger-wrap">
-                  <button
-                    className={currentRemindAt ? "active" : ""}
-                    onClick={() => setReminderPopupOpen((o) => !o)}
-                    title={currentRemindAt ? `Reminder set for ${new Date(currentRemindAt).toLocaleString()}` : "Set a reminder"}
-                  >
-                    <Bell size={13} />
-                    {currentRemindAt ? ` ${new Date(currentRemindAt).toLocaleDateString()}` : ""}
-                  </button>
-                  {reminderPopupOpen && (
-                    <ReminderPopup
-                      value={currentRemindAt}
-                      onSet={(v) => setReminder(v)}
-                      onClose={() => setReminderPopupOpen(false)}
-                      notePath={activePath}
-                      noteTitle={activeNote?.title ?? activePath}
-                    />
-                  )}
-                </div>
-              )}
-              {role === "owner" && (
-                <button onClick={() => setSharePanelOpen(true)} title="Share this note — generates a link scoped to just this note">
-                  <Share2 size={13} /> Share
-                </button>
-              )}
-              {role !== "owner" && <span className="role-badge">{role}</span>}
-              {role === "owner" && (
-                <button className="btn-danger" onClick={() => setDeleteConfirmOpen(true)}>
-                  Delete
-                </button>
-              )}
-            </div>
             {isCanvas ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
                 <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
@@ -1836,6 +1785,7 @@ export default function App() {
           </aside>
         </>
       )}
+      </div>
       {deleteConfirmOpen && activePath && (
         <ConfirmDialog
           title="Delete note?"
