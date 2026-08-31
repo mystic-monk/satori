@@ -77,6 +77,7 @@ import {
   History,
   Menu as MenuIcon,
   MessageSquare,
+  MoreHorizontal,
   Paintbrush,
   PenLine,
   RotateCw,
@@ -169,6 +170,22 @@ export default function App() {
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [identityPanelOpen, setIdentityPanelOpen] = useState(false);
+  // Only Canvas/Table/Calendar/Flashcards/History/Tutorials live behind
+  // this — All Notes/Journal/Graph are common enough to stay permanently
+  // pinned in the rail. Reset per note-switch effect below, same as the
+  // other transient panel-open states, so it doesn't linger open across
+  // an unrelated navigation.
+  const [railMoreOpen, setRailMoreOpen] = useState(false);
+  // Positioned fixed at these exact viewport coordinates rather than
+  // absolute relative to the "More" button — the button lives inside
+  // .sidebar-rail-scroll (overflow-y: auto, for a long nav list), and an
+  // absolutely-positioned popover extending past that container's own
+  // edge gets clipped to invisibility the same way the rail's resize
+  // handle did before that got the same fix. Computed fresh on open, not
+  // tracked continuously, since the button's position doesn't change
+  // while the menu is up.
+  const [moreMenuPos, setMoreMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   // Set right before opening Settings' export section, not persisted —
   // just "what did compiling just produce", reset per open note the same
@@ -242,6 +259,17 @@ export default function App() {
       toggleSidebarCollapsed();
       return;
     }
+    activate();
+    setSidebarCollapsed(isSpecialView);
+  }
+
+  // Same activation logic as railClick, minus the click-the-active-icon-
+  // again-to-toggle gesture — that doesn't translate cleanly to an item
+  // living inside a menu that's about to close anyway. Always activates
+  // and closes the "More" menu behind it.
+  function selectFromMoreMenu(activate: () => void, isSpecialView: boolean) {
+    setSidebarOpen(false);
+    setRailMoreOpen(false);
     activate();
     setSidebarCollapsed(isSpecialView);
   }
@@ -615,6 +643,7 @@ export default function App() {
       setPendingCommentAnchor(null);
       setCompileStatus(null);
       setReminderPopupOpen(false);
+      setRailMoreOpen(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
@@ -956,6 +985,17 @@ export default function App() {
   // and the wide panel below to avoid repeating all five negations at
   // every active-state check.
   const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory;
+  // Drives the "More" rail button's active state — true whenever the
+  // current view is one of the six tucked into that overflow menu, so
+  // it's still clear you're in a non-primary view even though the
+  // specific item isn't visible in the rail itself.
+  const isSecondaryViewActive =
+    showTable ||
+    showCalendar ||
+    showFlashcards ||
+    showHistory ||
+    (sidebarView === "canvas" && isListView) ||
+    (sidebarView === "tutorials" && isListView);
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
@@ -1268,49 +1308,76 @@ export default function App() {
                 <Calendar size={17} className="type-color-daily" />
                 <span>Journal</span>
               </button>
-              <button
-                className={sidebarView === "canvas" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "canvas" && isListView, () => selectView("canvas"), false)}
-              >
-                <Paintbrush size={17} className="type-color-canvas" />
-                <span>Canvas</span>
-              </button>
               <button className={showGraph ? "active" : ""} onClick={() => railClick(showGraph, () => showSpecialPanel("graph"), true)}>
                 <Waypoints size={17} />
                 <span>Graph</span>
               </button>
-              <button className={showTable ? "active" : ""} onClick={() => railClick(showTable, () => showSpecialPanel("table"), true)}>
-                <Table2 size={17} />
-                <span>Table</span>
-              </button>
-              <button
-                className={showCalendar ? "active" : ""}
-                onClick={() => railClick(showCalendar, () => showSpecialPanel("calendar"), true)}
-              >
-                <Calendar size={17} className="type-color-daily" />
-                <span>Calendar</span>
-              </button>
-              <button
-                className={showFlashcards ? "active" : ""}
-                onClick={() => railClick(showFlashcards, () => showSpecialPanel("flashcards"), true)}
-              >
-                <Brain size={17} className="type-color-flashcard" />
-                <span>Flashcards</span>
-              </button>
-              <button
-                className={showHistory ? "active" : ""}
-                onClick={() => railClick(showHistory, () => showSpecialPanel("history"), true)}
-              >
-                <History size={17} />
-                <span>History</span>
-              </button>
-              <button
-                className={sidebarView === "tutorials" && isListView ? "active" : ""}
-                onClick={() => railClick(sidebarView === "tutorials" && isListView, () => selectView("tutorials"), false)}
-              >
-                <BookOpen size={17} className="type-color-tutorial" />
-                <span>Tutorials</span>
-              </button>
+              <div className="sidebar-rail-more-wrap">
+                <button
+                  ref={moreButtonRef}
+                  className={isSecondaryViewActive ? "active" : ""}
+                  onClick={() => {
+                    if (railMoreOpen) {
+                      setRailMoreOpen(false);
+                      return;
+                    }
+                    const rect = moreButtonRef.current!.getBoundingClientRect();
+                    setMoreMenuPos({ top: rect.top, left: rect.right + 4 });
+                    setRailMoreOpen(true);
+                  }}
+                  aria-expanded={railMoreOpen}
+                >
+                  <MoreHorizontal size={17} />
+                  <span>More</span>
+                </button>
+                {/* Invisible, click-anywhere-to-dismiss — same idea as
+                    .sidebar-backdrop but without the dark tint, since this
+                    is a small in-page menu, not a full mobile drawer. */}
+                {railMoreOpen && <div className="sidebar-rail-more-backdrop" onClick={() => setRailMoreOpen(false)} />}
+                {railMoreOpen && moreMenuPos && (
+                  <div className="sidebar-rail-more-menu" style={{ top: moreMenuPos.top, left: moreMenuPos.left }}>
+                    <button
+                      className={sidebarView === "canvas" && isListView ? "active" : ""}
+                      onClick={() => selectFromMoreMenu(() => selectView("canvas"), false)}
+                    >
+                      <Paintbrush size={16} className="type-color-canvas" />
+                      <span>Canvas</span>
+                    </button>
+                    <button className={showTable ? "active" : ""} onClick={() => selectFromMoreMenu(() => showSpecialPanel("table"), true)}>
+                      <Table2 size={16} />
+                      <span>Table</span>
+                    </button>
+                    <button
+                      className={showCalendar ? "active" : ""}
+                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("calendar"), true)}
+                    >
+                      <Calendar size={16} className="type-color-daily" />
+                      <span>Calendar</span>
+                    </button>
+                    <button
+                      className={showFlashcards ? "active" : ""}
+                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("flashcards"), true)}
+                    >
+                      <Brain size={16} className="type-color-flashcard" />
+                      <span>Flashcards</span>
+                    </button>
+                    <button
+                      className={showHistory ? "active" : ""}
+                      onClick={() => selectFromMoreMenu(() => showSpecialPanel("history"), true)}
+                    >
+                      <History size={16} />
+                      <span>History</span>
+                    </button>
+                    <button
+                      className={sidebarView === "tutorials" && isListView ? "active" : ""}
+                      onClick={() => selectFromMoreMenu(() => selectView("tutorials"), false)}
+                    >
+                      <BookOpen size={16} className="type-color-tutorial" />
+                      <span>Tutorials</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

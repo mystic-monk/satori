@@ -443,6 +443,18 @@ body {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
+/* Only three permanent destinations now (All Notes/Journal/Graph) plus
+   the "More" button that opens the rest — real room to give each one
+   more breathing room than the tighter, denser nine-item version had,
+   without needing a wider rail to do it. The overflow menu's own items
+   stay at the base button density above; it's a compact dropdown, not
+   the primary nav surface. */
+.sidebar-rail-top > button,
+.sidebar-rail-more-wrap > button {
+  padding: 10px 10px;
+  gap: 12px;
+}
+
 .sidebar-rail button span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -458,6 +470,46 @@ body {
   background: var(--bg-active);
   color: var(--text);
   font-weight: 500;
+}
+
+.sidebar-rail-more-wrap {
+  position: relative;
+}
+
+.sidebar-rail-more-wrap > button {
+  width: 100%;
+}
+
+.sidebar-rail-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  background: transparent;
+}
+
+/* Opens to the right of the rail rather than below it — below would
+   either overflow past the rail's own bottom edge or need to know how
+   tall the rail currently is; anchoring sideways avoids both. */
+/* position: fixed with top/left set inline (App.tsx, computed from the
+   "More" button's own getBoundingClientRect() on open) — not absolute
+   relative to the button. The button lives inside .sidebar-rail-scroll
+   (overflow-y: auto, for a long nav list), and an absolutely-positioned
+   popover extending past that container's own edge gets silently
+   clipped to invisibility, the same failure mode the rail's resize
+   handle had before it got the identical fix. Fixed positioning escapes
+   that scrolling ancestor entirely. */
+.sidebar-rail-more-menu {
+  position: fixed;
+  z-index: 25;
+  width: 170px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .nav-icon {

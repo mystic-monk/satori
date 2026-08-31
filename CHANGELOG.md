@@ -24,12 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reminder popup: `type="datetime-local"` replaced with separate `type="date"`/`type="time"` inputs (the combined widget rendered as a cramped, fiddly segmented editor with no visible calendar) plus quick-pick buttons ("In 1 hour", "Tomorrow, 9am", "Next Monday, 9am"). The 🔔 toolbar button is a real icon (lucide's Bell) now, not an emoji glyph sitting out of step with the rest of the toolbar's icon set
 
 - The rail is drag-to-resize now (140–320px), same handle-and-persistence pattern the note-list and right panels already had (`useResizableWidth`'s `offset` parameter)
+- Rail trimmed to three permanent items (All Notes, Journal, Graph) plus a "More" button opening the other six (Canvas, Table, Calendar, Flashcards, History, Tutorials) — nine permanent items was crowded, and a growing feature set means it would only get more crowded over time. Fewer pinned items also meant real room to give each one more padding without widening the rail
 
 ### Fixed
 
 - CI's `npm audit --omit=dev` was failing on `fastembed`'s own direct `tar@^6.2.0` pin (several majors behind the `tar@7.5.22` already resolved elsewhere in the tree via `onnxruntime-node`) — overridden past it rather than downgrading fastembed
 - The note-list panel's own resize handle computed its width from the mouse's raw screen position, which was only correct back when it sat flush against the window's left edge — once the rail became a permanent fixture to its left, every drag was off by however wide the rail happened to be. `useResizableWidth` now accepts an `offset` for exactly this ("how much space something before me already occupies")
 - The rail's new resize handle was invisible to clicks in its outer half — deliberately straddles the rail's edge (`right: -3px`) the same way the note-list panel's own handle does, but the rail also had `overflow-y: auto` for its nav list, which clips a positioned descendant's hit-testable area to the padding box. Moved scrolling to an inner wrapper so the outer element (holding the handle) stays overflow: visible
+- The "More" menu had the identical clipping problem the resize handle did, for the same reason — an absolutely-positioned popover inside the same scrolling nav list. Positioned fixed at coordinates computed from the button's own `getBoundingClientRect()` instead, escaping the scroll container entirely rather than trying to stay inside it
 
 ## [0.1.4] — 2026-08-31
 
