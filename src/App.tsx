@@ -1220,6 +1220,24 @@ export default function App() {
             </>
           )}
         </div>
+        {!shareToken && (
+          <input
+            className="app-topbar-search"
+            placeholder="Search notes…"
+            aria-label="Search notes"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              // Search results render in the sidebar's note-list section,
+              // which only shows in a list view (Graph/Table/etc. have
+              // their own full-width content there instead) — typing a
+              // query while looking at one of those switches back so the
+              // results are actually visible, instead of typing into a
+              // box with no visible effect.
+              if (e.target.value && !isListView) showSpecialPanel(null);
+            }}
+          />
+        )}
         <div className="app-topbar-note">
           {isListView && activePath && localSession && role !== "denied" && (
             <>
@@ -1386,15 +1404,12 @@ export default function App() {
           )}
           {isListView && (
             <div className="sidebar-header">
-              {!shareToken && (
-                <input
-                  className="search-input"
-                  placeholder="Search notes…"
-                  aria-label="Search notes"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              )}
+              {/* Journal/Canvas already have their own nav buttons — this is
+                  for everything else: reference, template, project, or any
+                  custom `type:` you've given your own notes. Filters the
+                  list below to just that type; empty (just "reference," say)
+                  until you actually have notes using other types — it's not
+                  broken, there's just nothing else to filter by yet. */}
               {!results && !shareToken && types.filter((t) => t.type !== "daily" && t.type !== "canvas").length > 0 && (
                 <select
                   className="type-filter nav-more-types"
@@ -1403,8 +1418,9 @@ export default function App() {
                     setSidebarView("all");
                     setTypeFilter(e.target.value);
                   }}
+                  title="Filter the note list by type (anything other than Journal/Canvas, which have their own buttons above)"
                 >
-                  <option value="">More types…</option>
+                  <option value="">Filter by type…</option>
                   {types
                     .filter((t) => t.type !== "daily" && t.type !== "canvas")
                     .map((t) => (

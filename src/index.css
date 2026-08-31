@@ -169,6 +169,17 @@ body {
   flex-shrink: 0;
 }
 
+.app-topbar-search {
+  flex-shrink: 0;
+  width: 220px;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
 .app-topbar-vault {
   display: flex;
   align-items: center;
@@ -2680,6 +2691,11 @@ button:disabled:hover {
   .app-topbar-note {
     flex-wrap: wrap;
     row-gap: 6px;
+  }
+
+  .app-topbar-search {
+    width: 100%;
+    order: 1;
   }
 
   .editor-body.view-split {
