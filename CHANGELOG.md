@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[[Note#Heading]]`/`[[Note#^block-id]]` *links* now scroll to that spot once the note opens, matching what embeds (`![[...]]`) already did — previously the link resolved and navigated correctly but landed at the top of the note
 - A new **Calendar** view — a month grid of every note with a date, sourced from the same properties bag Table view reads (daily/journal notes automatically via their ISO-date title, any other note via a `date` property)
 - Book/Chapter/Character/Scene templates for long-form fiction and screenwriting (**+ Create → New From Template**) — no new engine, just existing features arranged for the job: a live `​```query` block lists each book's chapters, Table view sorts/filters chapters and scenes, and character relationships are just wikilinks in prose that show up on the Graph automatically. A new tutorial page (`tutorial/writing-books-and-scripts`) walks through it
+- A live word count in the editor toolbar for the open note (`src/wordCount.ts`), and a **Compile chapters** action in Settings for any `type: book` note — gathers every chapter that relates back to it, in `order`, into one document and exports it as Markdown/HTML/PDF, reporting the compiled chapter and word count (`src/compileBook.ts`)
 
 ### Fixed
 

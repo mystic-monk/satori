@@ -32,6 +32,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
 - Templates with `{{date}}`/`{{title}}` placeholder substitution — including a ready-made Book / Chapter / Character / Scene set for long-form fiction and screenwriting, built entirely from existing features (`​```query` blocks, table rollups, the link graph), see [[tutorial/writing-books-and-scripts]] in the starter vault
+- A live word count for the open note, and a **Compile chapters** action (Settings, on any `type: book` note) that gathers every related chapter in order into one document, exportable as Markdown/HTML/PDF
 - Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
 - Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing

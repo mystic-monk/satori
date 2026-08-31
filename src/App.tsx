@@ -59,6 +59,8 @@ import { checkForUpdate, type Update } from "./updater";
 import type { RenderEnv } from "./markdown";
 import { renderNoteBodyForExport } from "./renderForExport";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
+import { compileBook } from "./compileBook";
+import { countWords } from "./wordCount";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { resolveFragment } from "../shared/blockrefs";
 import {
@@ -187,6 +189,10 @@ export default function App() {
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
+  // Set right before opening Settings' export section, not persisted —
+  // just "what did compiling just produce", reset per open note the same
+  // way pendingCommentAnchor/commentRanges are (see the note-switch effect).
+  const [compileStatus, setCompileStatus] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -554,6 +560,7 @@ export default function App() {
       // from the note you're leaving is meaningless anywhere else too.
       setCommentRanges([]);
       setPendingCommentAnchor(null);
+      setCompileStatus(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
@@ -886,6 +893,9 @@ export default function App() {
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
+  // Frontmatter stripped before counting — otherwise a note's own YAML
+  // properties would inflate the count of what's actually being written.
+  const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
   // Not gated on the active note's edit/owner role (that reflects only
   // the currently-open note): the star renders on every row in the list,
   // so a guest with edit access to their one shared note would otherwise
@@ -947,6 +957,33 @@ export default function App() {
   async function onExportPdf() {
     if (!activePath) return;
     exportPdf(activeNote?.title ?? activePath, await renderNoteBodyForExport(raw, exportEnv(), notes));
+  }
+
+  // Same three-format shape as the export handlers above, just compiling
+  // every related chapter into one document first (src/compileBook.ts)
+  // instead of exporting the currently-open note's own content.
+  async function runCompile(): Promise<{ raw: string; chapterCount: number; wordCount: number } | null> {
+    if (!activeNote || activeNote.type !== "book") return null;
+    const result = await compileBook(activeNote, notes, async (p) => (await fetchNote(p, shareToken)).raw);
+    setCompileStatus(
+      `Compiled ${result.chapterCount} chapter${result.chapterCount === 1 ? "" : "s"}, ${result.wordCount.toLocaleString()} words.`
+    );
+    return result;
+  }
+  async function onCompileMd() {
+    const compiled = await runCompile();
+    if (!compiled || !activeNote) return;
+    exportMarkdown(`${activeNote.title}.md`, compiled.raw);
+  }
+  async function onCompileHtml() {
+    const compiled = await runCompile();
+    if (!compiled || !activeNote) return;
+    exportHtml(activeNote.title, await renderNoteBodyForExport(compiled.raw, exportEnv(), notes));
+  }
+  async function onCompilePdf() {
+    const compiled = await runCompile();
+    if (!compiled || !activeNote) return;
+    exportPdf(activeNote.title, await renderNoteBodyForExport(compiled.raw, exportEnv(), notes));
   }
 
   // Computed on demand, not stored in state — the whole point is that only
@@ -1046,6 +1083,11 @@ export default function App() {
           onExportMd={onExportMd}
           onExportHtml={onExportHtml}
           onExportPdf={onExportPdf}
+          canCompile={activeNote?.type === "book"}
+          onCompileMd={onCompileMd}
+          onCompileHtml={onCompileHtml}
+          onCompilePdf={onCompilePdf}
+          compileStatus={compileStatus}
         />
       )}
       {activePath && (
@@ -1476,6 +1518,7 @@ export default function App() {
                 {status}
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>
+              {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
               {!isCanvas && (
                 <div className="view-mode-toggle">
                   {(["source", "split", "preview"] as ViewMode[]).map((m) => (

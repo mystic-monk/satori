@@ -29,6 +29,14 @@ interface SettingsPanelProps {
   onExportMd: () => void;
   onExportHtml: () => void;
   onExportPdf: () => void;
+  // Only true when the open note is type: book — compiling reads every
+  // chapter that relates back to it (see src/compileBook.ts), so it
+  // doesn't make sense for any other note type.
+  canCompile: boolean;
+  onCompileMd: () => void;
+  onCompileHtml: () => void;
+  onCompilePdf: () => void;
+  compileStatus: string | null;
 }
 
 // One consolidated home for settings that used to be scattered: theme
@@ -61,6 +69,11 @@ export default function SettingsPanel({
   onExportMd,
   onExportHtml,
   onExportPdf,
+  canCompile,
+  onCompileMd,
+  onCompileHtml,
+  onCompilePdf,
+  compileStatus,
 }: SettingsPanelProps) {
   const [viewKeyPreview, setViewKeyPreview] = useState<string | null>(null);
   const [viewKeyCopied, setViewKeyCopied] = useState(false);
@@ -223,6 +236,28 @@ export default function SettingsPanel({
             <p className="settings-note">Open a note (not a canvas) to export it.</p>
           )}
         </div>
+
+        {canCompile && (
+          <div className="settings-section">
+            <div className="settings-section-label">Compile chapters</div>
+            <p className="settings-note">
+              Gathers every chapter whose <code>book</code> property points back at this note, in <code>order</code>,
+              into one document.
+            </p>
+            <div className="settings-export-row">
+              <button className="btn-ghost" onClick={onCompileMd}>
+                Markdown (.md)
+              </button>
+              <button className="btn-ghost" onClick={onCompileHtml}>
+                HTML (.html)
+              </button>
+              <button className="btn-ghost" onClick={onCompilePdf}>
+                PDF
+              </button>
+            </div>
+            {compileStatus && <p className="settings-note">{compileStatus}</p>}
+          </div>
+        )}
 
         <div className="modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose}>

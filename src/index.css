@@ -737,6 +737,11 @@ button:disabled:hover {
   font-weight: 500;
 }
 
+.editor-word-count {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 .cloud-bar-wrap {
   border-bottom: 1px solid var(--border);
 }
