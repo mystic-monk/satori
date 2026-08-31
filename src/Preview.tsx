@@ -8,6 +8,7 @@ import { fillQueryBlocks, fillBibliographyBlocks } from "./deferredBlocks";
 import { applyTextDiff } from "./collab";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { buildResolver } from "./noteResolver";
+import { parseTimetable, renderTimetableHtml, timetableGridMetrics } from "./timetable";
 
 // The inverse of markdown.ts's taskListsPlugin: `line` is the checkbox's
 // list-item start line within the frontmatter-stripped body (same
@@ -55,6 +56,7 @@ interface PreviewProps {
 
 export default function Preview({ raw, notes, onNavigate, shareToken, ytext, readOnly }: PreviewProps) {
   const [bodies, setBodies] = useState<Map<string, string>>(new Map());
+  const [fullscreenTimetable, setFullscreenTimetable] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const citations = useMemo(() => buildCitations(notes), [notes]);
@@ -144,16 +146,90 @@ export default function Preview({ raw, notes, onNavigate, shareToken, ytext, rea
       });
       return;
     }
+    const fsBtn = (e.target as HTMLElement).closest<HTMLButtonElement>(".timetable-fullscreen-btn");
+    if (fsBtn) {
+      const source = fsBtn.closest<HTMLElement>(".timetable-block")?.dataset.timetableSource;
+      // The attribute was written via md.utils.escapeHtml (src/markdown.ts)
+      // — reading it back through .dataset already gives the decoded raw
+      // text, same as .code-copy-btn's data-code a few branches up.
+      if (source) setFullscreenTimetable(source);
+      return;
+    }
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note-path]");
     if (el) onNavigate(el.dataset.notePath!, el.dataset.fragment);
   }
 
   return (
-    <div
-      className={`preview${readOnly ? " preview-readonly" : ""}`}
-      ref={containerRef}
-      onClick={handleClick}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <div
+        className={`preview${readOnly ? " preview-readonly" : ""}`}
+        ref={containerRef}
+        onClick={handleClick}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {fullscreenTimetable != null && (
+        <TimetableFullscreen source={fullscreenTimetable} onClose={() => setFullscreenTimetable(null)} />
+      )}
+    </>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+}
+
+// A dedicated full-screen presentation of one ```timetable block — bigger
+// rows (computed to fill the actual viewport height, not the compact
+// inline default), the OS/browser Fullscreen API, and a screen wake lock
+// so the display doesn't sleep while it's left up on a second monitor or
+// a wall-mounted screen. Wake Lock support varies (recent Safari/Chrome
+// only) — requested best-effort, silently skipped where unavailable.
+function TimetableFullscreen({ source, onClose }: { source: string; onClose: () => void }) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const entries = useMemo(() => parseTimetable(source), [source]);
+
+  const rowHeightPx = useMemo(() => {
+    if (entries.length === 0) return 4;
+    const { totalRows } = timetableGridMetrics(entries);
+    const available = window.innerHeight - 140; // day-header row + close button + breathing room
+    return Math.min(28, Math.max(4, Math.floor(available / totalRows)));
+  }, [entries]);
+
+  const html = useMemo(() => renderTimetableHtml(entries, escapeHtml, rowHeightPx), [entries, rowHeightPx]);
+
+  useEffect(() => {
+    overlayRef.current?.requestFullscreen?.().catch(() => {});
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+    nav.wakeLock
+      ?.request("screen")
+      .then((lock) => {
+        wakeLockRef.current = lock;
+      })
+      .catch(() => {});
+
+    function onFullscreenChange() {
+      if (!document.fullscreenElement) onClose();
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("keydown", onKeyDown);
+      wakeLockRef.current?.release().catch(() => {});
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    };
+  }, [onClose]);
+
+  return (
+    <div className="timetable-fullscreen-overlay" ref={overlayRef}>
+      <button type="button" className="timetable-fullscreen-close" onClick={onClose} aria-label="Close full screen">
+        ✕ Close
+      </button>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
   );
 }

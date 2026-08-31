@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import { extractWikilinkRefs as extractWikilinkRefsFromBody, type WikilinkRef } from "../shared/wikilinks.js";
 import { fragmentLabel, resolveFragment, stripBlockMarker } from "../shared/blockrefs.js";
+import { parseTimetable, renderTimetableHtml } from "./timetable";
 
 type MDInstance = InstanceType<typeof MarkdownIt>;
 // The full "highlight.js" package bundles ~190 languages (~1MB+) eagerly;
@@ -500,6 +501,19 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     // map, neither of which the fence rule has access to — Preview.tsx's
     // effect scans the rendered note for [@citekey]s and fills this in.
     return `<div class="bibliography-block"></div>`;
+  }
+  if (lang === "timetable") {
+    // Unlike mermaid/query/bibliography above, parsing+layout here is pure
+    // and synchronous (src/timetable.ts) — no external lib, no live notes
+    // list — so it renders directly, no placeholder/deferred fill-in pass
+    // needed. data-timetable-source carries the raw block text so the
+    // "Full screen" button (Preview.tsx) can re-render it into an overlay.
+    const source = md.utils.escapeHtml(token.content);
+    const entries = parseTimetable(token.content);
+    return `<div class="timetable-block" data-timetable-source="${source}">
+      <button type="button" class="timetable-fullscreen-btn" aria-label="Open full screen">⛶ Full screen</button>
+      ${renderTimetableHtml(entries, md.utils.escapeHtml)}
+    </div>`;
   }
   // A raw copy of the code, not the highlighted HTML — the copy button
   // needs the original text, and re-deriving it from the highlighted

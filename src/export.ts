@@ -61,6 +61,14 @@ const EXPORT_CSS = `
   .export-doc .transclusion-title { font-weight: 600; font-size: 0.85em; color: #666; margin-bottom: 6px; }
   .export-doc .wikilink { color: #2563eb; text-decoration: none; }
   .export-doc .wikilink-broken { color: #b91c1c; }
+  .export-doc .timetable-fullscreen-btn { display: none; }
+  .export-doc .timetable-grid { display: grid; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; page-break-inside: avoid; }
+  .export-doc .timetable-corner { border-bottom: 1px solid #ddd; border-right: 1px solid #ddd; }
+  .export-doc .timetable-day-header { grid-row: 1; text-align: center; font-weight: 600; font-size: 12px; padding: 6px 4px; border-bottom: 1px solid #ddd; border-left: 1px solid #ddd; }
+  .export-doc .timetable-hour-label { text-align: right; padding-right: 6px; font-size: 10px; color: #666; border-right: 1px solid #ddd; border-top: 1px solid #ddd; }
+  .export-doc .timetable-entry { margin: 1px 2px; padding: 3px 6px; border-radius: 4px; border-left: 3px solid #2563eb; background: #eef2ff; overflow: hidden; font-size: 11px; line-height: 1.3; }
+  .export-doc .timetable-entry-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .export-doc .timetable-entry-time { color: #666; white-space: nowrap; }
   @media print { .export-doc { margin: 0; max-width: none; } }
 `;
 

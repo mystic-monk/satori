@@ -59,6 +59,11 @@ const SLASH_ITEMS: SlashItem[] = [
     snippet: "```mermaid\nflowchart TD\n  A --> B{{cursor}}\n```",
   },
   { label: "Canvas embed", hint: "canvas note", snippet: "See the linked canvas note: [[{{cursor}}]]" },
+  {
+    label: "Timetable",
+    hint: "```timetable",
+    snippet: "```timetable\nMon 09:00-10:30 {{cursor}}\n```",
+  },
   { label: "Callout", hint: "> [!note]", snippet: "> [!note] {{cursor}}\n> " },
   { label: "Math block", hint: "$$ … $$", snippet: "$$\n{{cursor}}\n$$" },
   { label: "Note link", hint: "[[...]]", snippet: "[[{{cursor}}]]" },
