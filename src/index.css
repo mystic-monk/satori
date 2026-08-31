@@ -1511,6 +1511,71 @@ button:disabled:hover {
   border-bottom: 2px solid var(--accent);
 }
 
+/* A misspelled word — a wavy underline via repeating-linear-gradient
+   rather than text-decoration: wavy (inconsistent/unsupported across
+   browsers on an inline mark span), same red as most native spellcheckers. */
+.cm-misspelled {
+  cursor: pointer;
+  background-image: repeating-linear-gradient(
+    -60deg,
+    #e5484d,
+    #e5484d 1px,
+    transparent 1px,
+    transparent 2.5px
+  );
+  background-position: 0 100%;
+  background-size: 4px 3px;
+  background-repeat: repeat-x;
+  padding-bottom: 1px;
+}
+
+/* Suggestions popup that opens on clicking a .cm-misspelled word — same
+   floating-panel look as .slash-menu/.comment-selection-trigger above. */
+.spellcheck-popup {
+  position: absolute;
+  z-index: 10;
+  transform: translateY(4px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+}
+
+.spellcheck-suggestion,
+.spellcheck-add-word {
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.spellcheck-suggestion:hover,
+.spellcheck-add-word:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.spellcheck-add-word {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 6px;
+  color: var(--text-dim);
+}
+
+.spellcheck-no-suggestions {
+  padding: 5px 8px;
+  color: var(--text-dim);
+}
+
 /* ---- Rendered markdown preview ---- */
 
 .preview {

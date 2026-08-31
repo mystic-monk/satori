@@ -34,7 +34,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
-import Editor, { type CommentRange } from "./Editor";
+import Editor, { type CommentRange, type EditorHandle } from "./Editor";
 import Preview, { buildCitations } from "./Preview";
 import { buildResolver } from "./noteResolver";
 import Backlinks from "./Backlinks";
@@ -233,6 +233,10 @@ export default function App() {
   const sidebarResize = useResizableWidth("pkm-sidebar-width", 280, 200, 480, "left");
   const rightPanelResize = useResizableWidth("pkm-right-panel-width", 300, 220, 480, "right");
   const [themeId, setThemeId] = useState(() => getStoredTheme());
+  const [spellcheckMode, setSpellcheckMode] = useState<"auto" | "off">(
+    () => (localStorage.getItem("pkm-spellcheck-mode") === "auto" ? "auto" : "off")
+  );
+  const editorRef = useRef<EditorHandle>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
   const bibFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1025,6 +1029,17 @@ export default function App() {
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
         { id: "reindex", label: "Reindex Vault", action: onReindex },
         { id: "import-bib", label: "Import .bib References…", action: onImportBib },
+        {
+          id: "spellcheck-note",
+          label: "Check Spelling: Whole Note",
+          action: () => editorRef.current?.checkSpelling("note"),
+        },
+        {
+          id: "spellcheck-selection",
+          label: "Check Spelling: Selection",
+          action: () => editorRef.current?.checkSpelling("selection"),
+        },
+        { id: "spellcheck-clear", label: "Clear Spelling Underlines", action: () => editorRef.current?.clearSpelling() },
         ...(IS_TAURI
           ? [
               { id: "switch-vault", label: "Switch Vault…", action: () => switchVault() },
@@ -1060,6 +1075,11 @@ export default function App() {
           onClose={() => setSettingsPanelOpen(false)}
           themeId={themeId}
           onThemeChange={setThemeId}
+          spellcheckMode={spellcheckMode}
+          onSpellcheckModeChange={(mode) => {
+            setSpellcheckMode(mode);
+            localStorage.setItem("pkm-spellcheck-mode", mode);
+          }}
           relayUrl={relayUrl}
           onRelayUrlChange={(url) => {
             setRelayUrl(url);
@@ -1551,12 +1571,14 @@ export default function App() {
                     <div className="editor-source">
                       <Editor
                         key={activePath}
+                        ref={editorRef}
                         ytext={localSession.ytext}
                         awareness={localSession.awareness}
                         readOnly={role === "view" || role === "comment" || cloudSessionRole === "view"}
                         dark={isDarkTheme(themeId)}
                         scrollToOffset={scrollToOffset}
                         commentRanges={commentRanges}
+                        spellcheckMode={spellcheckMode}
                         onCommentOnSelection={
                           role !== "view"
                             ? (from, to) => {

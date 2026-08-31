@@ -7,6 +7,8 @@ interface SettingsPanelProps {
   onClose: () => void;
   themeId: string;
   onThemeChange: (id: string) => void;
+  spellcheckMode: "auto" | "off";
+  onSpellcheckModeChange: (mode: "auto" | "off") => void;
   relayUrl: string;
   onRelayUrlChange: (url: string) => void;
   cloudRoom: string;
@@ -49,6 +51,8 @@ export default function SettingsPanel({
   onClose,
   themeId,
   onThemeChange,
+  spellcheckMode,
+  onSpellcheckModeChange,
   relayUrl,
   onRelayUrlChange,
   cloudRoom,
@@ -114,6 +118,23 @@ export default function SettingsPanel({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Spell check</div>
+          <select
+            className="type-filter"
+            value={spellcheckMode}
+            onChange={(e) => onSpellcheckModeChange(e.target.value as "auto" | "off")}
+            aria-label="Spell check mode"
+          >
+            <option value="off">Off (check on demand)</option>
+            <option value="auto">Automatic (as you type)</option>
+          </select>
+          <p className="settings-note">
+            Either way, ⌘K → "Check Spelling: Whole Note" or "…: Selection" runs a check right now — click a
+            wavy-underlined word for suggestions.
+          </p>
         </div>
 
         <div className="settings-section">
