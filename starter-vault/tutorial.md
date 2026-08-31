@@ -20,6 +20,7 @@ Every page here carries `tags: [tutorial]`, which is what powers the sidebar's *
 - [[tutorial/ai-related-notes|Related Notes & local AI]] — fully local semantic search, no account or API key
 - [[tutorial/settings-and-export|Settings & export]] — theme, cloud sync controls, and getting a note out as Markdown/HTML/PDF
 - [[tutorial/writing-books-and-scripts|Writing books & scripts]] — Book/Chapter/Character/Scene templates for long-form fiction and screenwriting
+- [[tutorial/who-its-for|Who's this for?]] — how a script writer, researcher, student, team, and a dozen other kinds of users would actually use Satori
 
 > [!tip] Fastest way to learn
 > Open each linked note, then look at its **Source** view (top-right toggle) to see the raw markdown that produced what you're reading.

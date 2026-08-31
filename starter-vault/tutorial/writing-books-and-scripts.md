@@ -32,4 +32,4 @@ Character notes are plain markdown, but nothing stops you from also making a mat
 
 ---
 
-You've reached the end of the tutorial. From here, the fastest way to keep learning is just to use the app — favorite a note, try the graph, invite someone if you're running a server. Back to [[tutorial|Tutorial]].
+Next: [[tutorial/who-its-for|Who's this for? →]]
