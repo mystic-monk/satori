@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `server/` can now be deployed to Render (or similar) with one push — a `render.yaml` blueprint, a real `PORT`-aware production start script, and a README section on pointing cloud sync at a deployed relay
 - Comments can now be anchored to a specific text range instead of only being a flat per-note thread — select text, click the "💬 Comment" button that appears, and the comment ties to that exact span (a live-highlighted excerpt, clickable to jump back to it). Anchored via a Yjs relative position (`src/yjsAnchor.ts`), not a raw character offset, so it correctly tracks the same text through edits made anywhere else in the document instead of silently drifting onto the wrong words
 - `[[Note#Heading]]`/`[[Note#^block-id]]` *links* now scroll to that spot once the note opens, matching what embeds (`![[...]]`) already did — previously the link resolved and navigated correctly but landed at the top of the note
+- A new **Calendar** view — a month grid of every note with a date, sourced from the same properties bag Table view reads (daily/journal notes automatically via their ISO-date title, any other note via a `date` property)
 
 ### Fixed
 

@@ -26,7 +26,8 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)
 - **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
-- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table)
+- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table / Calendar)
+- Calendar view: a month grid showing every note with a date — daily/journal entries automatically, or any note with a `date` property
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
@@ -109,7 +110,7 @@ Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
 - Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
-- Table views are a single layout — no kanban/calendar/gallery views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
+- Table views are a single layout — no kanban/gallery views yet (Calendar exists as its own separate view, not a Table layout); rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
 - Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with
