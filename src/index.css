@@ -19,7 +19,7 @@
 :root {
   color-scheme: light dark;
   --bg: #1e1e1e;
-  --bg-sidebar: #181818;
+  --bg-sidebar: #141414;
   --bg-hover: #242424;
   --bg-active: #29344a;
   --bg-elevated: #202531;
@@ -76,7 +76,7 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
-  --bg-sidebar: #f5f5f7;
+  --bg-sidebar: #edeef1;
   --bg-hover: #eff1f4;
   --bg-active: #dbe6fd;
   --bg-elevated: #f0f4fb;
@@ -89,7 +89,7 @@
 :root[data-theme="solarized-dark"] {
   color-scheme: dark;
   --bg: #002b36;
-  --bg-sidebar: #073642;
+  --bg-sidebar: #001b22;
   --bg-hover: #0a4152;
   --bg-active: #0d5068;
   --bg-elevated: #0a4152;
@@ -102,7 +102,7 @@
 :root[data-theme="solarized-light"] {
   color-scheme: light;
   --bg: #fdf6e3;
-  --bg-sidebar: #eee8d5;
+  --bg-sidebar: #e7e0cb;
   --bg-hover: #f5efdc;
   --bg-active: #e3ecf5;
   --bg-elevated: #f5efdc;
