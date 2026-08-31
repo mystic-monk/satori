@@ -39,7 +39,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Calendar sync: export any reminder or `​```timetable` as a standard `.ics` file (Apple/Google/Outlook Calendar all import it), or — if you're running the optional server — subscribe Apple/Google/Outlook Calendar to a live feed URL (Settings → Calendar feed) that auto-updates as reminders and timetables change, no re-import needed
 - Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
-- Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing
+- Daily journal notes, one keystroke away — Journal is a continuous scrollable page of entries (bold "Today"/"Yesterday"/weekday heading, most recent first), not a list you click into one day at a time, with a "write today's entry" prompt when it's missing
 
 **Collaboration & sharing**
 - Real-time multi-cursor editing (CRDT-based, via Yjs) on your local network

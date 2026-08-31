@@ -46,6 +46,7 @@ import TableView from "./TableView";
 import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
 import HistoryView from "./HistoryView";
+import JournalView from "./JournalView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
@@ -78,7 +79,6 @@ import {
   Menu as MenuIcon,
   MessageSquare,
   Paintbrush,
-  PenLine,
   RotateCw,
   Settings as SettingsIcon,
   Share2,
@@ -123,35 +123,14 @@ function bridgeDocs(a: Y.Doc, b: Y.Doc): () => void {
 }
 
 type ViewMode = "source" | "preview" | "split";
-// "all"/"journal"/"canvas" drive the existing typeFilter mechanism under
-// the hood (see selectView) — "favorites" is a pure client-side filter
-// over whatever's already loaded, since a favorited note can be any type.
-type SidebarView = "all" | "journal" | "canvas" | "favorites" | "tutorials";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// Daily-note titles are just the ISO date ("2026-08-30") — accurate but
-// flat to read in a list. Journal view shows something a person actually
-// scans ("Today", "Yesterday", or a weekday) instead, falling back to the
-// raw title for anything that isn't a plain YYYY-MM-DD (a renamed entry,
-// say) so this only touches the common case.
-function formatJournalTitle(title: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(title)) return title;
-  const [y, m, d] = title.split("-").map(Number);
-  const entryDate = new Date(y, m - 1, d);
-  if (Number.isNaN(entryDate.getTime())) return title;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((today.getTime() - entryDate.getTime()) / DAY_MS);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  return entryDate.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    year: entryDate.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-  });
-}
+// "all"/"canvas" drive the existing typeFilter mechanism under the hood
+// (see selectView) — "favorites" is a pure client-side filter over
+// whatever's already loaded, since a favorited note can be any type.
+// Journal used to be a third typeFilter-driven member here too, but it's
+// its own full-width view now (JournalView.tsx, a continuous scrollable
+// page of entries rather than a filtered list you click into one at a
+// time), so it's handled the same way Graph/Table/etc. are.
+type SidebarView = "all" | "canvas" | "favorites" | "tutorials";
 
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
@@ -191,6 +170,7 @@ export default function App() {
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -200,7 +180,7 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left the Calendar view stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "history" | null;
+  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "history" | "journal" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -213,6 +193,7 @@ export default function App() {
     setShowCalendar(panel === "calendar");
     setShowFlashcards(panel === "flashcards");
     setShowHistory(panel === "history");
+    setShowJournal(panel === "journal");
     setSidebarOpen(false);
   }
   // Properties/Comments/History used to sit stacked above the editor,
@@ -702,9 +683,7 @@ export default function App() {
   function selectView(view: SidebarView) {
     setSidebarView(view);
     showSpecialPanel(null);
-    if (view === "journal") setTypeFilter("daily");
-    else if (view === "canvas") setTypeFilter("canvas");
-    else setTypeFilter(""); // "all", "favorites", and "tutorials" all draw from the full set
+    setTypeFilter(view === "canvas" ? "canvas" : ""); // "all", "favorites", and "tutorials" all draw from the full set
   }
 
   // Toggles the `favorite` frontmatter property directly — not a separate
@@ -940,7 +919,7 @@ export default function App() {
   // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
   // and the wide panel below to avoid repeating all five negations at
   // every active-state check.
-  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory;
+  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showHistory && !showJournal;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
@@ -986,7 +965,6 @@ export default function App() {
     [sidebarView, favoriteNotes, tutorialNotes, typeFilter, notes]
   );
   const templateNotes = useMemo(() => queryNotes(notes, { type: "template" }), [notes]);
-  const todayIso = new Date().toISOString().slice(0, 10);
 
   function exportEnv(): RenderEnv {
     // citations included — previously missing here, which meant every
@@ -1341,8 +1319,8 @@ export default function App() {
                 <span>All Notes</span>
               </button>
               <button
-                className={sidebarView === "journal" && isListView ? "active" : ""}
-                onClick={() => selectView("journal")}
+                className={showJournal ? "active" : ""}
+                onClick={() => showSpecialPanel(showJournal ? null : "journal")}
                 title="Journal"
               >
                 <Calendar size={17} className="type-color-daily" />
@@ -1459,14 +1437,6 @@ export default function App() {
                 </ul>
               </div>
             )}
-            {!results && sidebarView === "journal" && !displayedNotes.some((n) => n.title === todayIso) && (
-              <button className="journal-today-cta" onClick={onDailyNote}>
-                <span className="nav-icon" aria-hidden="true">
-                  <PenLine size={15} />
-                </span>
-                Write today's entry
-              </button>
-            )}
             <ul className="note-list">
               {results
                 ? results.map((r) => (
@@ -1491,12 +1461,7 @@ export default function App() {
                       role="button"
                       tabIndex={0}
                     >
-                      <div className="note-title">
-                        {sidebarView === "journal" ? formatJournalTitle(n.title) : n.title}
-                      </div>
-                      {sidebarView === "journal" && n.title !== formatJournalTitle(n.title) && (
-                        <div className="note-tags">{n.title}</div>
-                      )}
+                      <div className="note-title">{n.title}</div>
                       {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
                       {canFavorite && (
                         <button
@@ -1646,6 +1611,13 @@ export default function App() {
           <FlashcardReview shareToken={shareToken} />
         ) : showHistory ? (
           <HistoryView recentNotes={recentNotes} onNavigate={(path, title, type) => openNote(path, title, type)} />
+        ) : showJournal ? (
+          <JournalView
+            notes={notes}
+            onNavigate={(path, title, type) => openNote(path, title, type)}
+            onWriteToday={onDailyNote}
+            shareToken={shareToken}
+          />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.

@@ -2123,13 +2123,81 @@ button:disabled:hover {
 
 /* Same 760px reading width as .preview, not an arbitrary narrower one —
    consistent with the rest of the app's content-width convention now
-   that the note-list panel auto-collapses for this view (railClick,
+   that the note-list panel auto-collapses for this view (showSpecialPanel,
    App.tsx) instead of sitting open next to it as a second, unrelated
    list. */
 .history-view {
   max-width: 760px;
   margin: 0 auto;
   padding: 24px;
+}
+
+/* A continuous scrollable page of daily entries, most recent first —
+   same 760px reading width as .history-view/.preview. */
+.journal-view {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.journal-view-empty {
+  color: var(--text-dim);
+}
+
+.journal-entry {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.journal-entry:first-of-type {
+  padding-top: 0;
+}
+
+.journal-entry-header {
+  margin-bottom: 8px;
+}
+
+.journal-entry-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.journal-entry-time {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.journal-entry-loading {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.journal-entry-body {
+  padding: 0;
+  font-size: 14px;
+}
+
+.journal-load-more {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px;
+  text-align: center;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+}
+
+.journal-load-more:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.journal-view .journal-today-cta {
+  width: 100%;
+  margin: 0 0 20px;
 }
 
 .history-view-title {
