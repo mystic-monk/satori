@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-08-31
+
 ### Added
 
 - Cloud sync now has real, cryptographically enforced view/edit role separation — a passphrase still grants edit access, but a separate view-only content key (derived from the passphrase, not reversible back to it) can be shared instead, and the relay verifies a signature on every write against that room's registered editors before forwarding it, without ever decrypting content to do so. Settings' Cloud sync section gained an Edit/View-only toggle and a "Get a view-only key to share" action; the editor also goes read-only for a view-only session as a UI-level backstop on top of the relay's actual enforcement
