@@ -68,10 +68,10 @@ import { dueReminders } from "./reminderSchedule";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { resolveFragment } from "../shared/blockrefs";
 import {
+  Bell,
   BookOpen,
   Brain,
   Calendar,
-  ChevronDown,
   Download,
   FileText,
   History,
@@ -168,6 +168,7 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [identityPanelOpen, setIdentityPanelOpen] = useState(false);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   // Set right before opening Settings' export section, not persisted —
   // just "what did compiling just produce", reset per open note the same
@@ -1164,6 +1165,7 @@ export default function App() {
           onClose={() => setWorkspacePanelOpen(false)}
         />
       )}
+      {identityPanelOpen && <IdentityPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} />}
       {settingsPanelOpen && (
         <SettingsPanel
           onClose={() => setSettingsPanelOpen(false)}
@@ -1294,6 +1296,40 @@ export default function App() {
           )}
         </div>
         <div className="sidebar-rail-bottom">
+          {/* Vault name/switcher and identity used to sit as two full rows
+              at the very top of the wide note-list panel, above the
+              search box — real estate spent on chrome you look at once
+              per session, not the note list you scan constantly. Both
+              moved down here instead, next to Settings/Workspace, which
+              were already exactly this kind of "occasional, not
+              per-note" action living in the rail. */}
+          {IS_TAURI && (
+            <div className="sidebar-rail-vault-row">
+              <button className="sidebar-rail-vault-name" onClick={() => switchVault()} title="Switch to a different vault">
+                <VaultIcon size={17} />
+                <span>{vaultName ?? "Vault"}</span>
+              </button>
+              {!shareToken && (
+                <>
+                  <button
+                    className="sidebar-rail-icon-btn"
+                    onClick={onImportFolder}
+                    title="Import a folder (.md/.txt/.json)"
+                    aria-label="Import a folder"
+                  >
+                    <Download size={14} />
+                  </button>
+                  <button className="sidebar-rail-icon-btn" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
+                    <RotateCw size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          <button onClick={() => setIdentityPanelOpen(true)}>
+            <span className="identity-color-dot" style={{ background: getIdentity().color }} aria-hidden="true" />
+            <span>You: {getIdentity().name}</span>
+          </button>
           <button onClick={() => setSettingsPanelOpen(true)}>
             <SettingsIcon size={17} />
             <span>Settings</span>
@@ -1322,39 +1358,6 @@ export default function App() {
             onMouseDown={sidebarResize.onHandleMouseDown}
           />
         )}
-        {IS_TAURI && (
-          <div className="vault-header">
-            <button
-              className="vault-header-name"
-              onClick={() => switchVault()}
-              title="Switch to a different vault"
-            >
-              <span className="vault-icon" aria-hidden="true">
-                <VaultIcon size={14} />
-              </span>
-              {vaultName ?? "Vault"}
-              <span className="vault-switch-caret" aria-hidden="true">
-                <ChevronDown size={12} />
-              </span>
-            </button>
-            {!shareToken && (
-              <>
-                <button
-                  className="vault-reindex"
-                  onClick={onImportFolder}
-                  title="Import a folder (.md/.txt/.json)"
-                  aria-label="Import a folder"
-                >
-                  <Download size={14} />
-                </button>
-                <button className="vault-reindex" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
-                  <RotateCw size={14} />
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        <IdentityPanel />
         <div className="sidebar-header">
           {!shareToken && (
             <input
@@ -1587,7 +1590,8 @@ export default function App() {
                     onClick={() => setReminderPopupOpen((o) => !o)}
                     title={currentRemindAt ? `Reminder set for ${new Date(currentRemindAt).toLocaleString()}` : "Set a reminder"}
                   >
-                    🔔{currentRemindAt ? ` ${new Date(currentRemindAt).toLocaleDateString()}` : ""}
+                    <Bell size={13} />
+                    {currentRemindAt ? ` ${new Date(currentRemindAt).toLocaleDateString()}` : ""}
                   </button>
                   {reminderPopupOpen && (
                     <ReminderPopup

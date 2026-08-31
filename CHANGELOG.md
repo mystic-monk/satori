@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The rail's icon-only first pass (still icon + no label) was hard to read without hovering and read as too close a copy of VSCode's activity bar — icon + text label now, and switching to a full-panel view (Graph/Table/Calendar/Flashcards/History) auto-collapses the note-list panel instead of leaving two unrelated lists on screen at once
+- Vault name/switcher and identity ("You: name") moved out of two full rows at the top of the note-list panel and into the rail's bottom, next to Settings/Workspace — the same kind of occasional, not-per-note action already living there, freeing the space above the search box for the note list itself. Identity is a modal now (SettingsPanel's pattern) instead of an inline accordion
+- Reminder popup: `type="datetime-local"` replaced with separate `type="date"`/`type="time"` inputs (the combined widget rendered as a cramped, fiddly segmented editor with no visible calendar) plus quick-pick buttons ("In 1 hour", "Tomorrow, 9am", "Next Monday, 9am"). The 🔔 toolbar button is a real icon (lucide's Bell) now, not an emoji glyph sitting out of step with the rest of the toolbar's icon set
 
 ### Fixed
 

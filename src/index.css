@@ -329,55 +329,58 @@ body {
   cursor: default;
 }
 
-.vault-header {
+/* The vault name/switcher + import/reindex row, now living in the rail's
+   bottom section (App.tsx) instead of its own full row at the top of the
+   note-list panel — moved down here alongside Settings/Workspace, the
+   same kind of "occasional, not per-note" action already living there. */
+.sidebar-rail-vault-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  gap: 2px;
 }
 
-.vault-header-name {
+.sidebar-rail-vault-name {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  justify-content: flex-start;
+  gap: 8px;
   background: transparent;
   border: none;
-  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
   font-size: 13px;
-  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.sidebar-rail-vault-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-rail-vault-name:hover {
+  background: var(--bg-hover);
   color: var(--text);
 }
 
-.vault-header-name:hover {
-  background: var(--bg-hover);
-  border-radius: 4px;
-}
-
-.vault-icon {
-  display: inline-flex;
-  color: var(--text-dim);
-}
-
-.vault-switch-caret {
-  display: inline-flex;
-  color: var(--text-dim);
-}
-
-.vault-reindex {
+.sidebar-rail-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: none;
-  padding: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
+  cursor: pointer;
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 
-.vault-reindex:hover {
+.sidebar-rail-icon-btn:hover {
   color: var(--text);
   background: var(--bg-hover);
 }
@@ -730,6 +733,7 @@ button:disabled:hover {
   top: calc(100% + 4px);
   right: 0;
   z-index: 10;
+  width: 260px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -740,7 +744,36 @@ button:disabled:hover {
   gap: 8px;
 }
 
-.reminder-popup input[type="datetime-local"] {
+.reminder-quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reminder-quick-picks button {
+  flex: 1 1 auto;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.reminder-quick-picks button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.reminder-datetime-row {
+  display: flex;
+  gap: 6px;
+}
+
+.reminder-datetime-row input {
+  flex: 1;
+  min-width: 0;
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
@@ -2089,7 +2122,6 @@ button:disabled:hover {
   letter-spacing: 0.03em;
 }
 
-.identity-panel,
 .share-panel,
 .comments-panel,
 .history-panel {
@@ -2097,11 +2129,11 @@ button:disabled:hover {
 }
 
 .identity-body {
-  padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   font-size: 12px;
+  margin-bottom: 12px;
 }
 
 .identity-row {
@@ -2840,6 +2872,10 @@ button:disabled:hover {
 }
 
 .share-modal {
+  width: 420px;
+}
+
+.identity-modal {
   width: 420px;
 }
 

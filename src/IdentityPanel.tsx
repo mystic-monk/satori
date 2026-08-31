@@ -9,16 +9,19 @@ import {
   type Identity,
 } from "./identity";
 import PromptDialog from "./PromptDialog";
-import DisclosureChevron from "./DisclosureChevron";
 
-// Vault-wide, not per-note — unlike PropertiesPanel/SharePanel/HistoryPanel
-// (which all render inside the activePath block), this is who *you* are
-// across every note, so it's rendered once near the top of the sidebar.
-// Theme used to live here too but moved to SettingsPanel.tsx, which
-// consolidates it with cloud-sync connection settings and export — this
-// panel is purely "who am I" now (name/color/email/portability).
-export default function IdentityPanel() {
-  const [open, setOpen] = useState(false);
+interface IdentityPanelProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+// A modal now (SettingsPanel/WorkspacePanel's pattern), not the inline
+// accordion this used to be at the top of the note-list panel — that
+// accordion plus the vault switcher above it ate two rows of vertical
+// space before the search box even started, which is exactly the
+// clutter this was moved to fix. Reached from the rail's bottom "You:
+// name" button (App.tsx), same place Settings/Workspace already live.
+export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
   const [identity, setIdentity] = useState<Identity>(() => getIdentity());
   const [nameDraft, setNameDraft] = useState(identity.name);
   const [importDraft, setImportDraft] = useState("");
@@ -26,6 +29,8 @@ export default function IdentityPanel() {
   const [copied, setCopied] = useState(false);
   const [emailPromptOpen, setEmailPromptOpen] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  if (!open) return null;
 
   function commitName() {
     const trimmed = nameDraft.trim();
@@ -75,63 +80,67 @@ export default function IdentityPanel() {
   }
 
   return (
-    <div className="identity-panel">
-      <button className="properties-header" onClick={() => setOpen((o) => !o)}>
-        <DisclosureChevron open={open} /> You: {identity.name}
-      </button>
-      {open && (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal identity-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3 className="modal-title">Your identity</h3>
         <div className="identity-body">
-          <div className="identity-row">
-            <span className="identity-color-dot" style={{ background: identity.color }} aria-hidden="true" />
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              aria-label="Your display name"
-            />
-          </div>
-          <p className="identity-note">
-            Stored only in this browser. Renaming keeps your history attributed to you; switching to a new
-            device or browser doesn't carry it automatically unless you use email or export/import below.
-          </p>
-          <div className="identity-email">
-            {identity.email ? (
-              <>
-                <span className="identity-email-status">Identified as {identity.email}</span>
-                <button onClick={onUseAnonymous}>Use anonymous instead</button>
-              </>
-            ) : (
-              <button onClick={() => setEmailPromptOpen(true)}>Use email instead of anonymous</button>
-            )}
-          </div>
-          <p className="identity-note">
-            Typing the same email again on any device gives you back this exact identity — no export file
-            needed. Your email itself is never sent to collaborators or a server, only stored on this device;
-            what others see is the same opaque id anonymous identities already use. This isn't verified —
-            nothing confirms you actually own the address, it's just a more convenient way to stay portable.
-          </p>
-          {emailError && <p className="identity-error">{emailError}</p>}
-          <div className="identity-portability">
-            <button onClick={onExport}>{copied ? "Copied!" : "Export identity"}</button>
-          </div>
-          <div className="identity-portability">
-            <input
-              placeholder="Paste an exported identity here"
-              aria-label="Import identity"
-              value={importDraft}
-              onChange={(e) => {
-                setImportDraft(e.target.value);
-                setImportError(null);
-              }}
-            />
-            <button onClick={onImport} disabled={!importDraft.trim()}>
-              Import
-            </button>
-          </div>
-          {importError && <p className="identity-error">{importError}</p>}
+        <div className="identity-row">
+          <span className="identity-color-dot" style={{ background: identity.color }} aria-hidden="true" />
+          <input
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            aria-label="Your display name"
+          />
         </div>
-      )}
+        <p className="identity-note">
+          Stored only in this browser. Renaming keeps your history attributed to you; switching to a new device or
+          browser doesn't carry it automatically unless you use email or export/import below.
+        </p>
+        <div className="identity-email">
+          {identity.email ? (
+            <>
+              <span className="identity-email-status">Identified as {identity.email}</span>
+              <button onClick={onUseAnonymous}>Use anonymous instead</button>
+            </>
+          ) : (
+            <button onClick={() => setEmailPromptOpen(true)}>Use email instead of anonymous</button>
+          )}
+        </div>
+        <p className="identity-note">
+          Typing the same email again on any device gives you back this exact identity — no export file needed. Your
+          email itself is never sent to collaborators or a server, only stored on this device; what others see is
+          the same opaque id anonymous identities already use. This isn't verified — nothing confirms you actually
+          own the address, it's just a more convenient way to stay portable.
+        </p>
+        {emailError && <p className="identity-error">{emailError}</p>}
+        <div className="identity-portability">
+          <button onClick={onExport}>{copied ? "Copied!" : "Export identity"}</button>
+        </div>
+        <div className="identity-portability">
+          <input
+            placeholder="Paste an exported identity here"
+            aria-label="Import identity"
+            value={importDraft}
+            onChange={(e) => {
+              setImportDraft(e.target.value);
+              setImportError(null);
+            }}
+          />
+          <button onClick={onImport} disabled={!importDraft.trim()}>
+            Import
+          </button>
+        </div>
+        {importError && <p className="identity-error">{importError}</p>}
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
       {emailPromptOpen && (
         <PromptDialog
           title="Use email instead of anonymous"
