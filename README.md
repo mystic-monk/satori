@@ -34,6 +34,8 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Templates with `{{date}}`/`{{title}}` placeholder substitution — including a ready-made Book / Chapter / Character / Scene set for long-form fiction and screenwriting, built entirely from existing features (`​```query` blocks, table rollups, the link graph), see [[tutorial/writing-books-and-scripts]] in the starter vault
 - A live word count for the open note, and a **Compile chapters** action (Settings, on any `type: book` note) that gathers every related chapter in order into one document, exportable as Markdown/HTML/PDF
 - Spell check — automatic (as you type) or on demand via the command palette ("Check Spelling: Whole Note"/"…: Selection"), fully local (no text ever leaves the device); click a wavy-underlined word for suggestions or to add it to the session's dictionary
+- `​```timetable` blocks — a weekly grid (day + time range + title per line), with a full-screen mode (screen wake lock included, for a schedule left up on a second monitor) and clean PDF/HTML export
+- Reminders: set a date/time on any note (🔔 in the toolbar) and get a native notification when it's due — only while Satori is actually open, not a true background/push notification, see Roadmap
 - Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
 - Daily journal notes, one keystroke away, with a "write today's entry" prompt when it's missing
@@ -119,6 +121,7 @@ Satori is early and honest about what it isn't yet:
 - Team/Workspace v1 is server/browser-only, same as Related Notes above — Tauri's local vault stays single-owner
 - Workspace roles are coarse (admin / member, both full vault read-write) — no per-note permission tiers for members the way per-note share links have; a member gets the same access an owner always had
 - Workspace accounts and cloud-sync roles are two separate systems that don't know about each other — being a workspace admin/member doesn't automatically grant edit/view access to a given cloud room, and vice versa. Cloud sync's own view/edit separation (a view-only content key vs. the full passphrase, cryptographically enforced by the relay) is unrelated to whether workspace accounts exist on that server at all
+- Reminders only fire while Satori is open (a native notification on Tauri, a browser notification in the web deployment) — there's no background daemon or push service, so a reminder set for while your computer is asleep or the app is closed fires the moment you next open it, not at the original time
 - No SSO, no email verification, no self-serve password reset for workspace accounts (a self-hosted admin can intervene directly in `.pkm-state/state.sqlite` if truly needed)
 
 See [CHANGELOG.md](CHANGELOG.md) for what's shipped so far.

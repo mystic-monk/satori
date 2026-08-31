@@ -169,6 +169,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             // Not user-configurable yet (deliberate scope cut for a first
             // pass) — CmdOrCtrl+Shift+N, chosen to be unlikely to collide

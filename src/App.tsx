@@ -35,6 +35,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
 import { APP_VERSION } from "./version";
 import Editor, { type CommentRange, type EditorHandle } from "./Editor";
+import ReminderPopup from "./ReminderPopup";
 import Preview, { buildCitations } from "./Preview";
 import { buildResolver } from "./noteResolver";
 import Backlinks from "./Backlinks";
@@ -61,6 +62,8 @@ import { renderNoteBodyForExport } from "./renderForExport";
 import { exportHtml, exportMarkdown, exportPdf } from "./export";
 import { compileBook } from "./compileBook";
 import { countWords } from "./wordCount";
+import { requestNotificationPermission, fireNotification } from "./reminders";
+import { dueReminders } from "./reminderSchedule";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { resolveFragment } from "../shared/blockrefs";
 import {
@@ -193,6 +196,13 @@ export default function App() {
   // just "what did compiling just produce", reset per open note the same
   // way pendingCommentAnchor/commentRanges are (see the note-switch effect).
   const [compileStatus, setCompileStatus] = useState<string | null>(null);
+  const [reminderPopupOpen, setReminderPopupOpen] = useState(false);
+  // Keyed by "path:remind_at" (reminderSchedule.ts) so editing a reminder
+  // to a new time can fire again — reset per app load, not persisted,
+  // same "session-local" scope as everything else in this feature (see
+  // src/reminders.ts's doc comment on why this can't be a true background
+  // notification).
+  const firedRemindersRef = useRef<Set<string>>(new Set());
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -355,6 +365,22 @@ export default function App() {
     applyTheme(themeId);
     setMermaidDark(isDarkTheme(themeId));
   }, [themeId]);
+
+  // Checked every 20s against whatever `notes` currently holds — cheap (a
+  // plain array scan, no fetch of its own) since `notes` is already kept
+  // fresh by every other note-list-affecting action in this file. Only
+  // fires while Satori itself is open; see reminders.ts's doc comment for
+  // why this isn't a true background notification.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const due = dueReminders(notes, Date.now(), firedRemindersRef.current);
+      for (const reminder of due) {
+        firedRemindersRef.current.add(reminder.key);
+        fireNotification(reminder.title, "Reminder");
+      }
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [notes]);
 
   // Native menu bar (src-tauri/src/lib.rs) dispatches these events for the
   // items it can't handle entirely on the Rust side (vault switching and
@@ -543,7 +569,7 @@ export default function App() {
         // by the same update can resolve afterward with the collab room's
         // not-yet-persisted (stale) data and silently clobber it. Every
         // other kind of edit still refreshes normally.
-        if (origin === "favorite-toggle") return;
+        if (origin === "favorite-toggle" || origin === "reminder-set") return;
         loadNotes();
       });
     }
@@ -565,6 +591,7 @@ export default function App() {
       setCommentRanges([]);
       setPendingCommentAnchor(null);
       setCompileStatus(null);
+      setReminderPopupOpen(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath, shareToken]);
@@ -900,6 +927,11 @@ export default function App() {
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   const bodyWordCount = useMemo(() => (raw ? countWords(parseFrontmatter(raw).body) : 0), [raw]);
+  const currentRemindAt = useMemo(() => {
+    if (!raw) return null;
+    const v = parseFrontmatter(raw).data.remind_at;
+    return typeof v === "string" ? v : null;
+  }, [raw]);
   // Not gated on the active note's edit/owner role (that reflects only
   // the currently-open note): the star renders on every row in the list,
   // so a guest with edit access to their one shared note would otherwise
@@ -988,6 +1020,42 @@ export default function App() {
     const compiled = await runCompile();
     if (!compiled || !activeNote) return;
     exportPdf(activeNote.title, await renderNoteBodyForExport(compiled.raw, exportEnv(), notes));
+  }
+
+  // Only ever called against the currently-open note's own live session —
+  // same Y.Doc-write requirement toggleFavorite's activePath branch
+  // documents (a direct REST/IPC write here would race the collab room's
+  // own debounced persist and risk being silently overwritten).
+  async function setReminder(remindAt: string | null) {
+    if (!activePath || !localSession) return;
+    if (remindAt) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setStatus("notifications are blocked — allow them to use reminders");
+        return;
+      }
+    }
+    const parsed = parseFrontmatter(localSession.ytext.toString());
+    const nextData = { ...parsed.data };
+    if (remindAt) nextData.remind_at = remindAt;
+    else delete nextData.remind_at;
+    applyTextDiff(localSession.ytext, stringifyFrontmatter(nextData, parsed.body), "reminder-set");
+    // Same optimistic-update-plus-skip-the-reload reasoning as
+    // toggleFavorite's activePath branch: an async loadNotes() triggered
+    // by this same doc update can resolve with the collab room's
+    // not-yet-persisted (stale) data and silently drop remind_at again —
+    // the doc.on("update") listener above already skips reminder-set for
+    // exactly this reason.
+    setNotes((prev) =>
+      prev.map((n) => {
+        if (n.path !== activePath) return n;
+        const nextProps = { ...n.properties };
+        if (remindAt) nextProps.remind_at = remindAt;
+        else delete nextProps.remind_at;
+        return { ...n, properties: nextProps };
+      })
+    );
+    setReminderPopupOpen(false);
   }
 
   // Computed on demand, not stored in state — the whole point is that only
@@ -1546,6 +1614,24 @@ export default function App() {
                       {m}
                     </button>
                   ))}
+                </div>
+              )}
+              {role !== "view" && role !== "comment" && !isCanvas && (
+                <div className="reminder-trigger-wrap">
+                  <button
+                    className={currentRemindAt ? "active" : ""}
+                    onClick={() => setReminderPopupOpen((o) => !o)}
+                    title={currentRemindAt ? `Reminder set for ${new Date(currentRemindAt).toLocaleString()}` : "Set a reminder"}
+                  >
+                    🔔{currentRemindAt ? ` ${new Date(currentRemindAt).toLocaleDateString()}` : ""}
+                  </button>
+                  {reminderPopupOpen && (
+                    <ReminderPopup
+                      value={currentRemindAt}
+                      onSet={(v) => setReminder(v)}
+                      onClose={() => setReminderPopupOpen(false)}
+                    />
+                  )}
                 </div>
               )}
               {role === "owner" && (

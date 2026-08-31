@@ -742,6 +742,40 @@ button:disabled:hover {
   white-space: nowrap;
 }
 
+.reminder-trigger-wrap {
+  position: relative;
+}
+
+.reminder-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-popup input[type="datetime-local"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.reminder-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .cloud-bar-wrap {
   border-bottom: 1px solid var(--border);
 }

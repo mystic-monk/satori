@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `​```timetable` blocks — a weekly grid (one entry per line: `Day HH:MM-HH:MM Title`), rendered as a CSS Grid week view with entry height proportional to duration. A "Full screen" button opens it sized to the viewport, requests the Fullscreen API, and best-effort holds a screen wake lock (`src/timetable.ts`). Matching styles were added to `export.ts`'s `EXPORT_CSS` so MD/HTML/PDF export renders the grid too
+- Reminders: a 🔔 toolbar button sets a `remind_at` date/time on the open note; a native notification (Tauri, via `tauri-plugin-notification`) or browser notification fires when it's due, checked every 20s against the notes list (`src/reminders.ts`, `src/reminderSchedule.ts`). Only fires while Satori is open — not a background/push notification, see README's Roadmap
+- Sidebar: Recent/Favorites now only show in the default "All Notes" view — switching to Tutorials/Journal/Canvas/a type filter previously left them sitting above the filtered list, taking up space and making the filter look like it hadn't done anything
+
+### Fixed
+
+- CI's `npm audit --omit=dev` was failing on `fastembed`'s own direct `tar@^6.2.0` pin (several majors behind the `tar@7.5.22` already resolved elsewhere in the tree via `onnxruntime-node`) — overridden past it rather than downgrading fastembed
+
 ## [0.1.4] — 2026-08-31
 
 ### Added
