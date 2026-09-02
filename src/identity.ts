@@ -53,6 +53,59 @@ export function getPersona(id: string | undefined): Persona | undefined {
   return PERSONAS.find((p) => p.id === id);
 }
 
+// What makes the persona tag more than a label — App.tsx's sidebar "For
+// you" section renders these as shortcuts. `icon` is a plain string key
+// (not a component) so this file stays a plain logic module with no
+// React/lucide import; App.tsx maps it to an actual icon. `tutorialPath`
+// opens that page at the top (no fragment — only who-its-for.md's own
+// headings are confirmed anchor targets, already used by the topbar
+// badge). `navView` reuses the exact handler the matching sidebar-nav
+// button already calls, so a shortcut behaves identically to clicking
+// that nav item directly. Sourced from who-its-for.md's own curated
+// "→ [[...]]" link per persona — not a separate judgment call.
+export type PersonaShortcutIcon = "tutorial" | "journal" | "table" | "canvas" | "flashcards";
+
+export interface PersonaShortcut {
+  label: string;
+  icon: PersonaShortcutIcon;
+  tutorialPath?: string;
+  navView?: "journal" | "table" | "canvas" | "flashcards";
+}
+
+export const PERSONA_SHORTCUTS: Record<string, PersonaShortcut[]> = {
+  author: [{ label: "Writing books & scripts", icon: "tutorial", tutorialPath: "tutorial/writing-books-and-scripts.md" }],
+  researcher: [
+    { label: "Citations & references", icon: "tutorial", tutorialPath: "tutorial/citations.md" },
+    { label: "Related Notes & local AI", icon: "tutorial", tutorialPath: "tutorial/ai-related-notes.md" },
+  ],
+  student: [
+    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
+    { label: "Flashcards", icon: "flashcards", navView: "flashcards" },
+  ],
+  team: [
+    { label: "Team, Workspace & self-hosting", icon: "tutorial", tutorialPath: "tutorial/team-workspace.md" },
+    { label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" },
+  ],
+  planner: [
+    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
+    { label: "Table view", icon: "table", navView: "table" },
+  ],
+  journaler: [
+    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
+    { label: "Journal", icon: "journal", navView: "journal" },
+  ],
+  developer: [
+    { label: "Formatting", icon: "tutorial", tutorialPath: "tutorial/formatting.md" },
+    { label: "Diagrams", icon: "tutorial", tutorialPath: "tutorial/diagrams.md" },
+  ],
+  consultant: [{ label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" }],
+  privacy: [{ label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" }],
+  visual: [
+    { label: "Diagrams", icon: "tutorial", tutorialPath: "tutorial/diagrams.md" },
+    { label: "Canvas", icon: "canvas", navView: "canvas" },
+  ],
+};
+
 const IDENTITY_KEY = "pkm-identity";
 // Pre-Phase-A keys, read once to carry an existing user's established
 // name/color into their new identity object rather than resetting them.

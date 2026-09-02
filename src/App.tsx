@@ -77,6 +77,7 @@ import {
   BookOpen,
   Brain,
   Calendar,
+  ChevronRight,
   Download,
   FileText,
   History,
@@ -93,7 +94,7 @@ import {
   Vault as VaultIcon,
   Waypoints,
 } from "lucide-react";
-import { getIdentity, getPersona } from "./identity";
+import { getIdentity, getPersona, PERSONA_SHORTCUTS, type PersonaShortcut } from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, pruneDeleted, type RecentNote } from "./recentNotes";
 import { queryNotes } from "./noteQuery";
@@ -135,6 +136,17 @@ type ViewMode = "source" | "preview" | "split";
 // page of entries rather than a filtered list you click into one at a
 // time), so it's handled the same way Graph/Table/etc. are.
 type SidebarView = "all" | "canvas" | "favorites" | "tutorials";
+
+// PersonaShortcut.icon is a plain string key (identity.ts stays a plain
+// logic module, no React/lucide import) — this is the one place it gets
+// mapped to an actual icon component.
+const PERSONA_SHORTCUT_ICONS = {
+  tutorial: BookOpen,
+  journal: Calendar,
+  table: Table2,
+  canvas: Paintbrush,
+  flashcards: Brain,
+} as const;
 
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
@@ -210,6 +222,16 @@ export default function App() {
   function toggleRightPanelCollapsed() {
     setRightPanelCollapsed((collapsed) => {
       localStorage.setItem("pkm-right-panel-collapsed", collapsed ? "0" : "1");
+      return !collapsed;
+    });
+  }
+  // Defaults to expanded (unlike the right panel above) — the whole point
+  // of this section is to be seen at least once; collapsing it is
+  // something the user opts into, not the default state.
+  const [foryouCollapsed, setForyouCollapsed] = useState(() => localStorage.getItem("pkm-foryou-collapsed") === "1");
+  function toggleForyouCollapsed() {
+    setForyouCollapsed((collapsed) => {
+      localStorage.setItem("pkm-foryou-collapsed", collapsed ? "0" : "1");
       return !collapsed;
     });
   }
@@ -691,6 +713,22 @@ export default function App() {
     setTypeFilter(view === "canvas" ? "canvas" : ""); // "all", "favorites", and "tutorials" all draw from the full set
   }
 
+  // A "For you" shortcut is either a tutorial page (opens at the top, no
+  // fragment — see identity.ts's PersonaShortcut doc comment) or a nav
+  // view, dispatched through the exact same calls the real sidebar-nav
+  // buttons make so it behaves identically to clicking that nav item.
+  function onPersonaShortcutClick(shortcut: PersonaShortcut) {
+    if (shortcut.tutorialPath) {
+      openNote(shortcut.tutorialPath);
+      return;
+    }
+    if (shortcut.navView === "canvas") {
+      selectView("canvas");
+    } else if (shortcut.navView) {
+      showSpecialPanel(shortcut.navView);
+    }
+  }
+
   // Toggles the `favorite` frontmatter property directly — not a separate
   // local-only list — so it's consistent across devices/collaborators on
   // the same vault, same principle as `type`/`tags`.
@@ -1041,6 +1079,10 @@ export default function App() {
   // Memoized so an editing session over a large vault doesn't rescan the
   // full notes array per keystroke for a value that hasn't changed.
   const favoriteNotes = useMemo(() => notes.filter((n) => n.favorite), [notes]);
+  // Computed once (not inline in JSX) so the sidebar's "For you" section
+  // doesn't need repeated getIdentity() calls or non-null assertions to
+  // convince TypeScript the persona is still set a few lines later.
+  const personaShortcuts = PERSONA_SHORTCUTS[getIdentity().persona ?? ""];
   // typeFilter narrows what the sidebar list (and Table view, which reads
   // this same value) shows — applied here, client-side, rather than by
   // fetching a pre-filtered `notes` from the server (see loadNotes above).
@@ -1541,6 +1583,29 @@ export default function App() {
           )}
         {isListView && (
           <>
+            {!results && sidebarView === "all" && !typeFilter && !shareToken && personaShortcuts?.length && (
+              <div className="sidebar-section">
+                <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleForyouCollapsed}>
+                  <ChevronRight size={12} className={`sidebar-section-chevron ${foryouCollapsed ? "" : "open"}`} />
+                  For you
+                </button>
+                {!foryouCollapsed && (
+                  <ul className="persona-shortcut-list">
+                    {personaShortcuts.map((shortcut) => {
+                      const Icon = PERSONA_SHORTCUT_ICONS[shortcut.icon];
+                      return (
+                        <li key={shortcut.label}>
+                          <button className="persona-shortcut-item" onClick={() => onPersonaShortcutClick(shortcut)}>
+                            <Icon size={14} />
+                            {shortcut.label}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
             {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
               <div className="sidebar-section">
                 <div className="sidebar-section-label">Favorites</div>

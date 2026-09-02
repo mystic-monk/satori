@@ -586,6 +586,62 @@ body {
   color: var(--text-dim);
 }
 
+/* Favorites' label is a plain div; "For you" is the one section-label
+   that's also a collapse toggle, so it needs the button reset plus a
+   chevron — kept as an addition on top of .sidebar-section-label rather
+   than a full separate style so both stay visually identical otherwise. */
+.sidebar-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+
+.sidebar-section-toggle:hover {
+  color: var(--text);
+}
+
+.sidebar-section-chevron {
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.sidebar-section-chevron.open {
+  transform: rotate(90deg);
+}
+
+.persona-shortcut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.persona-shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.persona-shortcut-item:hover {
+  background: var(--bg-hover);
+}
+
+.persona-shortcut-item svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
 .note-list-compact {
   list-style: none;
   margin: 0;
