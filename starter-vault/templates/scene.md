@@ -1,6 +1,7 @@
 ---
 title: Scene
 type: template
+note_type: scene
 tags: [writing]
 order: 1
 setting: ""

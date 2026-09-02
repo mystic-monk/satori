@@ -1,6 +1,7 @@
 ---
 title: Book
 type: template
+note_type: book
 tags: [writing]
 status: planning
 genre: ""

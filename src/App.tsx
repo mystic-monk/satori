@@ -781,11 +781,17 @@ export default function App() {
         const parsed = parseFrontmatter(templateNote.raw);
         const date = new Date().toISOString().slice(0, 10);
         const body = parsed.body.replaceAll("{{date}}", date).replaceAll("{{title}}", title);
-        // `type` isn't carried over — otherwise a note created from a
-        // template would itself show up as a template next time (since
-        // "is this a template" is just `type === "template"`).
-        const { type: _templateType, ...rest } = parsed.data;
-        template = stringifyFrontmatter({ ...rest, title }, body);
+        // The template's own `type` is always "template" (that's the whole
+        // convention — see TemplatePickerDialog.tsx) and is never carried
+        // over as-is, or a note created from one would itself show up as a
+        // template next time. What the CREATED note's real type should be
+        // is a separate declaration, `note_type` (e.g. book.md carries
+        // `note_type: book`) — without it a created note used to end up
+        // permanently untyped, silently breaking anything that keys off
+        // that type afterwards (Book's "Compile chapters" export, its own
+        // `type: chapter` query block, Project's share-scoping, ...).
+        const { type: _templateType, note_type, ...rest } = parsed.data;
+        template = stringifyFrontmatter({ ...rest, ...(note_type ? { type: note_type } : {}), title }, body);
       } else {
         template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
       }

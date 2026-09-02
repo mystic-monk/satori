@@ -1,6 +1,7 @@
 ---
 title: Project
-type: project
+type: template
+note_type: project
 tags: [project]
 status: active
 ---

@@ -115,7 +115,7 @@ Read `server/relay.ts` and `src/crypto.ts` if you want to verify these claims yo
 Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
-- Not a Logseq/Roam-style outliner — no drag-to-reorder or collapsible nested blocks, and a "block" is a single line (a multi-line paragraph isn't merged into one addressable block yet)
+- Journal/daily notes have a real block outliner (indentable, collapsible bullets — Tab/Shift+Tab, click to collapse), but it doesn't extend to regular notes, there's no drag-to-reorder (keyboard only), and a "block" is still a single line (a multi-line paragraph isn't merged into one addressable block yet)
 - Table views are a single layout — no kanban/gallery views yet (Calendar exists as its own separate view, not a Table layout); rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation

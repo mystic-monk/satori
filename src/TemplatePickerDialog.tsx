@@ -9,7 +9,8 @@ interface TemplatePickerDialogProps {
 
 // A note with `type: template` is a template — that's the whole
 // convention (see submitCreatePrompt in App.tsx for the {{date}}/{{title}}
-// substitution that happens after picking one here).
+// substitution, and the `note_type` handling that gives the CREATED note
+// its own real type, that happens after picking one here).
 export default function TemplatePickerDialog({ templates, onSelect, onCancel }: TemplatePickerDialogProps) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

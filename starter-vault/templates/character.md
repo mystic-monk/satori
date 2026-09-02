@@ -1,6 +1,7 @@
 ---
 title: Character
 type: template
+note_type: character
 tags: [writing]
 role: ""
 ---
