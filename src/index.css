@@ -3769,13 +3769,79 @@ button:disabled:hover {
   overflow-y: auto;
 }
 
+.workspace-member-row-wrap {
+  border-bottom: 1px solid var(--border);
+  padding: 2px 0;
+}
+
 .workspace-member-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+.workspace-member-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 8px;
+}
+
+.workspace-scope-hint {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.workspace-scope-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.workspace-scope-remove {
+  color: var(--text-dim);
+  line-height: 1;
+  padding: 0;
+}
+
+.workspace-scope-remove:hover {
+  color: var(--danger);
+}
+
+.workspace-scope-add {
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--accent);
+  background: transparent;
+  border: none;
+}
+
+.workspace-scope-add:hover {
+  text-decoration: underline;
+}
+
+.workspace-scope-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workspace-scope-form select {
+  padding: 3px 6px;
+  font-size: var(--text-xs);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
 }
 
 .workspace-member-info {

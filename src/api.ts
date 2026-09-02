@@ -51,7 +51,7 @@ export interface HistoryEntry {
   authors: AuthorRef[];
 }
 
-function encodePath(p: string): string {
+export function encodePath(p: string): string {
   return p.split("/").map(encodeURIComponent).join("/");
 }
 

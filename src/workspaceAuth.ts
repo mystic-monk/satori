@@ -5,6 +5,7 @@
 // to pass explicitly beyond credentials: "include" is Express's default
 // same-origin cookie behavior, no extra config needed since this app is
 // always same-origin with its own API.
+import { encodePath, type ShareRole } from "./api";
 
 export type WorkspaceRole = "admin" | "member";
 
@@ -71,4 +72,37 @@ export async function removeMember(userId: string): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error ?? "failed to remove member");
   }
+}
+
+// Optional per-member restriction — see workspace_member_projects' doc
+// comment in server/db.ts. Zero scopes means the member keeps full vault
+// access, unchanged; one or more restricts them to exactly those projects.
+export interface ProjectScope {
+  projectPath: string;
+  role: ShareRole;
+}
+
+export async function listMemberProjects(userId: string): Promise<ProjectScope[]> {
+  const res = await fetch(`/api/auth/members/${encodeURIComponent(userId)}/projects`);
+  if (!res.ok) throw new Error("failed to list project scopes");
+  return res.json();
+}
+
+export async function addMemberProject(userId: string, projectPath: string, role: ShareRole): Promise<void> {
+  const res = await fetch(`/api/auth/members/${encodeURIComponent(userId)}/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectPath, role }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "failed to add project scope");
+  }
+}
+
+export async function removeMemberProject(userId: string, projectPath: string): Promise<void> {
+  const res = await fetch(`/api/auth/members/${encodeURIComponent(userId)}/projects/${encodePath(projectPath)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("failed to remove project scope");
 }

@@ -13,7 +13,15 @@ import {
   createInvite,
   resolveInvite,
   deleteInvite,
+  listMemberProjectScopes,
+  addMemberProjectScope,
+  removeMemberProjectScope,
 } from "./auth.js";
+import type { ShareRole } from "./db.js";
+
+function isShareRole(v: unknown): v is ShareRole {
+  return v === "view" || v === "comment" || v === "edit";
+}
 
 export const SESSION_COOKIE = "satori_session";
 
@@ -156,6 +164,32 @@ export function registerAuthRoutes(app: Express): void {
       return;
     }
     removeWorkspaceMember(req.params.userId);
+    res.json({ ok: true });
+  });
+
+  // Optional per-member restriction — see workspace_member_projects' doc
+  // comment in db.ts. Admin-only, same as every other member-management
+  // route above; a member's own scope is visible to them for free via
+  // GET /api/auth/status (resolveSessionMember doesn't include it
+  // directly, but the note list they can actually reach already reflects
+  // it — no separate "my scope" endpoint needed).
+  app.get("/api/auth/members/:userId/projects", requireAdmin, (req, res) => {
+    res.json(listMemberProjectScopes(req.params.userId));
+  });
+
+  app.post("/api/auth/members/:userId/projects", requireAdmin, (req, res) => {
+    const { projectPath, role } = req.body as { projectPath?: string; role?: string };
+    if (typeof projectPath !== "string" || !projectPath.trim() || !isShareRole(role)) {
+      res.status(400).json({ error: "invalid projectPath or role" });
+      return;
+    }
+    addMemberProjectScope(req.params.userId, projectPath, role);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/auth/members/:userId/projects/*", requireAdmin, (req, res) => {
+    const projectPath = (req.params as Record<string, string>)[0];
+    removeMemberProjectScope(req.params.userId, projectPath);
     res.json({ ok: true });
   });
 }

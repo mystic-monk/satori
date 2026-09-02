@@ -5,14 +5,22 @@ import {
   listMembers,
   logout,
   removeMember,
+  listMemberProjects,
+  addMemberProject,
+  removeMemberProject,
   type AuthStatus,
   type WorkspaceUser,
+  type ProjectScope,
 } from "./workspaceAuth";
+import type { NoteListItem } from "./api";
 
 interface WorkspacePanelProps {
   status: AuthStatus;
   onStatusChange: (status: AuthStatus) => void;
   onClose: () => void;
+  // Only used to build the "scope to project" picker (type: project
+  // notes) — MemberView/BootstrapForm never touch it.
+  notes: NoteListItem[];
 }
 
 // Reachable from a small, always-visible sidebar entry (App.tsx) rather
@@ -21,9 +29,10 @@ interface WorkspacePanelProps {
 // finds and uses this. Three states depending on `status`: not
 // configured yet (bootstrap form), configured and admin (members +
 // invite), configured and a plain member (just identity + sign out).
-export default function WorkspacePanel({ status, onStatusChange, onClose }: WorkspacePanelProps) {
+export default function WorkspacePanel({ status, onStatusChange, onClose, notes }: WorkspacePanelProps) {
   if (!status.configured) return <BootstrapForm onStatusChange={onStatusChange} onClose={onClose} />;
-  if (status.user?.role === "admin") return <MembersView status={status} onStatusChange={onStatusChange} onClose={onClose} />;
+  if (status.user?.role === "admin")
+    return <MembersView status={status} onStatusChange={onStatusChange} onClose={onClose} notes={notes} />;
   return <MemberView status={status} onStatusChange={onStatusChange} onClose={onClose} />;
 }
 
@@ -107,18 +116,33 @@ function MembersView({
   status,
   onStatusChange,
   onClose,
+  notes,
 }: {
   status: AuthStatus;
   onStatusChange: (status: AuthStatus) => void;
   onClose: () => void;
+  notes: NoteListItem[];
 }) {
   const [members, setMembers] = useState<WorkspaceUser[]>([]);
   const [invite, setInvite] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Which member row (if any) has its "scope to project" form open —
+  // only one at a time, same reasoning Table view's rollup-add form uses.
+  const [scopingMemberId, setScopingMemberId] = useState<string | null>(null);
+  const [scopes, setScopes] = useState<Record<string, ProjectScope[]>>({});
+
+  const projectNotes = notes.filter((n) => n.type === "project");
 
   useEffect(() => {
     listMembers()
-      .then(setMembers)
+      .then(async (list) => {
+        setMembers(list);
+        // Scoping only ever applies to plain members — no point fetching
+        // (or rendering) scope rows for an admin, who's always vault-wide.
+        const plainMembers = list.filter((m) => m.role === "member");
+        const pairs = await Promise.all(plainMembers.map((m) => listMemberProjects(m.id).then((s) => [m.id, s] as const)));
+        setScopes(Object.fromEntries(pairs));
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load members"));
   }, []);
 
@@ -142,6 +166,30 @@ function MembersView({
     }
   }
 
+  async function onAddScope(userId: string, projectPath: string, role: ProjectScope["role"]) {
+    setError(null);
+    try {
+      await addMemberProject(userId, projectPath, role);
+      setScopes((prev) => ({
+        ...prev,
+        [userId]: [...(prev[userId] ?? []).filter((s) => s.projectPath !== projectPath), { projectPath, role }],
+      }));
+      setScopingMemberId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to add project scope");
+    }
+  }
+
+  async function onRemoveScope(userId: string, projectPath: string) {
+    setError(null);
+    try {
+      await removeMemberProject(userId, projectPath);
+      setScopes((prev) => ({ ...prev, [userId]: (prev[userId] ?? []).filter((s) => s.projectPath !== projectPath) }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to remove project scope");
+    }
+  }
+
   async function onSignOut() {
     await logout();
     onStatusChange({ configured: true, user: null });
@@ -153,20 +201,60 @@ function MembersView({
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h3 className="modal-title">Workspace members</h3>
         <ul className="workspace-members-list">
-          {members.map((m) => (
-            <li key={m.id} className="workspace-member-row">
-              <div className="workspace-member-info">
-                <span className="workspace-member-name">{m.name}</span>
-                <span className="workspace-member-email">{m.email}</span>
-              </div>
-              <span className="workspace-member-role">{m.role}</span>
-              {m.id !== status.user?.id && (
-                <button className="btn-ghost" onClick={() => onRemove(m.id)}>
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
+          {members.map((m) => {
+            const memberScopes = scopes[m.id] ?? [];
+            return (
+              <li key={m.id} className="workspace-member-row-wrap">
+                <div className="workspace-member-row">
+                  <div className="workspace-member-info">
+                    <span className="workspace-member-name">{m.name}</span>
+                    <span className="workspace-member-email">{m.email}</span>
+                  </div>
+                  <span className="workspace-member-role">{m.role}</span>
+                  {m.id !== status.user?.id && (
+                    <button className="btn-ghost" onClick={() => onRemove(m.id)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {m.role === "member" && (
+                  <div className="workspace-member-scopes">
+                    {memberScopes.map((s) => {
+                      const note = notes.find((n) => n.path === s.projectPath);
+                      return (
+                        <span key={s.projectPath} className="workspace-scope-chip">
+                          {note?.title ?? s.projectPath} ({s.role})
+                          <button
+                            className="workspace-scope-remove"
+                            onClick={() => onRemoveScope(m.id, s.projectPath)}
+                            aria-label={`Remove scope for ${note?.title ?? s.projectPath}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {scopingMemberId === m.id ? (
+                      <AddScopeForm
+                        projectNotes={projectNotes.filter((n) => !memberScopes.some((s) => s.projectPath === n.path))}
+                        onAdd={(projectPath, role) => onAddScope(m.id, projectPath, role)}
+                        onCancel={() => setScopingMemberId(null)}
+                      />
+                    ) : (
+                      projectNotes.length > 0 && (
+                        <button className="workspace-scope-add" onClick={() => setScopingMemberId(m.id)}>
+                          + Scope to project…
+                        </button>
+                      )
+                    )}
+                    {memberScopes.length === 0 && scopingMemberId !== m.id && (
+                      <span className="workspace-scope-hint">Full vault access (not scoped to any project)</span>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
         {invite ? (
           <div className="workspace-invite-row">
@@ -191,6 +279,42 @@ function MembersView({
         </div>
       </div>
     </div>
+  );
+}
+
+// Same shape as TableView.tsx's AddRollupForm — a compact inline form of
+// two selects + Add/Cancel, the established pattern for "pick from a
+// short list, then confirm" elsewhere in this app.
+function AddScopeForm({
+  projectNotes,
+  onAdd,
+  onCancel,
+}: {
+  projectNotes: NoteListItem[];
+  onAdd: (projectPath: string, role: ProjectScope["role"]) => void;
+  onCancel: () => void;
+}) {
+  const [projectPath, setProjectPath] = useState(projectNotes[0]?.path ?? "");
+  const [role, setRole] = useState<ProjectScope["role"]>("view");
+  return (
+    <span className="workspace-scope-form">
+      <select value={projectPath} onChange={(e) => setProjectPath(e.target.value)} aria-label="Project">
+        {projectNotes.map((n) => (
+          <option key={n.path} value={n.path}>
+            {n.title}
+          </option>
+        ))}
+      </select>
+      <select value={role} onChange={(e) => setRole(e.target.value as ProjectScope["role"])} aria-label="Role">
+        <option value="view">Can view</option>
+        <option value="comment">Can comment</option>
+        <option value="edit">Can edit</option>
+      </select>
+      <button disabled={!projectPath} onClick={() => onAdd(projectPath, role)}>
+        Add
+      </button>
+      <button onClick={onCancel}>Cancel</button>
+    </span>
   );
 }
 

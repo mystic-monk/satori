@@ -1298,6 +1298,7 @@ export default function App() {
           status={authStatus}
           onStatusChange={setAuthStatus}
           onClose={() => setWorkspacePanelOpen(false)}
+          notes={notes}
         />
       )}
       {identityPanelOpen && <IdentityPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} />}
