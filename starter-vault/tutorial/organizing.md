@@ -37,16 +37,30 @@ Just below Favorites, the sidebar tracks the last several notes you opened, most
 
 The sidebar's **All Notes / Journal / Canvas / Graph / Table / Flashcards / Tutorials** row switches what you're browsing:
 - **All Notes** — everything (the default)
-- **Journal** — just your daily notes, with a one-click "Write today's entry" prompt when today's doesn't exist yet
+- **Journal** — see below
 - **Canvas** — just your Excalidraw canvas notes
 - **Graph** — the visual link graph (see [[tutorial/linking|Linking & the graph]])
 - **Table** — see below
 - **Flashcards** — spaced-repetition review (see below)
 - **Tutorials** — every page in this tutorial, in one place — the exact section you're reading right now
 
-If you've added a custom `type` to some notes (beyond `daily`/`canvas`), a **More types…** dropdown appears so you can filter to those too.
+If you've added a custom `type` to some notes (beyond `daily`/`canvas`), a **Filter by type…** dropdown appears in the sidebar so you can filter to those too.
 
-On a wide enough screen, the little panel icon next to the note title collapses the sidebar entirely — more room for writing, one click to bring it back. Your choice is remembered next time you open the app.
+On a wide enough screen, drag the sidebar's edge narrower and it collapses to icon-only automatically — more room for writing, drag it back out any time. Your width is remembered next time you open the app.
+
+## Journal: a block outliner for your daily notes
+
+Click **Journal** in the sidebar. You land on a continuous scrollable feed — a bold **Today**/**Yesterday**/weekday heading per entry, most recent first, with that day's content shown right below it. No "Write today's entry" note needed yet? A button at the top makes one.
+
+Open today's entry (click its heading, or the button) and you're writing in real indentable, collapsible bullet blocks — closer to LogSeq/Workflowy than a plain markdown page:
+- **Enter** starts a new block below the current one
+- **Tab** indents the current block under the one above it; **Shift+Tab** un-indents it back out
+- **Backspace** at the very start of a block merges it into the end of the previous one
+- **↑ / ↓ / ← / →** move the cursor between blocks
+- Click the **▸** next to any block with children to collapse or expand it — collapsed state is saved, so it's still collapsed next time you open that day
+- Paste multiple lines at once and each line becomes its own block, in order
+
+A `[[wikilink]]` typed inside a block works exactly like it does in a normal note — it resolves, shows up in Backlinks, and is clickable once you click away from that block. This is scoped to Journal/daily notes specifically, not a vault-wide outliner — a regular note is still the flat markdown editor described throughout the rest of this tutorial.
 
 ## Query blocks: live-filtered lists inside a note
 
@@ -68,7 +82,7 @@ would list every daily journal entry. Any frontmatter property works as a filter
 
 Give a note `type: template` in its frontmatter, and it becomes available from **+ Create → New From Template**. Its body can use `{{title}}` and `{{date}}` placeholders, substituted when you create a note from it — handy for anything you write a lot of in the same shape (meeting notes, project briefs, weekly reviews).
 
-The template's own `type: template` is deliberately *not* copied onto the note you create from it — otherwise every note made from a template would itself show up as a template next time.
+The template's own `type: template` is deliberately *not* copied onto the note you create from it — otherwise every note made from a template would itself show up as a template next time. If the created note should have its own real type (a Book template producing an actual `type: book` note, say), add a `note_type` property to the template — its value becomes the new note's `type` instead of being left blank. The built-in Book/Chapter/Character/Scene/Project templates (see [[tutorial/writing-books-and-scripts|Writing books & scripts]]) all do exactly this.
 
 ## Table view
 
