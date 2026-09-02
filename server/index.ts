@@ -21,7 +21,6 @@ import {
   listShares,
   revokeShare,
   getHistory,
-  resolveShareRole,
   getDueCards,
   recordCardReview,
   addComment,
@@ -38,7 +37,7 @@ import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
 import { scheduleEmbeddingUpdate, scheduleEmbeddingUpdateAll } from "./embeddings.js";
-import { hasOwnerAccess } from "./auth.js";
+import { hasOwnerAccess, resolveEffectiveRole } from "./auth.js";
 import { registerAuthRoutes, SESSION_COOKIE } from "./auth-routes.js";
 
 const app = express();
@@ -77,14 +76,13 @@ function sessionTokenFrom(req: Request): string | null {
   return (req.cookies?.[SESSION_COOKIE] as string | undefined) ?? null;
 }
 
-// Wraps resolveShareRole so its own no-token→"owner" default is never
-// reached once accounts exist — that fallback predates real accounts and
-// would silently undo auth.ts's hasOwnerAccess tightening if a caller
-// went around this.
+// Thin Express-aware wrapper around auth.ts's resolveEffectiveRole (the
+// one place token-vs-session-vs-project-scope resolution happens — see
+// its own doc comment for why server/collab.ts's WS handler calls the
+// exact same function rather than this ever growing a second copy of the
+// branching logic).
 function effectiveRole(req: Request, relPath: string): ShareRole | "owner" | "denied" {
-  const token = tokenFrom(req);
-  if (token) return resolveShareRole(relPath, token);
-  return hasOwnerAccess(token, sessionTokenFrom(req)) ? "owner" : "denied";
+  return resolveEffectiveRole(relPath, tokenFrom(req), sessionTokenFrom(req));
 }
 
 function requireOwner(req: Request, res: Response, next: NextFunction) {

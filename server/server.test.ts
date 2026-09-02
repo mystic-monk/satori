@@ -136,6 +136,24 @@ describe("resolveShareRole with a project-scoped share", () => {
     db.upsertNoteIndex("taskD.md");
     expect(db.resolveShareRole("taskD.md", noteShare.token)).toBe("denied");
   });
+
+  it("also matches a project property written as a path reference, not just a title", () => {
+    vault.writeNoteRaw("nested/proj-e.md", "---\ntitle: Project E\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("taskE.md", '---\ntitle: Task E\nproject: "[[nested/proj-e]]"\n---\nBody.');
+    db.upsertNoteIndex("nested/proj-e.md");
+    db.upsertNoteIndex("taskE.md");
+    const share = db.createShare("nested/proj-e.md", "view", "team", "project");
+    expect(db.resolveShareRole("taskE.md", share.token)).toBe("view");
+  });
+
+  it("matches a project title case-insensitively, same as every other relation in the app", () => {
+    vault.writeNoteRaw("proj-f.md", "---\ntitle: Project F\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("taskF.md", '---\ntitle: Task F\nproject: "[[project f]]"\n---\nBody.');
+    db.upsertNoteIndex("proj-f.md");
+    db.upsertNoteIndex("taskF.md");
+    const share = db.createShare("proj-f.md", "view", "team", "project");
+    expect(db.resolveShareRole("taskF.md", share.token)).toBe("view");
+  });
 });
 
 // Regression test for the persistent-identity change: history rows written
@@ -237,6 +255,26 @@ describe("collab Room CRDT/file staleness", () => {
 
     const room2 = new collab.Room("fresh-test.md");
     expect(room2.doc.getText("content").toString()).toBe("from collab session");
+  });
+});
+
+// The WS upgrade path doesn't go through Express's cookie-parser, so the
+// session cookie has to be pulled off the raw header by hand (see the
+// connection handler in collab.ts) — this is the one piece of that fix
+// that's a pure function worth its own direct test, separate from the
+// project-scoping logic itself (covered in auth.test.ts).
+describe("sessionTokenFromCookieHeader", () => {
+  it("finds the session cookie among others and decodes it", () => {
+    expect(collab.sessionTokenFromCookieHeader("foo=bar; satori_session=abc123; other=1")).toBe("abc123");
+  });
+
+  it("returns null when the cookie is absent or the header is missing", () => {
+    expect(collab.sessionTokenFromCookieHeader("foo=bar")).toBeNull();
+    expect(collab.sessionTokenFromCookieHeader(undefined)).toBeNull();
+  });
+
+  it("decodes a URL-encoded value", () => {
+    expect(collab.sessionTokenFromCookieHeader("satori_session=a%2Fb")).toBe("a/b");
   });
 });
 

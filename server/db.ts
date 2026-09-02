@@ -152,6 +152,24 @@ stateDb.exec(`
     added_at INTEGER NOT NULL
   );
 
+  -- Optional per-member restriction, layered on top of workspace_members
+  -- the same way workspace_members itself is layered on top of shares:
+  -- zero rows for a user means today's behavior (full vault-wide access,
+  -- unchanged) — one or more rows means that member is restricted to
+  -- exactly those projects, at the role granted per project. Only ever
+  -- consulted for role: "member" — an admin is always vault-wide
+  -- regardless of any rows present here (see auth.ts's
+  -- getMemberProjectScope). Reuses the exact "project: [[X]]" relation
+  -- project-shares already resolve via noteBelongsToProject, rather than
+  -- inventing a second membership concept.
+  CREATE TABLE IF NOT EXISTS workspace_member_projects (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    project_path TEXT NOT NULL,
+    role TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, project_path)
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
@@ -607,24 +625,45 @@ export function revokeShare(token: string): void {
   stateDb.prepare("DELETE FROM shares WHERE token = ?").run(token);
 }
 
+// Resolves a wikilink-style ref (a note's path with or without .md, or its
+// title, case-insensitive) to that note's canonical path — the same
+// two-step resolution src/noteResolver.ts's buildResolver does client-side
+// (path first, then title), reimplemented here against the notes table
+// directly since this runs server-side against SQLite rather than an
+// in-memory NoteListItem[]. Kept as one place so noteBelongsToProject
+// below doesn't grow its own bespoke comparison a second time.
+function resolveNoteRefToPath(ref: string): string | null {
+  const clean = ref.trim().replace(/\.md$/, "");
+  const byPath = db.prepare("SELECT path FROM notes WHERE path = ? OR path = ?").get(clean, `${clean}.md`) as
+    | { path: string }
+    | undefined;
+  if (byPath) return byPath.path;
+  const byTitle = db.prepare("SELECT path FROM notes WHERE LOWER(title) = LOWER(?)").get(clean) as
+    | { path: string }
+    | undefined;
+  return byTitle ? byTitle.path : null;
+}
+
 // A note "belongs to" a project the same way a chapter belongs to a book
 // (see starter-vault/templates/book.md) — a `project: [[Project Title]]`
-// frontmatter property, matched by exact string equality against the
-// project note's title, same convention noteQuery.ts's matchesFilter
-// uses client-side. The project note itself is always included (it's
-// what a project share is fundamentally "of" — its own query block is
-// how a member browses to everything else in it).
-function noteBelongsToProject(notePath: string, projectPath: string): boolean {
+// frontmatter property. Resolved via resolveNoteRefToPath (path-or-title,
+// same as every other relation in the app — Table view rollups, wikilink
+// navigation) rather than a bespoke exact-title-string comparison, so a
+// project reference by path works too and title matching is consistently
+// case-insensitive. The project note itself is always included (it's
+// what a project share/scope is fundamentally "of" — its own query block
+// is how a member browses to everything else in it).
+export function noteBelongsToProject(notePath: string, projectPath: string): boolean {
   if (notePath === projectPath) return true;
   const noteRow = db.prepare("SELECT properties FROM notes WHERE path = ?").get(notePath) as
     | { properties: string }
     | undefined;
-  const projectRow = db.prepare("SELECT title FROM notes WHERE path = ?").get(projectPath) as
-    | { title: string }
-    | undefined;
-  if (!noteRow || !projectRow) return false;
+  if (!noteRow) return false;
   const project = parseProperties(noteRow.properties).project;
-  return project === `[[${projectRow.title}]]`;
+  if (typeof project !== "string") return false;
+  const [ref] = extractWikilinkRefs(project);
+  if (!ref) return false;
+  return resolveNoteRefToPath(ref.ref) === projectPath;
 }
 
 // No token at all means the request is the local app itself (the owner

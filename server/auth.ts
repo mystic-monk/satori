@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import sodium from "libsodium-wrappers-sumo";
-import { stateDb } from "./db.js";
+import { stateDb, noteBelongsToProject, resolveShareRole, type ShareRole } from "./db.js";
 
 // Same "sumo" build src/crypto.ts already uses (crypto_pwhash/Argon2id
 // isn't in the default libsodium-wrappers build) — one dependency, two
@@ -114,6 +114,45 @@ export function removeWorkspaceMember(userId: string): void {
   tx();
 }
 
+export interface ProjectScope {
+  projectPath: string;
+  role: ShareRole;
+}
+
+// Optional per-member restriction — see the doc comment on
+// workspace_member_projects in db.ts. Only ever meaningful for "member";
+// an admin is always vault-wide, which is why this takes the caller's
+// already-known role rather than looking it up itself (avoids a second
+// query, and makes "admins are never scoped" impossible to get backwards
+// at a call site — the null-for-admin branch is right here, not left to
+// every caller to remember).
+export function getMemberProjectScope(userId: string, role: WorkspaceRole): ProjectScope[] | null {
+  if (role === "admin") return null;
+  const rows = stateDb
+    .prepare("SELECT project_path as projectPath, role FROM workspace_member_projects WHERE user_id = ?")
+    .all(userId) as ProjectScope[];
+  return rows.length > 0 ? rows : null;
+}
+
+export function listMemberProjectScopes(userId: string): ProjectScope[] {
+  return stateDb
+    .prepare("SELECT project_path as projectPath, role FROM workspace_member_projects WHERE user_id = ?")
+    .all(userId) as ProjectScope[];
+}
+
+export function addMemberProjectScope(userId: string, projectPath: string, role: ShareRole): void {
+  stateDb
+    .prepare(
+      `INSERT INTO workspace_member_projects (user_id, project_path, role, added_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, project_path) DO UPDATE SET role = excluded.role`
+    )
+    .run(userId, projectPath, role, Date.now());
+}
+
+export function removeMemberProjectScope(userId: string, projectPath: string): void {
+  stateDb.prepare("DELETE FROM workspace_member_projects WHERE user_id = ? AND project_path = ?").run(userId, projectPath);
+}
+
 export function createSession(userId: string): { token: string; expiresAt: number } {
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
@@ -183,6 +222,21 @@ export function deleteInvite(token: string): void {
   stateDb.prepare("DELETE FROM invites WHERE token = ?").run(token);
 }
 
+// The three shapes a resolved session can take: no valid session at all;
+// a full vault-wide member (admin, or a plain member with zero scoping
+// rows — today's only behavior, preserved exactly); or a member
+// restricted to specific projects. The one place session-to-access
+// resolution happens — hasOwnerAccess and resolveEffectiveRole below both
+// build on this rather than each re-deriving it.
+export type SessionAccess = { kind: "none" } | { kind: "owner" } | { kind: "scoped"; projects: ProjectScope[] };
+
+export function resolveSessionAccess(sessionToken: string | null): SessionAccess {
+  const member = resolveSessionMember(sessionToken);
+  if (!member) return { kind: "none" };
+  const scope = getMemberProjectScope(member.id, member.role);
+  return scope ? { kind: "scoped", projects: scope } : { kind: "owner" };
+}
+
 // The one real behavior change from adding real accounts (Team/Workspace
 // v1): a request with no share token used to be trusted as "the owner"
 // unconditionally — correct when only the vault's actual owner could
@@ -190,15 +244,45 @@ export function deleteInvite(token: string): void {
 // stops being true (the whole point of a workspace is other people
 // reaching this same server), so once at least one account has been
 // created, "no share token" alone no longer counts as owner access — it
-// also needs a valid session for a real workspace member. A server with
-// zero accounts ever created (today's default, completely unaffected by
-// this feature until someone opts in by creating the first one) keeps
-// behaving exactly as it always has. Deliberately Express-independent
-// (plain string|null in, not a Request) — the whole point of pulling
-// this out of index.ts is testing it without needing to spin up an HTTP
-// server or bring in a testing-only dependency just for that.
+// also needs a valid session for a real, *unscoped* workspace member (a
+// project-scoped member is deliberately not "owner" here — vault-wide
+// operations like reindex/search/vault-wide share management stay closed
+// to them; their own note-level access is resolveEffectiveRole's job,
+// below). A server with zero accounts ever created (today's default,
+// completely unaffected by this feature until someone opts in by
+// creating the first one) keeps behaving exactly as it always has.
+// Deliberately Express-independent (plain string|null in, not a
+// Request) — the whole point of pulling this out of index.ts is testing
+// it without needing to spin up an HTTP server or bring in a
+// testing-only dependency just for that.
 export function hasOwnerAccess(shareToken: string | null, sessionToken: string | null): boolean {
   if (shareToken) return false; // a share token present is the guest path, not owner
   if (!usersConfigured()) return true;
-  return resolveSessionMember(sessionToken) !== null;
+  return resolveSessionAccess(sessionToken).kind === "owner";
+}
+
+// The single place "does this request get to touch this note, and how"
+// is decided — server/index.ts's effectiveRole and server/collab.ts's WS
+// connection handler both call this instead of each re-implementing the
+// token-vs-session branching (which is exactly how they drifted apart
+// before: collab.ts calling resolveShareRole directly, bypassing session/
+// scoping entirely, is the bug this consolidation closes). Precedence:
+// a share token (the anonymous guest path) is checked first and, if
+// present, is authoritative on its own — a request either presents a
+// token or a session, never resolved as both at once, same as today.
+export function resolveEffectiveRole(
+  notePath: string,
+  shareToken: string | null,
+  sessionToken: string | null
+): ShareRole | "owner" | "denied" {
+  if (shareToken) return resolveShareRole(notePath, shareToken);
+  if (!usersConfigured()) return "owner";
+  const access = resolveSessionAccess(sessionToken);
+  if (access.kind === "owner") return "owner";
+  if (access.kind === "scoped") {
+    for (const { projectPath, role } of access.projects) {
+      if (noteBelongsToProject(notePath, projectPath)) return role;
+    }
+  }
+  return "denied";
 }

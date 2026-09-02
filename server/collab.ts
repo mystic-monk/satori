@@ -8,7 +8,9 @@ import * as decoding from "lib0/decoding";
 import fs from "node:fs";
 import path from "node:path";
 import { readNoteRaw, writeNoteRaw, getNoteMtime } from "./vault.js";
-import { upsertNoteIndex, resolveShareRole, logHistory, type ShareRole } from "./db.js";
+import { upsertNoteIndex, logHistory, type ShareRole } from "./db.js";
+import { resolveEffectiveRole } from "./auth.js";
+import { SESSION_COOKIE } from "./auth-routes.js";
 
 // Local-mode real-time collaboration. This server runs on the user's own
 // machine (or LAN) — it is not a cloud vendor — so it is allowed to decode
@@ -235,6 +237,21 @@ export function closeRoom(notePath: string) {
   if (fs.existsSync(statePath)) fs.rmSync(statePath);
 }
 
+// The WS upgrade request never goes through Express's cookie-parser
+// middleware (that only runs on the HTTP request pipeline), so the
+// session cookie has to be pulled off the raw Cookie header by hand — a
+// small inline parser rather than a new dependency for extracting one
+// named value.
+export function sessionTokenFromCookieHeader(header: string | undefined): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === SESSION_COOKIE) return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return null;
+}
+
 export function setupCollabServer(server: HttpServer) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -249,7 +266,15 @@ export function setupCollabServer(server: HttpServer) {
     const token = url.searchParams.get("token");
     const name = url.searchParams.get("name")?.trim() || "Anonymous";
     const id = url.searchParams.get("id")?.trim() || null;
-    const role = resolveShareRole(notePath, token);
+    // resolveEffectiveRole, not a bare resolveShareRole(notePath, token) —
+    // this used to bypass session/project-scoping entirely, meaning a
+    // tokenless WS connection always resolved to "owner" regardless of
+    // who was actually connecting. Harmless while workspace members were
+    // all vault-wide-equivalent; a real hole once a member can be scoped
+    // to specific projects, since this is the real-time editing path, not
+    // just a read.
+    const sessionToken = sessionTokenFromCookieHeader(req.headers.cookie);
+    const role = resolveEffectiveRole(notePath, token, sessionToken);
     if (role === "denied") {
       ws.close(4403, "invalid or revoked share token");
       return;

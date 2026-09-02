@@ -10,11 +10,15 @@ const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pkm-auth-test-"));
 const originalCwd = process.cwd();
 
 let auth: typeof import("./auth.js");
+let vault: typeof import("./vault.js");
+let db: typeof import("./db.js");
 
 beforeAll(async () => {
   fs.mkdirSync(path.join(tmpRoot, "vault"), { recursive: true });
   process.chdir(tmpRoot);
   auth = await import("./auth.js");
+  vault = await import("./vault.js");
+  db = await import("./db.js");
 });
 
 afterAll(() => {
@@ -162,5 +166,120 @@ describe("invites", () => {
     const invite = auth.createInvite(admin.id);
     auth.deleteInvite(invite.token);
     expect(auth.resolveInvite(invite.token)).toBeNull();
+  });
+});
+
+// getMemberProjectScope / resolveSessionAccess / resolveEffectiveRole —
+// the project-scoped-member feature. Security-critical in the same way
+// hasOwnerAccess is (first describe block in this file): a member with no
+// scoping rows must keep getting exactly today's full vault access
+// (backward compatibility by construction), and an admin must never be
+// restrictable by a scoping row even if one somehow exists.
+describe("project-scoped workspace members", () => {
+  it("getMemberProjectScope: null for an admin regardless of any scoping rows present", async () => {
+    const user = await auth.createUser("admin-scope@example.com", "AdminScope", "pw");
+    auth.addWorkspaceMember(user.id, "admin");
+    auth.addMemberProjectScope(user.id, "some-project.md", "view");
+    expect(auth.getMemberProjectScope(user.id, "admin")).toBeNull();
+  });
+
+  it("getMemberProjectScope: null for a member with zero scoping rows (full vault access)", async () => {
+    const user = await auth.createUser("member-unscoped@example.com", "MemberUnscoped", "pw");
+    auth.addWorkspaceMember(user.id, "member");
+    expect(auth.getMemberProjectScope(user.id, "member")).toBeNull();
+  });
+
+  it("getMemberProjectScope: returns granted projects for a scoped member", async () => {
+    const user = await auth.createUser("member-scoped@example.com", "MemberScoped", "pw");
+    auth.addWorkspaceMember(user.id, "member");
+    auth.addMemberProjectScope(user.id, "proj-a.md", "edit");
+    auth.addMemberProjectScope(user.id, "proj-b.md", "view");
+    const scope = auth.getMemberProjectScope(user.id, "member");
+    expect(scope).toHaveLength(2);
+    expect(scope).toEqual(
+      expect.arrayContaining([
+        { projectPath: "proj-a.md", role: "edit" },
+        { projectPath: "proj-b.md", role: "view" },
+      ])
+    );
+  });
+
+  it("removeMemberProjectScope removes just that one project", async () => {
+    const user = await auth.createUser("member-remove-scope@example.com", "MemberRemoveScope", "pw");
+    auth.addWorkspaceMember(user.id, "member");
+    auth.addMemberProjectScope(user.id, "proj-a.md", "edit");
+    auth.addMemberProjectScope(user.id, "proj-b.md", "view");
+    auth.removeMemberProjectScope(user.id, "proj-a.md");
+    expect(auth.listMemberProjectScopes(user.id)).toEqual([{ projectPath: "proj-b.md", role: "view" }]);
+  });
+
+  it("resolveSessionAccess: none/owner/scoped", async () => {
+    expect(auth.resolveSessionAccess("not-a-real-token").kind).toBe("none");
+
+    const owner = await auth.createUser("access-owner@example.com", "AccessOwner", "pw");
+    auth.addWorkspaceMember(owner.id, "member");
+    const ownerSession = auth.createSession(owner.id);
+    expect(auth.resolveSessionAccess(ownerSession.token).kind).toBe("owner");
+
+    const scoped = await auth.createUser("access-scoped@example.com", "AccessScoped", "pw");
+    auth.addWorkspaceMember(scoped.id, "member");
+    auth.addMemberProjectScope(scoped.id, "proj-a.md", "view");
+    const scopedSession = auth.createSession(scoped.id);
+    const access = auth.resolveSessionAccess(scopedSession.token);
+    expect(access.kind).toBe("scoped");
+    expect(access.kind === "scoped" && access.projects).toEqual([{ projectPath: "proj-a.md", role: "view" }]);
+  });
+
+  it("resolveEffectiveRole: a share token always takes precedence over a session, unchanged", async () => {
+    vault.writeNoteRaw("erole-secret.md", "---\ntitle: Secret\n---\nBody.");
+    db.upsertNoteIndex("erole-secret.md");
+    // No share exists for this token — resolveShareRole's own fail-closed
+    // behavior applies regardless of whatever session is also passed in.
+    expect(auth.resolveEffectiveRole("erole-secret.md", "bogus-share-token", "any-session")).toBe("denied");
+  });
+
+  // The "no accounts configured → owner" branch of resolveEffectiveRole is
+  // already covered by this file's very first describe block (which must
+  // run before any user exists) — not re-tested here, since by this point
+  // in the file usersConfigured() is already true.
+  it("resolveEffectiveRole: an unscoped member gets owner for any note path (today's behavior, unchanged)", async () => {
+    const user = await auth.createUser("erole-unscoped@example.com", "EroleUnscoped", "pw");
+    auth.addWorkspaceMember(user.id, "member");
+    const session = auth.createSession(user.id);
+    vault.writeNoteRaw("erole-anywhere.md", "---\ntitle: Anywhere\n---\nBody.");
+    db.upsertNoteIndex("erole-anywhere.md");
+    expect(auth.resolveEffectiveRole("erole-anywhere.md", null, session.token)).toBe("owner");
+  });
+
+  it("resolveEffectiveRole: an admin gets owner for any note path even with a stray scoping row", async () => {
+    const user = await auth.createUser("erole-admin@example.com", "EroleAdmin", "pw");
+    auth.addWorkspaceMember(user.id, "admin");
+    auth.addMemberProjectScope(user.id, "erole-some-project.md", "view"); // should be ignored entirely
+    const session = auth.createSession(user.id);
+    vault.writeNoteRaw("erole-unrelated.md", "---\ntitle: Unrelated\n---\nBody.");
+    db.upsertNoteIndex("erole-unrelated.md");
+    expect(auth.resolveEffectiveRole("erole-unrelated.md", null, session.token)).toBe("owner");
+  });
+
+  it("resolveEffectiveRole: a scoped member gets their granted role inside the project, denied outside it", async () => {
+    vault.writeNoteRaw("erole-proj.md", "---\ntitle: Erole Project\ntype: project\n---\nBody.");
+    vault.writeNoteRaw("erole-member-note.md", '---\ntitle: Member Note\nproject: "[[Erole Project]]"\n---\nBody.');
+    vault.writeNoteRaw("erole-outside.md", "---\ntitle: Outside\n---\nBody.");
+    db.upsertNoteIndex("erole-proj.md");
+    db.upsertNoteIndex("erole-member-note.md");
+    db.upsertNoteIndex("erole-outside.md");
+
+    const user = await auth.createUser("erole-scoped@example.com", "EroleScoped", "pw");
+    auth.addWorkspaceMember(user.id, "member");
+    auth.addMemberProjectScope(user.id, "erole-proj.md", "comment");
+    const session = auth.createSession(user.id);
+
+    expect(auth.resolveEffectiveRole("erole-proj.md", null, session.token)).toBe("comment"); // the project note itself
+    expect(auth.resolveEffectiveRole("erole-member-note.md", null, session.token)).toBe("comment"); // a member note
+    expect(auth.resolveEffectiveRole("erole-outside.md", null, session.token)).toBe("denied"); // not in the project
+  });
+
+  it("resolveEffectiveRole: no session and no token denies once accounts are configured (unchanged)", () => {
+    expect(auth.resolveEffectiveRole("erole-anywhere.md", null, null)).toBe("denied");
   });
 });
