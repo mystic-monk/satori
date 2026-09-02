@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import type * as Y from "yjs";
 import { fetchNote, type NoteListItem } from "./api";
 import { renderNoteBody } from "./markdown";
 import { buildResolver } from "./noteResolver";
 import { buildCitations } from "./Preview";
 import { parseFrontmatter } from "../shared/frontmatter";
 import { parseBlockDoc, renderBlockTreeHtml } from "./blockTree";
+import BlockOutline from "./BlockOutline";
 import { PenLine } from "lucide-react";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -39,16 +41,34 @@ interface JournalViewProps {
   onNavigate: (path: string, title?: string, type?: string | null) => void;
   onWriteToday: () => void;
   shareToken?: string | null;
+  // Today's entry (and only today's) renders live and directly editable
+  // in place, LogSeq-style, instead of a read-only preview you click
+  // through to open elsewhere — App.tsx keeps a single collab session
+  // open for whichever note is `activePath`, and points it at today's
+  // daily note while this view is showing (see its openJournal/onDailyNote).
+  // These three are that same session, passed straight through; null
+  // until it's connected, in which case this entry falls back to the
+  // same fetched-and-loading treatment every other entry gets.
+  editingPath: string | null;
+  editingYtext: Y.Text | null;
+  editingRaw: string;
 }
 
 // One continuous scrollable page — bold date heading, that day's content
 // rendered below it, most recent first — instead of a filtered note list
-// you click into one day at a time. Each day is still its own real note
-// file underneath (Satori is a flat markdown editor, not an outliner like
-// the app this was modeled on, so there's no cross-day block editing
-// here); clicking a heading or "Edit" opens that one note normally for
-// the actual writing.
-export default function JournalView({ notes, onNavigate, onWriteToday, shareToken }: JournalViewProps) {
+// you click into one day at a time. Every past entry is still its own
+// real note file you click through to open normally; today's entry is
+// the exception — see editingPath/editingYtext above — it's a live
+// LogSeq-style block outliner right on this page, no click-through.
+export default function JournalView({
+  notes,
+  onNavigate,
+  onWriteToday,
+  shareToken,
+  editingPath,
+  editingYtext,
+  editingRaw,
+}: JournalViewProps) {
   const dailyNotes = useMemo(
     () =>
       notes
@@ -63,7 +83,10 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
   const citations = useMemo(() => buildCitations(notes), [notes]);
 
   useEffect(() => {
-    const missing = visible.filter((n) => !bodies.has(n.path));
+    // The live entry (see editingPath) gets its content from the collab
+    // session, not this fetch — fetching it too would be wasted work and
+    // would race the live copy with a separate, non-collaborating read.
+    const missing = visible.filter((n) => n.path !== editingPath && !bodies.has(n.path));
     if (missing.length === 0) return;
     let cancelled = false;
     Promise.all(
@@ -87,7 +110,7 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, shareToken]);
+  }, [visible, shareToken, editingPath]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const hasToday = dailyNotes.some((n) => n.title === todayIso);
@@ -119,11 +142,18 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
         <>
           {visible.map((n) => {
             const raw = bodies.get(n.path);
+            // Today's entry, live: the collab session is connected and its
+            // content is a real block doc (a brand-new daily note always
+            // is — see App.tsx's onDailyNote — an old prose-only one isn't,
+            // and falls through to the same read-only treatment as every
+            // other entry rather than losing its content to the outliner).
+            const isLive =
+              n.path === editingPath && editingYtext != null && parseBlockDoc(parseFrontmatter(editingRaw).body) != null;
             return (
               <article
                 key={n.path}
                 className={`journal-entry ${n.title === todayIso ? "journal-entry-today" : ""}`}
-                onClick={(e) => handleClick(e, n.path, n.title)}
+                onClick={isLive ? undefined : (e) => handleClick(e, n.path, n.title)}
               >
                 <header className="journal-entry-header">
                   <h2>{formatJournalHeading(n.title)}</h2>
@@ -132,7 +162,9 @@ export default function JournalView({ notes, onNavigate, onWriteToday, shareToke
                     Last edited {new Date(n.updatedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                   </span>
                 </header>
-                {raw == null ? (
+                {isLive ? (
+                  <BlockOutline key={n.path} raw={editingRaw} ytext={editingYtext!} notes={notes} />
+                ) : raw == null ? (
                   <p className="journal-entry-loading">Loading…</p>
                 ) : (
                   <div

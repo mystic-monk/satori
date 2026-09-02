@@ -742,6 +742,21 @@ export default function App() {
     setTypeFilter(view === "canvas" ? "canvas" : ""); // "all" and "favorites" both draw from the full set
   }
 
+  // Opening Journal also puts today's daily note "live" — see
+  // JournalView's editingPath/editingYtext doc comment — by pointing
+  // activePath at it directly, the same way clicking any other note
+  // would, just without openNote's showSpecialPanel(null) (that would
+  // immediately leave the Journal page we're trying to open). Only does
+  // this when today's note already exists; onDailyNote (the "Write
+  // today's entry" CTA) handles creating it and is itself
+  // showJournal-aware, see below.
+  function openJournal() {
+    showSpecialPanel("journal");
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayPath = `daily/${todayIso}.md`;
+    if (notes.some((n) => n.path === todayPath)) setActivePath(todayPath);
+  }
+
   // A "For you" shortcut is either a tutorial page (opens at the top, no
   // fragment — see identity.ts's PersonaShortcut doc comment) or a nav
   // view, dispatched through the exact same calls the real sidebar-nav
@@ -753,6 +768,8 @@ export default function App() {
     }
     if (shortcut.navView === "canvas") {
       selectView("canvas");
+    } else if (shortcut.navView === "journal") {
+      openJournal();
     } else if (shortcut.navView) {
       showSpecialPanel(shortcut.navView);
     }
@@ -910,7 +927,19 @@ export default function App() {
       await loadNotes();
       fetchTypes().then(setTypes);
     }
-    openNote(p, date, "daily");
+    // Called both from the sidebar/menu/command-palette (leave whatever
+    // view is open, jump into the real editor — openNote's usual
+    // behavior) and from Journal's own "Write today's entry" CTA, where
+    // leaving would defeat the point — that CTA wants the newly-created
+    // entry to come up live and in place, exactly like openJournal
+    // already does for a today's-note that existed before Journal opened.
+    if (showJournal) {
+      setRecentNotes(recordOpened(p, date, "daily"));
+      setSidebarOpen(false);
+      setActivePath(p);
+    } else {
+      openNote(p, date, "daily");
+    }
   }
 
   async function confirmDelete() {
@@ -1515,7 +1544,7 @@ export default function App() {
               </button>
               <button
                 className={showJournal ? "active" : ""}
-                onClick={() => showSpecialPanel(showJournal ? null : "journal")}
+                onClick={() => (showJournal ? showSpecialPanel(null) : openJournal())}
                 title="Journal"
               >
                 <Calendar size={17} className="type-color-daily" />
@@ -1880,6 +1909,9 @@ export default function App() {
             onNavigate={(path, title, type) => openNote(path, title, type)}
             onWriteToday={onDailyNote}
             shareToken={shareToken}
+            editingPath={activePath}
+            editingYtext={localSession?.ytext ?? null}
+            editingRaw={raw}
           />
         ) : role === "denied" ? (
           <div className="access-denied">
