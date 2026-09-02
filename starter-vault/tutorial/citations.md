@@ -28,4 +28,4 @@ Already have a BibTeX file from Zotero, Mendeley, or wherever? Run **Import .bib
 
 Deliberate scope cut: no locator suffix (`[@key, p. 12]`) or multi-citation grouping (`[@key1; @key2]`) yet — one citation at a time covers the common case for a first pass.
 
-Next: [[tutorial/collaboration|Collaboration & sharing →]]
+Next: [[tutorial/data-dictionary|Data dictionary import →]]

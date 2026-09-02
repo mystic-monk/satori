@@ -10,6 +10,7 @@ import {
   fetchVaultInfo,
   importFolder,
   pickBibFile,
+  pickDataDictionaryFile,
   reindex,
   search,
   switchVault,
@@ -19,6 +20,7 @@ import {
   type ShareRole,
 } from "./api";
 import { parseBibtex } from "../shared/bibtex";
+import { parseDataDictionary } from "../shared/dataDictionary";
 import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
 // cloud-collab.ts pulls in crypto.ts -> libsodium-wrappers-sumo (~550KB of
 // WASM) — most users never touch cloud sync, so this is a dynamic import
@@ -231,6 +233,7 @@ export default function App() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
   const bibFileInputRef = useRef<HTMLInputElement | null>(null);
+  const dataDictionaryFileInputRef = useRef<HTMLInputElement | null>(null);
   const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | "flashcard" | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templatePath, setTemplatePath] = useState<string | null>(null);
@@ -924,6 +927,75 @@ export default function App() {
     await processBibImport(await file.text());
   }
 
+  // A markdown table cell can't contain a literal unescaped `|` — a
+  // description with one would otherwise silently break the row's column
+  // count when rendered.
+  function escapeTableCell(s: string): string {
+    return s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  }
+
+  // One note per table (`type: db_table`), columns rendered as a markdown
+  // table in the body — a foreign-key column's `references_table` becomes
+  // a real [[wikilink]] there rather than only living in frontmatter,
+  // which is what makes it show up in Graph view/Backlinks for free
+  // through the same body-wikilink indexing every other note already
+  // uses, with no server/db.ts changes. Otherwise mirrors
+  // processBibImport above: one record -> one note, skip (don't
+  // overwrite) a table that's already been imported.
+  async function processDataDictionaryImport(text: string) {
+    setStatus("importing data dictionary…");
+    const tables = parseDataDictionary(text);
+    const existingPaths = new Set(notes.map((n) => n.path));
+    let imported = 0;
+    let skipped = 0;
+    for (const table of tables) {
+      const safeName = table.tableName.replace(/[^a-zA-Z0-9_-]+/g, "-");
+      const path = `data-dictionary/${safeName || "untitled"}.md`;
+      if (existingPaths.has(path)) {
+        skipped++;
+        continue;
+      }
+      const data = { type: "db_table", title: table.tableName, tags: ["data-dictionary"], column_count: table.columns.length };
+      const rows = table.columns
+        .map((c) => {
+          // No #fragment on the link — the target table note has no
+          // heading/^block-id matching a column name, so a fragment here
+          // would just never resolve to anything; the referenced column
+          // name is shown as plain text alongside instead.
+          const references = c.referencesTable
+            ? `[[${c.referencesTable}]]${c.referencesColumn ? ` (${c.referencesColumn})` : ""}`
+            : "";
+          const nullable = c.nullable === undefined ? "" : c.nullable ? "Yes" : "No";
+          const pk = c.primaryKey ? "✓" : "";
+          return `| ${escapeTableCell(c.name)} | ${escapeTableCell(c.type ?? "")} | ${nullable} | ${pk} | ${references} | ${escapeTableCell(c.description ?? "")} |`;
+        })
+        .join("\n");
+      const body = `## Columns\n\n| Column | Type | Nullable | PK | References | Description |\n|---|---|---|---|---|---|\n${rows}\n`;
+      await createNote(path, stringifyFrontmatter(data, body));
+      existingPaths.add(path);
+      imported++;
+    }
+    setStatus(`imported ${imported} table${imported === 1 ? "" : "s"}, skipped ${skipped}`);
+    await loadNotes();
+    fetchTypes().then(setTypes);
+  }
+
+  async function onImportDataDictionary() {
+    if (IS_TAURI) {
+      const text = await pickDataDictionaryFile();
+      if (text) await processDataDictionaryImport(text);
+      return;
+    }
+    dataDictionaryFileInputRef.current?.click();
+  }
+
+  async function onDataDictionaryFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await processDataDictionaryImport(await file.text());
+  }
+
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
@@ -1117,6 +1189,7 @@ export default function App() {
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
         { id: "reindex", label: "Reindex Vault", action: onReindex },
         { id: "import-bib", label: "Import .bib References…", action: onImportBib },
+        { id: "import-data-dictionary", label: "Import Data Dictionary…", action: onImportDataDictionary },
         {
           id: "spellcheck-note",
           label: "Check Spelling: Whole Note",
@@ -1599,16 +1672,33 @@ export default function App() {
                 >
                   Import .bib References…
                 </button>
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onImportDataDictionary();
+                  }}
+                >
+                  Import Data Dictionary…
+                </button>
               </div>
             )}
             {!IS_TAURI && (
-              <input
-                ref={bibFileInputRef}
-                type="file"
-                accept=".bib"
-                className="visually-hidden"
-                onChange={onBibFileSelected}
-              />
+              <>
+                <input
+                  ref={bibFileInputRef}
+                  type="file"
+                  accept=".bib"
+                  className="visually-hidden"
+                  onChange={onBibFileSelected}
+                />
+                <input
+                  ref={dataDictionaryFileInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="visually-hidden"
+                  onChange={onDataDictionaryFileSelected}
+                />
+              </>
             )}
           </div>
         )}

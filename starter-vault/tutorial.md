@@ -15,6 +15,7 @@ Every page here carries `tags: [tutorial]`, which is what powers the sidebar's *
 - [[tutorial/organizing|Organizing & finding your notes]] — favorites, recent, the command palette, query blocks, templates, table views, quick capture, collapsing the sidebar
 - [[tutorial/diagrams|Diagrams]] — Mermaid flowcharts and the Excalidraw canvas
 - [[tutorial/citations|Citations & references]] — cite sources with `[@key]`, import a `.bib` file
+- [[tutorial/data-dictionary|Data dictionary import]] — catalog database tables/columns as linked, filterable notes from a CSV export
 - [[tutorial/collaboration|Collaboration & sharing]] — local sync, encrypted cloud sync, comments, and access control
 - [[tutorial/team-workspace|Team, Workspace & self-hosting]] — standing accounts for a shared server, and reaching one from outside your network
 - [[tutorial/ai-related-notes|Related Notes & local AI]] — fully local semantic search, no account or API key

@@ -306,6 +306,13 @@ export async function pickBibFile(): Promise<string | null> {
   return invoke("pick_bib_file");
 }
 
+// Same convention as pickBibFile above — Tauri-only, browser deployment
+// uses a plain <input type="file"> instead (App.tsx's
+// onImportDataDictionary).
+export async function pickDataDictionaryFile(): Promise<string | null> {
+  return invoke("pick_data_dictionary_file");
+}
+
 export type Rating = "again" | "hard" | "good" | "easy";
 
 export interface DueCard {

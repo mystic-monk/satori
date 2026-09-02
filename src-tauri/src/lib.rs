@@ -338,6 +338,7 @@ pub fn run() {
             commands::import_folder,
             commands::save_export_file,
             commands::pick_bib_file,
+            commands::pick_data_dictionary_file,
             commands::print_current_window,
             commands::get_due_cards,
             commands::record_card_review,

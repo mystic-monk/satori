@@ -221,6 +221,20 @@ pub fn pick_bib_file() -> Result<Option<String>, String> {
     std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
 }
 
+// Same division of labor as pick_bib_file above — parsing the CSV itself
+// happens in the frontend (shared/dataDictionary.ts), this is just the
+// native picker plus reading the file.
+#[tauri::command]
+pub fn pick_data_dictionary_file() -> Result<Option<String>, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("CSV", &["csv"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_comments(state: State<AppState>, path: String) -> Result<Vec<db::Comment>, String> {
     let conn = state.state_conn.lock().map_err(lock_err)?;
