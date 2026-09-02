@@ -2,16 +2,22 @@ import { useEffect, useState } from "react";
 import { fetchDueCards, fetchNote, reviewCard, type DueCard, type Rating } from "./api";
 import { parseFrontmatter } from "../shared/frontmatter";
 import { splitFrontBack } from "../shared/flashcards";
+import { PenLine } from "lucide-react";
 
 interface FlashcardReviewProps {
   shareToken?: string | null;
+  // Reuses the exact handler the "+Create → New Flashcard" menu item
+  // already calls (App.tsx's onNewFlashcard) — creating one used to be
+  // reachable only from that menu, buried away from where you'd actually
+  // think to look for it (this review screen).
+  onCreateNew: () => void;
 }
 
 // A type: flashcard note's body is rendered as plain text here, not full
 // markdown — deliberately simple for a first version (the review UI's job
 // is showing a question and a rating, not rich formatting); revisit if
 // that turns out to matter in practice.
-export default function FlashcardReview({ shareToken }: FlashcardReviewProps) {
+export default function FlashcardReview({ shareToken, onCreateNew }: FlashcardReviewProps) {
   const [queue, setQueue] = useState<DueCard[] | null>(null);
   const [card, setCard] = useState<{ front: string; back: string | null } | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -53,18 +59,28 @@ export default function FlashcardReview({ shareToken }: FlashcardReviewProps) {
     return (
       <div className="flashcard-review flashcard-empty-state">
         <h2>All done</h2>
-        <p>
-          {reviewedCount > 0
-            ? `Reviewed ${reviewedCount} card${reviewedCount === 1 ? "" : "s"}.`
-            : "No cards are due right now — add a note with type: flashcard to get started."}
-        </p>
+        {reviewedCount > 0 && (
+          <p>
+            Reviewed {reviewedCount} card{reviewedCount === 1 ? "" : "s"}.
+          </p>
+        )}
+        <button className="flashcard-new-cta" onClick={onCreateNew}>
+          <PenLine size={15} aria-hidden="true" />
+          New Flashcard
+        </button>
       </div>
     );
   }
 
   return (
     <div className="flashcard-review">
-      <div className="flashcard-progress">{queue.length} due</div>
+      <div className="flashcard-progress">
+        {queue.length} due
+        <button className="flashcard-new-cta flashcard-new-cta-inline" onClick={onCreateNew}>
+          <PenLine size={13} aria-hidden="true" />
+          New Flashcard
+        </button>
+      </div>
       <div className="flashcard-card">
         <div className="flashcard-front">{card?.front ?? "Loading…"}</div>
         {revealed && (
