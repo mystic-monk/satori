@@ -1,9 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { EditorState, StateField, StateEffect } from "@codemirror/state";
+import { EditorState, StateField, StateEffect, Compartment, type Range } from "@codemirror/state";
 import { EditorView, basicSetup } from "codemirror";
-import { Decoration, type DecorationSet } from "@codemirror/view";
+import { Decoration, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
+import { syntaxTree } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
+import { GFM } from "@lezer/markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { yCollab } from "y-codemirror.next";
 import * as Y from "yjs";
@@ -135,6 +137,157 @@ const misspellingsField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+// Live-preview formatting ("live" view mode — see App.tsx's ViewMode):
+// headings/bold/italic/strikethrough/inline-code/blockquotes render
+// styled, with raw delimiters hidden, EXCEPT on whichever line the cursor
+// currently occupies, where the raw markdown shows normally so editing
+// stays exact. This is a ViewPlugin, not a StateField like the two decor-
+// ation fields above — those are only ever updated by an external effect
+// or by tr.docChanged; this one also needs to react to cursor movement
+// (update.selectionSet) with no outside trigger, which is what
+// ViewPlugin.update's full ViewUpdate gives access to.
+//
+// Phase 1 scope only: no wikilink/citation rendering, no fenced-code/
+// Mermaid/math/callout rendering — those still only render in Preview
+// mode. Source and Preview modes are unaffected either way; this
+// extension is only ever installed while the "live" mode is active (see
+// the view-creation effect below).
+function isCursorOnNodeLines(state: EditorState, from: number, to: number): boolean {
+  const sel = state.selection.main;
+  const nodeFromLine = state.doc.lineAt(from).number;
+  const nodeToLine = state.doc.lineAt(to).number;
+  const selFromLine = state.doc.lineAt(sel.from).number;
+  const selToLine = state.doc.lineAt(sel.to).number;
+  return selToLine >= nodeFromLine && selFromLine <= nodeToLine;
+}
+
+// TaskMarker's own range is exactly the 3 characters "[ ]"/"[x]" (see
+// @lezer/markdown's TaskParser) — captured in the closure at build time,
+// so unlike the misspelling-click handler there's no DOM-click-to-
+// document-position reverse lookup needed; the widget already knows
+// exactly which range to rewrite.
+class TaskCheckboxWidget extends WidgetType {
+  constructor(
+    readonly checked: boolean,
+    readonly from: number,
+    readonly to: number
+  ) {
+    super();
+  }
+  eq(other: TaskCheckboxWidget) {
+    return other.checked === this.checked && other.from === this.from && other.to === this.to;
+  }
+  toDOM(view: EditorView) {
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = this.checked;
+    box.className = "cm-live-checkbox";
+    box.onmousedown = (e) => {
+      e.preventDefault();
+      view.dispatch({ changes: { from: this.from, to: this.to, insert: this.checked ? "[ ]" : "[x]" } });
+    };
+    return box;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+function buildLiveDecorations(view: EditorView): DecorationSet {
+  const ranges: Range<Decoration>[] = [];
+  const { state } = view;
+
+  for (const { from, to } of view.visibleRanges) {
+    syntaxTree(state).iterate({
+      from,
+      to,
+      enter: (node) => {
+        switch (node.name) {
+          case "ATXHeading1":
+          case "ATXHeading2":
+          case "ATXHeading3":
+          case "ATXHeading4":
+          case "ATXHeading5":
+          case "ATXHeading6": {
+            const level = node.name.slice(-1);
+            ranges.push(Decoration.mark({ class: `cm-live-h${level}` }).range(node.from, node.to));
+            if (!isCursorOnNodeLines(state, node.from, node.to)) {
+              const mark = node.node.getChild("HeaderMark");
+              if (mark) {
+                const spaceAfter = state.sliceDoc(mark.to, mark.to + 1) === " ";
+                ranges.push(Decoration.replace({}).range(mark.from, spaceAfter ? mark.to + 1 : mark.to));
+              }
+            }
+            break;
+          }
+          case "StrongEmphasis":
+          case "Emphasis": {
+            if (isCursorOnNodeLines(state, node.from, node.to)) break;
+            const cls = node.name === "StrongEmphasis" ? "cm-live-bold" : "cm-live-italic";
+            ranges.push(Decoration.mark({ class: cls }).range(node.from, node.to));
+            for (const mark of node.node.getChildren("EmphasisMark")) {
+              ranges.push(Decoration.replace({}).range(mark.from, mark.to));
+            }
+            break;
+          }
+          case "Strikethrough": {
+            if (isCursorOnNodeLines(state, node.from, node.to)) break;
+            ranges.push(Decoration.mark({ class: "cm-live-strike" }).range(node.from, node.to));
+            for (const mark of node.node.getChildren("StrikethroughMark")) {
+              ranges.push(Decoration.replace({}).range(mark.from, mark.to));
+            }
+            break;
+          }
+          case "InlineCode": {
+            if (isCursorOnNodeLines(state, node.from, node.to)) break;
+            ranges.push(Decoration.mark({ class: "cm-live-code" }).range(node.from, node.to));
+            for (const mark of node.node.getChildren("CodeMark")) {
+              ranges.push(Decoration.replace({}).range(mark.from, mark.to));
+            }
+            break;
+          }
+          case "Blockquote": {
+            ranges.push(Decoration.mark({ class: "cm-live-blockquote" }).range(node.from, node.to));
+            break;
+          }
+          case "TaskMarker": {
+            const text = state.sliceDoc(node.from, node.to);
+            const checked = /\[[xX]\]/.test(text);
+            ranges.push(
+              Decoration.replace({ widget: new TaskCheckboxWidget(checked, node.from, node.to) }).range(node.from, node.to)
+            );
+            break;
+          }
+        }
+      },
+    });
+  }
+
+  return Decoration.set(ranges, true);
+}
+
+const livePreviewPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildLiveDecorations(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.selectionSet || update.viewportChanged) {
+        this.decorations = buildLiveDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
+
+// Toggled via reconfigure (see the liveFormatting effect below), not by
+// remounting the whole EditorView — switching Source <-> Live shouldn't
+// cost cursor position/undo history, the same reasoning scrollToOffset's
+// separate effect already documents for staying out of the main effect's
+// dependency array.
+const liveFormattingCompartment = new Compartment();
+
 export interface EditorHandle {
   // scope "selection" checks only the current selection (no-op if empty);
   // "note" checks the whole document. Both replace whatever underlines
@@ -167,6 +320,11 @@ interface EditorProps {
   // leaves spellcheck inert until EditorHandle.checkSpelling is called
   // explicitly (the command palette's "Check spelling" actions, App.tsx).
   spellcheckMode?: "auto" | "off";
+  // "live" mode (App.tsx's ViewMode) — headings/bold/italic/strikethrough/
+  // inline-code/blockquotes render styled with raw markup hidden except on
+  // the cursor's own line. Off for "source" mode (exact raw text) and
+  // irrelevant for "preview" (Editor isn't mounted there at all).
+  liveFormatting?: boolean;
 }
 
 const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
@@ -179,6 +337,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     commentRanges,
     onCommentOnSelection,
     spellcheckMode = "off",
+    liveFormatting = false,
   },
   ref
 ) {
@@ -323,7 +482,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       doc: ytext.toString(),
       extensions: [
         basicSetup,
-        markdown({ codeLanguages: languages }),
+        // GFM adds Strikethrough/TaskList/Table/Autolink node types to the
+        // parse tree — the base markdown() config doesn't include them,
+        // and the live-preview plugin below needs Strikethrough/TaskMarker
+        // nodes to exist to decorate them at all.
+        markdown({ codeLanguages: languages, extensions: [GFM] }),
         dark ? oneDark : lightCmTheme(),
         EditorView.lineWrapping,
         EditorState.readOnly.of(readOnly),
@@ -335,6 +498,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         misspellingClickHandler,
         commentRangesField,
         misspellingsField,
+        liveFormattingCompartment.of(liveFormatting ? [livePreviewPlugin] : []),
       ],
     });
 
@@ -348,6 +512,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ytext, awareness, readOnly, dark]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view == null) return;
+    view.dispatch({ effects: liveFormattingCompartment.reconfigure(liveFormatting ? [livePreviewPlugin] : []) });
+  }, [liveFormatting]);
 
   useEffect(() => {
     const view = viewRef.current;

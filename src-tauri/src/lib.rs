@@ -283,7 +283,7 @@ pub fn run() {
                 .item(&MenuItemBuilder::with_id("toggle_graph", "Toggle Graph").build(app)?)
                 .separator()
                 .item(&MenuItemBuilder::with_id("view_source", "Source").build(app)?)
-                .item(&MenuItemBuilder::with_id("view_split", "Split").build(app)?)
+                .item(&MenuItemBuilder::with_id("view_live", "Live").build(app)?)
                 .item(&MenuItemBuilder::with_id("view_preview", "Preview").build(app)?)
                 .build()?;
 
@@ -307,7 +307,7 @@ pub fn run() {
                 "switch_vault" => switch_vault_dialog(app_handle),
                 "quick_capture" => open_quick_capture(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
-                | "view_source" | "view_split" | "view_preview" | "check_for_updates") => {
+                | "view_source" | "view_live" | "view_preview" | "check_for_updates") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
                 }
                 _ => {}

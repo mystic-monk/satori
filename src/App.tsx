@@ -126,7 +126,15 @@ function bridgeDocs(a: Y.Doc, b: Y.Doc): () => void {
   };
 }
 
-type ViewMode = "source" | "preview" | "split";
+// "split" used to show raw source and rendered preview side by side,
+// always both live-synced — flagged as confusing (nothing indicated which
+// pane was "driving"). Replaced by "live": headings/bold/italic/etc.
+// render styled inline in the same single editor pane, raw markup hidden
+// except on the cursor's own line (see Editor.tsx's live-preview plugin).
+// "source" (exact raw text) and "preview" (full markdown-it render, still
+// the only place Mermaid/math/query blocks/etc. actually render) are
+// unchanged.
+type ViewMode = "source" | "preview" | "live";
 // "all"/"canvas" drive the existing typeFilter mechanism under the hood
 // (see selectView) — "favorites" is a pure client-side filter over
 // whatever's already loaded, since a favorited note can be any type.
@@ -189,7 +197,7 @@ export default function App() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>("live");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Single source of truth for "which of the full-width special panels (if
@@ -433,7 +441,7 @@ export default function App() {
       listen("menu:toggle-sidebar", () => setSidebarOpen((o) => !o)),
       listen("menu:toggle-graph", () => showSpecialPanel(specialPanelRef.current === "graph" ? null : "graph")),
       listen("menu:view-source", () => setViewMode("source")),
-      listen("menu:view-split", () => setViewMode("split")),
+      listen("menu:view-live", () => setViewMode("live")),
       listen("menu:view-preview", () => setViewMode("preview")),
       listen("menu:check-for-updates", () => onCheckForUpdates()),
     ];
@@ -656,7 +664,7 @@ export default function App() {
     setPendingFragment(null);
     if (!range) return; // fragment doesn't exist in this note — link is just stale, nothing to scroll to
     setScrollToOffset(bodyOffset + range.start);
-    setViewMode((m) => (m === "preview" ? "split" : m)); // the target has to actually be visible to scroll to it
+    setViewMode((m) => (m === "preview" ? "live" : m)); // the target has to actually be visible to scroll to it
   }, [raw, rawPath, activePath, pendingFragment]);
 
   // Opt-in cloud sync for the currently open note: connects to the E2E
@@ -1246,7 +1254,7 @@ export default function App() {
           action: () => showSpecialPanel(showFlashcards ? null : "flashcards"),
         },
         { id: "view-source", label: "View: Source", action: () => setViewMode("source") },
-        { id: "view-split", label: "View: Split", action: () => setViewMode("split") },
+        { id: "view-live", label: "View: Live", action: () => setViewMode("live") },
         { id: "view-preview", label: "View: Preview", action: () => setViewMode("preview") },
         { id: "reindex", label: "Reindex Vault", action: onReindex },
         { id: "import-bib", label: "Import .bib References…", action: onImportBib },
@@ -1408,7 +1416,7 @@ export default function App() {
               {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
               {!isCanvas && !isOutline && (
                 <div className="view-mode-toggle">
-                  {(["source", "split", "preview"] as ViewMode[]).map((m) => (
+                  {(["source", "live", "preview"] as ViewMode[]).map((m) => (
                     <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
                       {m}
                     </button>
@@ -1911,6 +1919,7 @@ export default function App() {
                         scrollToOffset={scrollToOffset}
                         commentRanges={commentRanges}
                         spellcheckMode={spellcheckMode}
+                        liveFormatting={viewMode === "live"}
                         onCommentOnSelection={
                           role !== "view"
                             ? (from, to) => {
@@ -1928,7 +1937,7 @@ export default function App() {
                       />
                     </div>
                   )}
-                  {viewMode !== "source" && (
+                  {viewMode === "preview" && (
                     <div className="editor-preview">
                       <Preview
                         raw={raw}
