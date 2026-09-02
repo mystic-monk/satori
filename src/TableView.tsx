@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchNote, writeNoteApi, type NoteListItem } from "./api";
 import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { getIdentity } from "./identity";
@@ -22,10 +22,25 @@ interface TableViewProps {
 const BUILTIN_COLUMNS = ["title", "type", "tags"] as const;
 
 type SortDir = "asc" | "desc";
-type RollupMode = "count" | "list";
+type RollupMode = "count" | "list" | "sum" | "average";
 interface Rollup {
   property: string;
   mode: RollupMode;
+  // Which numeric property on the *related* notes to aggregate — only
+  // meaningful (and required) for sum/average; unused for count/list.
+  field?: string;
+}
+
+const ROLLUPS_STORAGE_KEY = "pkm-table-rollups";
+
+function loadStoredRollups(): Rollup[] {
+  try {
+    const raw = localStorage.getItem(ROLLUPS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 // A relation is just a property whose value is [[wikilink]] syntax (see
@@ -33,16 +48,21 @@ interface Rollup {
 // clickable chip instead of plain text. A rollup column is the reverse
 // direction: "which notes have property P pointing at *this* note",
 // same relationship a backlink is, just keyed off a named property
-// instead of an inline body link. Deliberate MVP scope cuts: rollups are
-// session-local UI state (not persisted — reset when Table view remounts)
-// and only count/list aggregates, no sum/average over numeric fields yet.
+// instead of an inline body link. Rollups persist across reopening Table
+// view (localStorage, same per-browser-not-per-vault scope as every other
+// UI preference here — theme, sidebar width) and support sum/average over
+// a chosen numeric property on the related notes, not just count/list.
 export default function TableView({ notes, onNavigate, onNotesChanged, shareToken }: TableViewProps) {
   const [sortKey, setSortKey] = useState<string>("title");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editingCell, setEditingCell] = useState<{ path: string; key: string; wasArray: boolean } | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [rollups, setRollups] = useState<Rollup[]>([]);
+  const [rollups, setRollups] = useState<Rollup[]>(loadStoredRollups);
   const [addingRollup, setAddingRollup] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(ROLLUPS_STORAGE_KEY, JSON.stringify(rollups));
+  }, [rollups]);
 
   const resolver = useMemo(() => buildResolver(notes), [notes]);
 
@@ -94,13 +114,29 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
   }, [rollups, notes, resolver]);
 
   function rollupColumnKey(r: Rollup): string {
-    return `rollup:${r.property}:${r.mode}`;
+    // `field` included — two rollups on the same relation property but
+    // different aggregated fields (sum of `price` vs sum of `quantity`)
+    // are different columns, not the same one overwriting itself.
+    return `rollup:${r.property}:${r.mode}${r.field ? `:${r.field}` : ""}`;
   }
 
   function rollupValue(note: NoteListItem, r: Rollup): string {
     const related = rollupIndexes.get(r.property)?.get(note.path) ?? [];
     if (r.mode === "count") return String(related.length);
-    return related.map((n) => n.title).join(", ");
+    if (r.mode === "list") return related.map((n) => n.title).join(", ");
+    // sum/average: parse each related note's `field` property as a
+    // number, skipping anything that isn't one (no enforced column
+    // schema here, same as everywhere else — a non-numeric or missing
+    // value just doesn't contribute rather than erroring or counting as
+    // zero, which would otherwise skew an average toward zero for notes
+    // that simply haven't set that property yet).
+    const numbers = related.map((n) => Number(n.properties[r.field ?? ""])).filter((n) => !Number.isNaN(n));
+    if (numbers.length === 0) return r.mode === "sum" ? "0" : "—";
+    const sum = numbers.reduce((a, b) => a + b, 0);
+    const value = r.mode === "sum" ? sum : sum / numbers.length;
+    // Round to at most 2 decimals without forcing trailing zeros (12 stays
+    // "12", 12.5 stays "12.5", 12.333... becomes "12.33").
+    return String(Math.round(value * 100) / 100);
   }
 
   const columns = [...BUILTIN_COLUMNS, ...propertyColumns, ...rollups.map(rollupColumnKey)];
@@ -208,7 +244,8 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
         <div className="table-rollup-bar">
           {rollups.map((r) => (
             <span key={rollupColumnKey(r)} className="table-rollup-chip">
-              ↩ {r.property} ({r.mode})
+              ↩ {r.property} ({r.mode}
+              {r.field ? ` of ${r.field}` : ""})
               <button
                 className="table-rollup-remove"
                 onClick={() => setRollups((prev) => prev.filter((x) => x !== r))}
@@ -221,8 +258,9 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
           {addingRollup ? (
             <AddRollupForm
               properties={relationPropertyNames}
+              fieldOptions={propertyColumns}
               onAdd={(r) => {
-                setRollups((prev) => (prev.some((x) => x.property === r.property && x.mode === r.mode) ? prev : [...prev, r]));
+                setRollups((prev) => (prev.some((x) => rollupColumnKey(x) === rollupColumnKey(r)) ? prev : [...prev, r]));
                 setAddingRollup(false);
               }}
               onCancel={() => setAddingRollup(false)}
@@ -322,15 +360,25 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
 
 function AddRollupForm({
   properties,
+  fieldOptions,
   onAdd,
   onCancel,
 }: {
   properties: string[];
+  // Candidate properties to sum/average over the related notes — every
+  // property in play, not just relation ones; no enforced schema means
+  // there's no reliable way to know in advance which ones are numeric on
+  // any given note, so this isn't filtered down further (same "don't
+  // pretend to validate a schema-free field" posture as the rest of this
+  // file).
+  fieldOptions: string[];
   onAdd: (r: Rollup) => void;
   onCancel: () => void;
 }) {
   const [property, setProperty] = useState(properties[0]);
   const [mode, setMode] = useState<RollupMode>("count");
+  const [field, setField] = useState(fieldOptions[0] ?? "");
+  const needsField = mode === "sum" || mode === "average";
   return (
     <span className="table-rollup-form">
       <select value={property} onChange={(e) => setProperty(e.target.value)} aria-label="Rollup property">
@@ -343,8 +391,21 @@ function AddRollupForm({
       <select value={mode} onChange={(e) => setMode(e.target.value as RollupMode)} aria-label="Rollup aggregate">
         <option value="count">Count</option>
         <option value="list">List</option>
+        <option value="sum">Sum</option>
+        <option value="average">Average</option>
       </select>
-      <button onClick={() => onAdd({ property, mode })}>Add</button>
+      {needsField && (
+        <select value={field} onChange={(e) => setField(e.target.value)} aria-label="Rollup field to aggregate">
+          {fieldOptions.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      )}
+      <button disabled={needsField && !field} onClick={() => onAdd({ property, mode, field: needsField ? field : undefined })}>
+        Add
+      </button>
       <button onClick={onCancel}>Cancel</button>
     </span>
   );
