@@ -75,6 +75,7 @@
   "overrides": {
     "lodash-es": "^4.18.1",
     "nanoid": "^5.1.16",
+    "qs": "^6.16.0",
     "fastembed": {
       "tar": "^7.5.22"
     }
