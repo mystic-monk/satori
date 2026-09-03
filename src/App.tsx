@@ -211,7 +211,20 @@ export default function App() {
   // the live value instead of whatever it was at mount — same problem
   // Editor.tsx's onCommentOnSelectionRef solves the same way.
   const specialPanelRef = useRef<SpecialPanel>(null);
+  // What activePath was right before openJournal() pointed it at today's
+  // daily note for live inline editing (see JournalView's
+  // editingPath/editingYtext) — restored below when Journal is left any
+  // way other than opening a specific note (which sets its own activePath
+  // right after calling this, overriding the restore in the same tick).
+  // Without this, activePath silently kept pointing at today's journal
+  // entry after navigating to All Notes/Graph/etc., so the main panel
+  // kept showing it instead of whatever note (or nothing) was actually
+  // active before Journal was opened.
+  const journalPreviousPathRef = useRef<string | null>(null);
   function showSpecialPanel(panel: SpecialPanel) {
+    if (specialPanelRef.current === "journal" && panel !== "journal") {
+      setActivePath(journalPreviousPathRef.current);
+    }
     specialPanelRef.current = panel;
     setShowGraph(panel === "graph");
     setShowTable(panel === "table");
@@ -751,6 +764,7 @@ export default function App() {
   // today's entry" CTA) handles creating it and is itself
   // showJournal-aware, see below.
   function openJournal() {
+    journalPreviousPathRef.current = activePath;
     showSpecialPanel("journal");
     const todayIso = new Date().toISOString().slice(0, 10);
     const todayPath = `daily/${todayIso}.md`;
