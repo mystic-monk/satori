@@ -21,17 +21,17 @@ export default function CanvasGridView({ notes, onNavigate, onNewCanvas }: Canva
   );
 
   return (
-    <div className="canvas-grid-view">
-      <div className="canvas-grid">
-        <button className="canvas-tile canvas-tile-new" onClick={onNewCanvas}>
+    <div className="tile-grid-view">
+      <div className="tile-grid">
+        <button className="tile tile-new" onClick={onNewCanvas}>
           <Plus size={28} aria-hidden="true" />
           <span>New Canvas</span>
         </button>
         {canvasNotes.map((n) => (
-          <button key={n.path} className="canvas-tile" onClick={() => onNavigate(n.path, n.title, "canvas")}>
-            <Paintbrush size={28} className="canvas-tile-icon" aria-hidden="true" />
-            <span className="canvas-tile-title">{n.title}</span>
-            <span className="canvas-tile-date">{new Date(n.updatedAt).toLocaleDateString()}</span>
+          <button key={n.path} className="tile" onClick={() => onNavigate(n.path, n.title, "canvas")}>
+            <Paintbrush size={28} className="tile-icon" aria-hidden="true" />
+            <span className="tile-title">{n.title}</span>
+            <span className="tile-date">{new Date(n.updatedAt).toLocaleDateString()}</span>
           </button>
         ))}
       </div>

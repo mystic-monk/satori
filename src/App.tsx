@@ -48,6 +48,7 @@ import TableView from "./TableView";
 import FlashcardReview from "./FlashcardReview";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
+import ProjectGridView from "./ProjectGridView";
 import RemindersView from "./RemindersView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
@@ -84,6 +85,7 @@ import {
   Menu as MenuIcon,
   MessageSquare,
   Paintbrush,
+  FolderKanban,
   RotateCw,
   Settings as SettingsIcon,
   Share2,
@@ -197,6 +199,7 @@ export default function App() {
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showCanvasGrid, setShowCanvasGrid] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
@@ -207,7 +210,7 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left a special panel stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "reminders" | null;
+  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "projects" | "reminders" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -233,6 +236,7 @@ export default function App() {
     setShowFlashcards(panel === "flashcards");
     setShowJournal(panel === "journal");
     setShowCanvasGrid(panel === "canvas");
+    setShowProjects(panel === "projects");
     setShowReminders(panel === "reminders");
     setSidebarOpen(false);
   }
@@ -866,6 +870,18 @@ export default function App() {
     setCreatePromptMode("note");
   }
 
+  // A project is a plain note here (see ProjectGridView's own doc comment
+  // for why this deliberately isn't a folder) — the existing Project
+  // template already does exactly what creating one needs, so this skips
+  // straight to it via pickTemplate rather than making someone go through
+  // the generic "New From Template" picker just to reach the one entry
+  // this button already knows they want.
+  function onNewProject() {
+    const projectTemplate = notes.find((n) => n.type === "template" && n.properties.note_type === "project");
+    if (projectTemplate) pickTemplate(projectTemplate.path);
+    else onNewFromTemplate();
+  }
+
   // A plain slug.md, disambiguated only if that path is actually taken —
   // replaces always appending Date.now() (still guaranteed-unique, but
   // every single note paid for it: my-note-1788432825572.md instead of
@@ -1145,7 +1161,8 @@ export default function App() {
   // (Graph/Table/Flashcards/Journal/Canvas/Reminders) — used throughout
   // the rail and the wide panel below to avoid repeating all these
   // negations at every active-state check.
-  const isListView = !showGraph && !showTable && !showFlashcards && !showJournal && !showCanvasGrid && !showReminders;
+  const isListView =
+    !showGraph && !showTable && !showFlashcards && !showJournal && !showCanvasGrid && !showProjects && !showReminders;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   // For an outline note, body text is spread across many small block
@@ -1592,6 +1609,14 @@ export default function App() {
                 <span>Canvas</span>
               </button>
               <button
+                className={showProjects ? "active" : ""}
+                onClick={() => (showProjects ? showSpecialPanel(null) : showSpecialPanel("projects"))}
+                title="Projects"
+              >
+                <FolderKanban size={17} />
+                <span>Projects</span>
+              </button>
+              <button
                 className={showGraph ? "active" : ""}
                 onClick={() => showSpecialPanel(showGraph ? null : "graph")}
                 title="Graph"
@@ -1942,6 +1967,8 @@ export default function App() {
           />
         ) : showCanvasGrid ? (
           <CanvasGridView notes={notes} onNavigate={openNote} onNewCanvas={onNewCanvas} />
+        ) : showProjects ? (
+          <ProjectGridView notes={notes} onNavigate={openNote} onNewProject={onNewProject} />
         ) : showReminders ? (
           <RemindersView notes={notes} onNavigate={openNote} />
         ) : role === "denied" ? (

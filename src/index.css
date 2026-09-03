@@ -2174,21 +2174,23 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
-.canvas-grid-view {
+/* Shared by every tile-grid special panel (Canvas, Projects, ...) — one
+   card per note of that kind, plus a dashed "+ New X" tile. */
+.tile-grid-view {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 40px;
 }
 
-.canvas-grid {
+.tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
   max-width: 900px;
 }
 
-.canvas-tile {
+.tile {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2205,16 +2207,16 @@ button:disabled:hover {
   transition: background 0.1s, border-color 0.1s;
 }
 
-.canvas-tile:hover {
+.tile:hover {
   background: var(--bg-hover);
   border-color: var(--text-dim);
 }
 
-.canvas-tile-icon {
+.tile-icon {
   color: var(--text-dim);
 }
 
-.canvas-tile-title {
+.tile-title {
   font-size: 13px;
   font-weight: 500;
   overflow: hidden;
@@ -2223,18 +2225,18 @@ button:disabled:hover {
   max-width: 100%;
 }
 
-.canvas-tile-date {
+.tile-date {
   font-size: 11px;
   color: var(--text-dim);
 }
 
-.canvas-tile-new {
+.tile-new {
   color: var(--accent);
   background: transparent;
   border: 1px dashed var(--accent);
 }
 
-.canvas-tile-new:hover {
+.tile-new:hover {
   background: var(--bg-hover);
 }
 
