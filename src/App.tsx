@@ -49,6 +49,7 @@ import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
+import RemindersView from "./RemindersView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
@@ -198,6 +199,7 @@ export default function App() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showCanvasGrid, setShowCanvasGrid] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -207,7 +209,7 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left the Calendar view stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "journal" | "canvas" | null;
+  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "journal" | "canvas" | "reminders" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -234,6 +236,7 @@ export default function App() {
     setShowFlashcards(panel === "flashcards");
     setShowJournal(panel === "journal");
     setShowCanvasGrid(panel === "canvas");
+    setShowReminders(panel === "reminders");
     setSidebarOpen(false);
   }
   // Properties/Comments/History used to sit stacked above the editor,
@@ -1129,7 +1132,8 @@ export default function App() {
   // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
   // and the wide panel below to avoid repeating all five negations at
   // every active-state check.
-  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showJournal && !showCanvasGrid;
+  const isListView =
+    !showGraph && !showTable && !showCalendar && !showFlashcards && !showJournal && !showCanvasGrid && !showReminders;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   // For an outline note, body text is spread across many small block
@@ -1612,6 +1616,14 @@ export default function App() {
                 <Brain size={17} className="type-color-flashcard" />
                 <span>Flashcards</span>
               </button>
+              <button
+                className={showReminders ? "active" : ""}
+                onClick={() => showSpecialPanel(showReminders ? null : "reminders")}
+                title="Reminders"
+              >
+                <Bell size={17} />
+                <span>Reminders</span>
+              </button>
             </nav>
           )}
           {isListView && (
@@ -1937,6 +1949,8 @@ export default function App() {
           />
         ) : showCanvasGrid ? (
           <CanvasGridView notes={notes} onNavigate={openNote} onNewCanvas={onNewCanvas} />
+        ) : showReminders ? (
+          <RemindersView notes={notes} onNavigate={openNote} />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.

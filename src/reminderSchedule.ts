@@ -28,3 +28,25 @@ export function dueReminders(notes: NoteListItem[], now: number, alreadyFired: R
   }
   return due;
 }
+
+export interface ScheduledReminder {
+  path: string;
+  title: string;
+  type: string | null;
+  remindAt: string;
+}
+
+// Every note with a valid remind_at, past or future — dueReminders above
+// answers "what needs to fire right now"; this answers "what's set at
+// all," for a vault-wide browse view. Same parsing rules (datetime-local
+// string, invalid/unparseable values skipped rather than erroring).
+export function allReminders(notes: NoteListItem[]): ScheduledReminder[] {
+  const all: ScheduledReminder[] = [];
+  for (const note of notes) {
+    const remindAt = note.properties.remind_at;
+    if (typeof remindAt !== "string" || !remindAt) continue;
+    if (Number.isNaN(new Date(remindAt).getTime())) continue;
+    all.push({ path: note.path, title: note.title, type: note.type, remindAt });
+  }
+  return all.sort((a, b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime());
+}

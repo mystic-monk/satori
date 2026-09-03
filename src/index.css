@@ -2356,6 +2356,79 @@ button:disabled:hover {
   background: var(--bg-hover);
 }
 
+/* width: 100% is deliberate, not decorative — a direct flex item of
+   .editor-pane's column layout collapses to shrink-to-fit content width
+   without it (auto margins in a flex item's cross axis override
+   align-items: stretch), the exact bug .journal-view hit earlier. */
+.reminders-view {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 40px 24px 60px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.reminders-view-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 28px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.reminders-empty {
+  color: var(--text-dim);
+}
+
+.reminders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminders-item {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.reminders-item:hover {
+  background: var(--bg-hover);
+}
+
+.reminders-item-time {
+  flex-shrink: 0;
+  width: 150px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.reminders-item-title {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminders-item-past .reminders-item-time,
+.reminders-item-past .reminders-item-title {
+  color: var(--text-dim);
+}
+
 .block-outline {
   flex: 1;
   min-height: 0;

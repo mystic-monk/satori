@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dueReminders } from "./reminderSchedule";
+import { dueReminders, allReminders } from "./reminderSchedule";
 import type { NoteListItem } from "./api";
 
 function note(path: string, remindAt: string | undefined): NoteListItem {
@@ -52,6 +52,28 @@ describe("dueReminders", () => {
 
   it("ignores a malformed remind_at value instead of throwing", () => {
     const result = dueReminders([note("a.md", "not a date")], now, new Set());
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe("allReminders", () => {
+  it("includes both past and future reminders, unlike dueReminders", () => {
+    const result = allReminders([note("past.md", "2020-01-01T09:00"), note("future.md", "2099-01-01T09:00")]);
+    expect(result.map((r) => r.path)).toEqual(["past.md", "future.md"]);
+  });
+
+  it("sorts by remind_at ascending", () => {
+    const result = allReminders([note("later.md", "2026-09-02T09:00"), note("earlier.md", "2026-09-01T09:00")]);
+    expect(result.map((r) => r.path)).toEqual(["earlier.md", "later.md"]);
+  });
+
+  it("excludes notes with no remind_at property", () => {
+    const result = allReminders([note("a.md", undefined)]);
+    expect(result).toHaveLength(0);
+  });
+
+  it("ignores a malformed remind_at value instead of throwing", () => {
+    const result = allReminders([note("a.md", "not a date")]);
     expect(result).toHaveLength(0);
   });
 });
