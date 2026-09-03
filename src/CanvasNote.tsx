@@ -12,7 +12,6 @@ const ORIGIN = "canvas-editor";
 interface CanvasNoteProps {
   raw: string;
   ytext: Y.Text;
-  dark?: boolean;
 }
 
 interface ParsedScene {
@@ -45,7 +44,16 @@ function parseScene(body: string): ParsedScene | null {
 // the earlier version of this file only kept elements + appState, so a
 // dropped-in image would render for the current session and then silently
 // vanish on the next reload since its bytes were never saved anywhere.
-export default function CanvasNote({ raw, ytext, dark = true }: CanvasNoteProps) {
+//
+// Always theme="light", regardless of the app's own dark/light setting —
+// a sketch is drawn on paper, not on the app chrome (same reasoning
+// behind seeding viewBackgroundColor: "#ffffff" below). Passing the
+// app's dark theme through here used to silently defeat that: Excalidraw
+// renders its dark theme via a CSS invert filter over the whole canvas,
+// which turns a white viewBackgroundColor into a solid black void
+// instead — every new canvas rendered as a blank black square no matter
+// what background color it was actually seeded with.
+export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialScene] = useState(() => parseScene(parseFrontmatter(raw).body));
 
@@ -70,11 +78,11 @@ export default function CanvasNote({ raw, ytext, dark = true }: CanvasNoteProps)
       <Excalidraw
         initialData={{
           elements: initialScene?.elements ?? [],
-          appState: { ...initialScene?.appState, theme: dark ? "dark" : "light" },
+          appState: { ...initialScene?.appState, theme: "light" },
           files: initialScene?.files ?? {},
         }}
         onChange={onChange}
-        theme={dark ? "dark" : "light"}
+        theme="light"
       />
     </div>
   );

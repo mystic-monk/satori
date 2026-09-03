@@ -1935,7 +1935,7 @@ export default function App() {
           <>
             {isCanvas ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
-                <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
+                <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} />
               </Suspense>
             ) : isOutline ? (
               <>
