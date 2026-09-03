@@ -12,6 +12,7 @@ const ORIGIN = "canvas-editor";
 interface CanvasNoteProps {
   raw: string;
   ytext: Y.Text;
+  dark?: boolean;
 }
 
 interface ParsedScene {
@@ -45,15 +46,16 @@ function parseScene(body: string): ParsedScene | null {
 // dropped-in image would render for the current session and then silently
 // vanish on the next reload since its bytes were never saved anywhere.
 //
-// Always theme="light", regardless of the app's own dark/light setting —
-// a sketch is drawn on paper, not on the app chrome (same reasoning
-// behind seeding viewBackgroundColor: "#ffffff" below). Passing the
-// app's dark theme through here used to silently defeat that: Excalidraw
-// renders its dark theme via a CSS invert filter over the whole canvas,
-// which turns a white viewBackgroundColor into a solid black void
-// instead — every new canvas rendered as a blank black square no matter
-// what background color it was actually seeded with.
-export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
+// theme follows the app's own dark/light setting, matching the real
+// Excalidraw app's own behavior — its dark theme isn't a distinct dark
+// canvas color, it's a CSS filter (invert(93%) hue-rotate(180deg))
+// applied straight to the canvas element, so a white viewBackgroundColor
+// (below) renders as Excalidraw's own near-black #121212 default in dark
+// mode. That's genuinely how Excalidraw looks everywhere it's embedded,
+// not a bug here — worth knowing if a canvas note in dark mode ever
+// looks "too dark" again, since it isn't this component doing anything
+// unusual, it's upstream Excalidraw's own dark-theme design.
+export default function CanvasNote({ raw, ytext, dark = true }: CanvasNoteProps) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialScene] = useState(() => parseScene(parseFrontmatter(raw).body));
 
@@ -78,11 +80,11 @@ export default function CanvasNote({ raw, ytext }: CanvasNoteProps) {
       <Excalidraw
         initialData={{
           elements: initialScene?.elements ?? [],
-          appState: { ...initialScene?.appState, theme: "light" },
+          appState: { ...initialScene?.appState, theme: dark ? "dark" : "light" },
           files: initialScene?.files ?? {},
         }}
         onChange={onChange}
-        theme="light"
+        theme={dark ? "dark" : "light"}
       />
     </div>
   );
