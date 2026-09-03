@@ -13,6 +13,7 @@ import {
 import { fetchLinks, fetchNotes } from "./api";
 import { Waypoints, Maximize2, MoreHorizontal, ChevronRight, Download } from "lucide-react";
 import { IS_TAURI } from "./platform";
+import { buildQueryMatcher, parseGraphQuery } from "./graphQuery";
 
 interface GraphNode extends SimulationNodeDatum {
   id: string;
@@ -153,6 +154,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [queryText, setQueryText] = useState("");
   const [chargeStrength, setChargeStrength] = useState(DEFAULT_CHARGE);
   const [linkDistance, setLinkDistance] = useState(DEFAULT_LINK_DISTANCE);
   const simRef = useRef<Simulation<GraphNode, undefined> | null>(null);
@@ -549,6 +551,30 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const trimmedQuery = searchQuery.trim().toLowerCase();
   const matchIds = trimmedQuery ? new Set(nodes.filter((n) => n.title.toLowerCase().includes(trimmedQuery)).map((n) => n.id)) : null;
 
+  // Query conditions (degree/type/connected/isolated) are a second,
+  // independent filter from plain-text Search above — when both are
+  // active they combine as AND (intersected below) rather than one
+  // silently replacing the other.
+  const queryConditions = parseGraphQuery(queryText);
+  const queryMatchIds =
+    queryConditions.length > 0
+      ? new Set(
+          nodes
+            .filter(
+              buildQueryMatcher(
+                queryConditions,
+                nodes,
+                links.map((l) => ({ source: l.source.id, target: l.target.id }))
+              )
+            )
+            .map((n) => n.id)
+        )
+      : null;
+  const effectiveMatchIds =
+    matchIds && queryMatchIds
+      ? new Set([...matchIds].filter((id) => queryMatchIds.has(id)))
+      : (matchIds ?? queryMatchIds);
+
   const sortedTypes = Array.from(typeCounts.keys()).sort((a, b) => {
     if (a === NONE_TYPE) return 1;
     if (b === NONE_TYPE) return -1;
@@ -630,8 +656,8 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
               {nodes.map((n) => {
                 const dim = hoveredId
                   ? n.id !== hoveredId && !connectedIds.has(n.id)
-                  : matchIds
-                    ? !matchIds.has(n.id)
+                  : effectiveMatchIds
+                    ? !effectiveMatchIds.has(n.id)
                     : false;
                 return (
                   <g
@@ -711,6 +737,20 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {trimmedQuery && <div className="graph-panel-hint">{matchIds?.size ?? 0} match{matchIds?.size === 1 ? "" : "es"}</div>}
+              </PanelSection>
+              <PanelSection title="Query" defaultOpen={false}>
+                <textarea
+                  className="graph-panel-search graph-panel-query"
+                  placeholder={"degree > 5\ntype: project\nconnected: [[Note]]\nisolated"}
+                  rows={4}
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                />
+                {queryConditions.length > 0 && (
+                  <div className="graph-panel-hint">
+                    {queryMatchIds?.size ?? 0} match{queryMatchIds?.size === 1 ? "" : "es"}
+                  </div>
+                )}
               </PanelSection>
               <PanelSection title="Forces" defaultOpen={false}>
                 <label className="graph-panel-slider-row">

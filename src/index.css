@@ -3506,6 +3506,14 @@ button:disabled:hover {
   font-size: 11px;
 }
 
+.graph-panel-query {
+  width: 100%;
+  resize: vertical;
+  font-family: monospace;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
 .graph-panel-slider-row {
   display: flex;
   flex-direction: column;
