@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Calendar view (the month grid) is removed — a date-based view didn't fit what it was actually being asked to do (a recurring weekly routine), which `​```timetable` blocks already cover properly (see above). `src/CalendarView.tsx` and its `.calendar-*` styles removed; calendar *sync* (the `.ics` export/feed — a completely separate feature) is unaffected
 - History and Tutorials are collapsible inline sidebar sections now (same chevron/collapse pattern as Favorites/For You), not full-panel destinations you navigate away into — the rail drops from 9 items to 7. Nothing lost: History's data was already capped at 8 entries, and Tutorials' ~13 pages fit the same scrollable compact-list treatment Favorites already had. `HistoryView.tsx` (now unused) removed
 - Flashcards' empty state ("no cards due") and the review screen both get a "New Flashcard" button, reusing the exact `+Create → New Flashcard` flow — previously the only way to add one was buried in that menu, with no path to it from the Flashcards view itself
 - The rail's icon-only first pass (still icon + no label) was hard to read without hovering and read as too close a copy of VSCode's activity bar — icon + text label now, and switching to a full-panel view (Graph/Table/Calendar/Flashcards/History) auto-collapses the note-list panel instead of leaving two unrelated lists on screen at once

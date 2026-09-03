@@ -26,16 +26,15 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - Full-text search (SQLite FTS5)
 - **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
-- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table / Calendar)
-- Calendar view: a month grid showing every note with a date — daily/journal entries automatically, or any note with a `date` property
+- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Table / Reminders)
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
 - Templates with `{{date}}`/`{{title}}` placeholder substitution — including a ready-made Book / Chapter / Character / Scene set for long-form fiction and screenwriting, built entirely from existing features (`​```query` blocks, table rollups, the link graph), see [[tutorial/writing-books-and-scripts]] in the starter vault
 - A live word count for the open note, and a **Compile chapters** action (Settings, on any `type: book` note) that gathers every related chapter in order into one document, exportable as Markdown/HTML/PDF
 - Spell check — automatic (as you type) or on demand via the command palette ("Check Spelling: Whole Note"/"…: Selection"), fully local (no text ever leaves the device); click a wavy-underlined word for suggestions or to add it to the session's dictionary
-- `​```timetable` blocks — a weekly grid (day + time range + title per line), with a full-screen mode (screen wake lock included, for a schedule left up on a second monitor) and clean PDF/HTML export
-- Reminders: set a date/time on any note (🔔 in the toolbar, with quick picks for "in 1 hour"/"tomorrow"/"next Monday") and get a native notification when it's due — only while Satori is actually open, not a true background/push notification, see Roadmap
+- `​```timetable` blocks — a weekly grid (day + time range + title per line, repeating every week automatically since it's keyed by day-of-week rather than a date), with a full-screen mode (screen wake lock included, for a schedule left up on a second monitor), clean PDF/HTML export, and a ready-made template (**+ Create → New From Template → Timetable**)
+- Reminders: set a date/time on any note (🔔 in the toolbar, with quick picks for "in 1 hour"/"tomorrow"/"next Monday") and get a native notification when it's due — only while Satori is actually open, not a true background/push notification, see Roadmap. A dedicated **Reminders** sidebar view lists every one set across the vault, soonest first
 - Calendar sync: export any reminder or `​```timetable` as a standard `.ics` file (Apple/Google/Outlook Calendar all import it), or — if you're running the optional server — subscribe Apple/Google/Outlook Calendar to a live feed URL (Settings → Calendar feed) that auto-updates as reminders and timetables change, no re-import needed
 - Table/database views over your notes' properties, with inline editing — including relation properties (`[[wikilink]]`-valued fields render as clickable links) and rollup columns (count/list of notes that relate back to this one via a chosen property)
 - Spaced-repetition flashcards (SM-2 scheduling)
@@ -116,7 +115,7 @@ Satori is early and honest about what it isn't yet:
 - No plugin ecosystem (Obsidian/Logseq have large ones)
 - No native mobile apps yet (responsive web layout only)
 - Journal/daily notes have a real block outliner (indentable, collapsible bullets — Tab/Shift+Tab, click to collapse), but it doesn't extend to regular notes, there's no drag-to-reorder (keyboard only), and a "block" is still a single line (a multi-line paragraph isn't merged into one addressable block yet)
-- Table views are a single layout — no kanban/gallery views yet (Calendar exists as its own separate view, not a Table layout); rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
+- Table views are a single layout — no kanban/gallery/calendar-grid views yet; rollup columns are count/list only (no sum/average over numeric fields) and don't persist across reopening Table view yet
 - Citations support a single `[@citekey]` per reference — no locators (`p. 12`) or multi-citation grouping yet
 - The `.bib` importer is a pragmatic parser (handles what a real Zotero/BibTeX export looks like), not a full BibTeX-spec implementation
 - Related Notes (local semantic embeddings) only runs in the Node/browser deployment — the Tauri native app needs its own Rust-side ML inference path (candle), not yet built, so the panel doesn't appear there yet. Works best on notes with real paragraph content; very short one-liners give the embedding model less to work with

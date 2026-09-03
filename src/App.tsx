@@ -45,7 +45,6 @@ import RelatedNotes from "./RelatedNotes";
 import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
 import TableView from "./TableView";
-import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
@@ -196,7 +195,6 @@ export default function App() {
   const [showGraph, setShowGraph] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [showCanvasGrid, setShowCanvasGrid] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
@@ -205,11 +203,11 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Single source of truth for "which of the full-width special panels (if
-  // any) is showing" — replaces four separate setShowX(false) calls
+  // any) is showing" — replaces several separate setShowX(false) calls
   // repeated at every switch point, which is exactly the shape of bug that
-  // once left the Calendar view stuck on-screen after navigating away from
+  // once left a special panel stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "journal" | "canvas" | "reminders" | null;
+  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "reminders" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -232,7 +230,6 @@ export default function App() {
     specialPanelRef.current = panel;
     setShowGraph(panel === "graph");
     setShowTable(panel === "table");
-    setShowCalendar(panel === "calendar");
     setShowFlashcards(panel === "flashcards");
     setShowJournal(panel === "journal");
     setShowCanvasGrid(panel === "canvas");
@@ -1128,12 +1125,11 @@ export default function App() {
   const isOutline = raw ? parseFrontmatter(raw).data.type === "daily" && parseBlockDoc(parseFrontmatter(raw).body) !== null : false;
   const outlineDoc = useMemo(() => (isOutline && raw ? parseBlockDoc(parseFrontmatter(raw).body) : null), [isOutline, raw]);
   // True for the four "list-based" sidebar views (All Notes/Journal/
-  // Canvas/Tutorials), false for the five full-width special panels
-  // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
-  // and the wide panel below to avoid repeating all five negations at
-  // every active-state check.
-  const isListView =
-    !showGraph && !showTable && !showCalendar && !showFlashcards && !showJournal && !showCanvasGrid && !showReminders;
+  // Canvas/Tutorials), false for the full-width special panels
+  // (Graph/Table/Flashcards/Journal/Canvas/Reminders) — used throughout
+  // the rail and the wide panel below to avoid repeating all these
+  // negations at every active-state check.
+  const isListView = !showGraph && !showTable && !showFlashcards && !showJournal && !showCanvasGrid && !showReminders;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   // For an outline note, body text is spread across many small block
@@ -1298,11 +1294,6 @@ export default function App() {
         { id: "today", label: "Today's Journal Entry", action: onDailyNote },
         { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => showSpecialPanel(showGraph ? null : "graph") },
         { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => showSpecialPanel(showTable ? null : "table") },
-        {
-          id: "toggle-calendar",
-          label: showCalendar ? "Show Editor" : "Show Calendar",
-          action: () => showSpecialPanel(showCalendar ? null : "calendar"),
-        },
         {
           id: "toggle-flashcards",
           label: showFlashcards ? "Show Editor" : "Review Flashcards",
@@ -1599,14 +1590,6 @@ export default function App() {
               >
                 <Table2 size={17} />
                 <span>Table</span>
-              </button>
-              <button
-                className={showCalendar ? "active" : ""}
-                onClick={() => showSpecialPanel(showCalendar ? null : "calendar")}
-                title="Calendar"
-              >
-                <Calendar size={17} className="type-color-daily" />
-                <span>Calendar</span>
               </button>
               <button
                 className={showFlashcards ? "active" : ""}
@@ -1929,12 +1912,6 @@ export default function App() {
           <GraphView activePath={activePath} onNavigate={openNote} />
         ) : showTable ? (
           <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
-        ) : showCalendar ? (
-          // Deliberately the full vault, not displayedNotes — a calendar's
-          // whole point is aggregating across whatever's dated regardless
-          // of the sidebar's current type filter, unlike Table view which
-          // is meant to reflect "whatever you've already narrowed to".
-          <CalendarView notes={notes} onNavigate={openNote} />
         ) : showFlashcards ? (
           <FlashcardReview shareToken={shareToken} onCreateNew={onNewFlashcard} />
         ) : showJournal ? (
