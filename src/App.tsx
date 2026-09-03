@@ -46,6 +46,7 @@ import PropertiesPanel from "./PropertiesPanel";
 import GraphView from "./GraphView";
 import TableView from "./TableView";
 import FlashcardReview from "./FlashcardReview";
+import FlashcardGridView from "./FlashcardGridView";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
 import ProjectGridView from "./ProjectGridView";
@@ -199,6 +200,7 @@ export default function App() {
   const [graphInitialMode, setGraphInitialMode] = useState<"full" | "local">("full");
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
+  const [flashcardsMode, setFlashcardsMode] = useState<"grid" | "review">("grid");
   const [showJournal, setShowJournal] = useState(false);
   const [showCanvasGrid, setShowCanvasGrid] = useState(false);
   const [showProjects, setShowProjects] = useState(false);
@@ -795,6 +797,9 @@ export default function App() {
       showSpecialPanel("canvas");
     } else if (shortcut.navView === "journal") {
       openJournal();
+    } else if (shortcut.navView === "flashcards") {
+      setFlashcardsMode("grid");
+      showSpecialPanel("flashcards");
     } else if (shortcut.navView) {
       showSpecialPanel(shortcut.navView);
     }
@@ -1361,8 +1366,15 @@ export default function App() {
         { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => showSpecialPanel(showTable ? null : "table") },
         {
           id: "toggle-flashcards",
-          label: showFlashcards ? "Show Editor" : "Review Flashcards",
-          action: () => showSpecialPanel(showFlashcards ? null : "flashcards"),
+          label: showFlashcards && flashcardsMode === "review" ? "Show Editor" : "Review Flashcards",
+          action: () => {
+            if (showFlashcards && flashcardsMode === "review") {
+              showSpecialPanel(null);
+            } else {
+              setFlashcardsMode("review");
+              showSpecialPanel("flashcards");
+            }
+          },
         },
         { id: "view-source", label: "View: Source", action: () => setViewMode("source") },
         { id: "view-live", label: "View: Live", action: () => setViewMode("live") },
@@ -1677,7 +1689,10 @@ export default function App() {
               </button>
               <button
                 className={showFlashcards ? "active" : ""}
-                onClick={() => showSpecialPanel(showFlashcards ? null : "flashcards")}
+                onClick={() => {
+                  if (!showFlashcards) setFlashcardsMode("grid");
+                  showSpecialPanel(showFlashcards ? null : "flashcards");
+                }}
                 title="Flashcards"
               >
                 <Brain size={17} className="type-color-flashcard" />
@@ -2018,7 +2033,20 @@ export default function App() {
         ) : showTable ? (
           <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
         ) : showFlashcards ? (
-          <FlashcardReview shareToken={shareToken} onCreateNew={onNewFlashcard} />
+          flashcardsMode === "review" ? (
+            <FlashcardReview
+              shareToken={shareToken}
+              onCreateNew={onNewFlashcard}
+              onBack={() => setFlashcardsMode("grid")}
+            />
+          ) : (
+            <FlashcardGridView
+              notes={notes}
+              onNavigate={openNote}
+              onNewFlashcard={onNewFlashcard}
+              onReview={() => setFlashcardsMode("review")}
+            />
+          )
         ) : showJournal ? (
           <JournalView
             notes={notes}

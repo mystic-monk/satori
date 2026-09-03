@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchDueCards, fetchNote, reviewCard, type DueCard, type Rating } from "./api";
 import { parseFrontmatter } from "../shared/frontmatter";
 import { splitFrontBack } from "../shared/flashcards";
-import { PenLine } from "lucide-react";
+import { PenLine, ArrowLeft } from "lucide-react";
 
 interface FlashcardReviewProps {
   shareToken?: string | null;
@@ -11,13 +11,18 @@ interface FlashcardReviewProps {
   // reachable only from that menu, buried away from where you'd actually
   // think to look for it (this review screen).
   onCreateNew: () => void;
+  // FlashcardGridView (the browse-everything tile grid) is what the
+  // Flashcards rail nav opens now — this review queue is reached from
+  // there via "Review now", so it needs a way back that isn't just
+  // re-clicking the rail nav item.
+  onBack: () => void;
 }
 
 // A type: flashcard note's body is rendered as plain text here, not full
 // markdown — deliberately simple for a first version (the review UI's job
 // is showing a question and a rating, not rich formatting); revisit if
 // that turns out to matter in practice.
-export default function FlashcardReview({ shareToken, onCreateNew }: FlashcardReviewProps) {
+export default function FlashcardReview({ shareToken, onCreateNew, onBack }: FlashcardReviewProps) {
   const [queue, setQueue] = useState<DueCard[] | null>(null);
   const [card, setCard] = useState<{ front: string; back: string | null } | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -58,6 +63,10 @@ export default function FlashcardReview({ shareToken, onCreateNew }: FlashcardRe
   if (queue.length === 0) {
     return (
       <div className="flashcard-review flashcard-empty-state">
+        <button className="flashcard-back-btn" onClick={onBack}>
+          <ArrowLeft size={13} aria-hidden="true" />
+          All Flashcards
+        </button>
         <h2>All done</h2>
         {reviewedCount > 0 && (
           <p>
@@ -75,6 +84,10 @@ export default function FlashcardReview({ shareToken, onCreateNew }: FlashcardRe
   return (
     <div className="flashcard-review">
       <div className="flashcard-progress">
+        <button className="flashcard-back-btn" onClick={onBack}>
+          <ArrowLeft size={13} aria-hidden="true" />
+          All Flashcards
+        </button>
         {queue.length} due
         <button className="flashcard-new-cta flashcard-new-cta-inline" onClick={onCreateNew}>
           <PenLine size={13} aria-hidden="true" />
