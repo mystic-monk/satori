@@ -50,6 +50,7 @@ import FlashcardGridView from "./FlashcardGridView";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
 import ProjectGridView from "./ProjectGridView";
+import TabStrip from "./TabStrip";
 import RemindersView from "./RemindersView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
@@ -101,6 +102,7 @@ import {
 import { getIdentity, getPersona, PERSONA_SHORTCUTS, type PersonaShortcut } from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, pruneDeleted, type RecentNote } from "./recentNotes";
+import { getOpenTabs, saveOpenTabs, openTab, closeTab, pruneOpenTabs } from "./openTabs";
 import { queryNotes } from "./noteQuery";
 import TemplatePickerDialog from "./TemplatePickerDialog";
 import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
@@ -192,6 +194,10 @@ export default function App() {
   // notification).
   const firedRemindersRef = useRef<Set<string>>(new Set());
   const [activePath, setActivePath] = useState<string | null>(null);
+  const [openTabPaths, setOpenTabPaths] = useState<string[]>(() => getOpenTabs());
+  useEffect(() => {
+    saveOpenTabs(openTabPaths);
+  }, [openTabPaths]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [status, setStatus] = useState("");
@@ -391,7 +397,9 @@ export default function App() {
   // initial fetch above has actually landed.
   useEffect(() => {
     if (notes.length === 0) return;
-    setRecentNotes(pruneDeleted(new Set(notes.map((n) => n.path))));
+    const existingPaths = new Set(notes.map((n) => n.path));
+    setRecentNotes(pruneDeleted(existingPaths));
+    setOpenTabPaths((prev) => pruneOpenTabs(prev, existingPaths));
   }, [notes]);
 
   // Team/Workspace v1 is a server/browser-only concept — Tauri's local
@@ -543,6 +551,28 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Cmd/Ctrl+Option+Right/Left cycles open tabs — same modifier combo
+  // Safari/Chrome already use for browser-tab cycling on macOS, so it
+  // doesn't need to be discovered from scratch. Not bound to Cmd+W (close
+  // tab) — that's already the native window-close accelerator (see
+  // src-tauri/src/lib.rs's File menu), so this pass only wires cycling; the
+  // × on each tab is the only way to close one for now.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      if (openTabPaths.length < 2) return;
+      e.preventDefault();
+      const currentIndex = activePath ? openTabPaths.indexOf(activePath) : -1;
+      const delta = e.key === "ArrowRight" ? 1 : -1;
+      const nextIndex = (currentIndex + delta + openTabPaths.length) % openTabPaths.length;
+      openNote(openTabPaths[nextIndex]);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTabPaths, activePath]);
 
   useEffect(() => {
     // Vault-wide search is an owner-only operation server-side (a share
@@ -760,6 +790,21 @@ export default function App() {
     if (fragment) setPendingFragment(fragment);
     if (p === activePath) return;
     setActivePath(p);
+    setOpenTabPaths((prev) => openTab(prev, p));
+  }
+
+  // Closing a tab never touches the note itself (unlike deleting one) — a
+  // live Yjs session is already continuously persisted, not a save-on-
+  // close model, so there's nothing to lose. If the closed tab was the
+  // active one, openNote takes over from here (leaves any special panel,
+  // resolves title/type, re-adds the tab it just left) exactly as if that
+  // tab had been clicked directly.
+  function onCloseTab(path: string) {
+    const { tabs, nextActive } = closeTab(openTabPaths, path, activePath);
+    setOpenTabPaths(tabs);
+    if (path !== activePath) return;
+    if (nextActive) openNote(nextActive);
+    else setActivePath(null);
   }
 
   function selectView(view: SidebarView) {
@@ -2028,6 +2073,7 @@ export default function App() {
         <div className="sidebar-version">Satori v{APP_VERSION}{IS_TAURI ? "" : " · web"}</div>
       </aside>
       <main className={`editor-pane ${rightPanelCollapsed ? "right-panel-collapsed" : ""}`}>
+        <TabStrip openTabPaths={openTabPaths} notes={notes} activePath={activePath} onSelect={openNote} onClose={onCloseTab} />
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} initialMode={graphInitialMode} />
         ) : showTable ? (

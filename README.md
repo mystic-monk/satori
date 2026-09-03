@@ -27,6 +27,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Full-text search (SQLite FTS5)
 - **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
 - Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Projects / Table / Reminders)
+- Tabs for open notes — every note you visit stays open in its own tab (persists across restarts, Cmd/Ctrl+Option+Right/Left to cycle) instead of replacing whatever was open before
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused
 - `​```query` blocks — live, filterable lists of notes embedded directly in your markdown
