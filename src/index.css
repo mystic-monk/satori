@@ -2366,7 +2366,15 @@ button:disabled:hover {
   background: transparent;
   border: none;
   border-radius: 3px;
-  outline: 1px solid var(--accent);
+  outline: none;
+}
+
+/* Logseq's own editing state has no border/box around the active block —
+   it just reads as plain text with a caret. A visible outline here made
+   every focused block look like a form field, worst on Journal's today
+   entry where it was often the only content on the page. */
+.block-textarea:focus {
+  background: var(--bg-hover);
 }
 
 .block-rendered {
@@ -2425,6 +2433,18 @@ button:disabled:hover {
   background: var(--bg-hover);
 }
 
+/* Today's entry is live/directly editable in place (see JournalView's
+   editingPath doc comment) — clicking the card no longer navigates
+   anywhere, so it shouldn't read as clickable the way every other entry
+   still does. */
+.journal-entry-live {
+  cursor: default;
+}
+
+.journal-entry-live:hover {
+  background: none;
+}
+
 .journal-entry:first-of-type {
   padding-top: 8px;
 }
@@ -2467,6 +2487,19 @@ button:disabled:hover {
   padding: 0;
   font-size: 14px;
   line-height: 1.65;
+}
+
+/* .block-outline is normally the sole, full-height child of the main
+   editor pane (its own padding/max-width/flex sizing assumes that) — the
+   live today entry nests it inside a card here instead, so those
+   page-level rules need to be neutralized or it renders double-padded
+   and misaligned against every other entry's flush .journal-entry-body. */
+.journal-entry-body .block-outline {
+  flex: initial;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  max-width: none;
 }
 
 .journal-entry-body .block-tree-list {

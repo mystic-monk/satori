@@ -152,7 +152,7 @@ export default function JournalView({
             return (
               <article
                 key={n.path}
-                className={`journal-entry ${n.title === todayIso ? "journal-entry-today" : ""}`}
+                className={`journal-entry ${n.title === todayIso ? "journal-entry-today" : ""} ${isLive ? "journal-entry-live" : ""}`}
                 onClick={isLive ? undefined : (e) => handleClick(e, n.path, n.title)}
               >
                 <header className="journal-entry-header">
@@ -163,7 +163,9 @@ export default function JournalView({
                   </span>
                 </header>
                 {isLive ? (
-                  <BlockOutline key={n.path} raw={editingRaw} ytext={editingYtext!} notes={notes} />
+                  <div className="journal-entry-body">
+                    <BlockOutline key={n.path} raw={editingRaw} ytext={editingYtext!} notes={notes} />
+                  </div>
                 ) : raw == null ? (
                   <p className="journal-entry-loading">Loading…</p>
                 ) : (
