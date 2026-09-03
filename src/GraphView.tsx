@@ -37,6 +37,11 @@ interface RawLink {
 interface GraphViewProps {
   onNavigate: (path: string) => void;
   activePath: string | null;
+  // Rail nav always wants "Full vault" (the general-purpose entry point);
+  // the per-note "View in Graph" toolbar button wants to land straight on
+  // "This note" instead of making someone re-click the toggle themselves
+  // right after they asked to see this specific note's connections.
+  initialMode?: "full" | "local";
 }
 
 const WIDTH = 800;
@@ -139,10 +144,10 @@ function parseViewBox(vb: string): [number, number, number, number] {
   return [x, y, w, h];
 }
 
-export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
+export default function GraphView({ onNavigate, activePath, initialMode = "full" }: GraphViewProps) {
   const [rawNodes, setRawNodes] = useState<RawNode[]>([]);
   const [rawLinks, setRawLinks] = useState<RawLink[]>([]);
-  const [mode, setMode] = useState<"full" | "local">("full");
+  const [mode, setMode] = useState<"full" | "local">(initialMode);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [tick, setTick] = useState(0);
@@ -248,7 +253,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
       return;
     }
     if (viewBoxAnimRef.current != null) cancelAnimationFrame(viewBoxAnimRef.current);
-    const duration = 350;
+    const duration = 450;
     const start = performance.now();
     function step(now: number) {
       const t = Math.min(1, (now - start) / duration);
@@ -321,7 +326,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
         if (tickCountRef.current > 40 && !userAdjustedViewRef.current) {
           const xs = nodeList.map((n) => n.x ?? 0);
           const ys = nodeList.map((n) => n.y ?? 0);
-          const pad = 70;
+          const pad = 50;
           const minX = Math.min(...xs) - pad;
           const maxX = Math.max(...xs) + pad;
           const minY = Math.min(...ys) - pad;

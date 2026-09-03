@@ -196,6 +196,7 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [peerCount, setPeerCount] = useState(0);
   const [showGraph, setShowGraph] = useState(false);
+  const [graphInitialMode, setGraphInitialMode] = useState<"full" | "local">("full");
   const [showTable, setShowTable] = useState(false);
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
@@ -897,6 +898,15 @@ export default function App() {
     else onNewFromTemplate();
   }
 
+  // Graph view already has a "This note" scope (just the open note's direct
+  // connections) — it just had no entry point from inside the note itself,
+  // so seeing it meant opening Graph and clicking the toggle by hand. This
+  // jumps straight there already scoped, from whatever's currently open.
+  function onViewInGraph() {
+    setGraphInitialMode("local");
+    showSpecialPanel("graph");
+  }
+
   // A plain slug.md, disambiguated only if that path is actually taken —
   // replaces always appending Date.now() (still guaranteed-unique, but
   // every single note paid for it: my-note-1788432825572.md instead of
@@ -1340,7 +1350,14 @@ export default function App() {
         { id: "new-note", label: "New Note", shortcut: IS_TAURI ? "⌘N" : undefined, action: onNewNote },
         { id: "new-canvas", label: "New Canvas", action: onNewCanvas },
         { id: "today", label: "Today's Journal Entry", action: onDailyNote },
-        { id: "toggle-graph", label: showGraph ? "Show Editor" : "Show Graph", action: () => showSpecialPanel(showGraph ? null : "graph") },
+        {
+          id: "toggle-graph",
+          label: showGraph ? "Show Editor" : "Show Graph",
+          action: () => {
+            setGraphInitialMode("full");
+            showSpecialPanel(showGraph ? null : "graph");
+          },
+        },
         { id: "toggle-table", label: showTable ? "Show Editor" : "Show Table", action: () => showSpecialPanel(showTable ? null : "table") },
         {
           id: "toggle-flashcards",
@@ -1544,6 +1561,9 @@ export default function App() {
                   )}
                 </div>
               )}
+              <button onClick={onViewInGraph} title="View this note's connections in Graph">
+                <Waypoints size={13} /> Graph
+              </button>
               {role === "owner" && (
                 <button onClick={() => setSharePanelOpen(true)} title="Share this note — generates a link scoped to just this note">
                   <Share2 size={13} /> Share
@@ -1638,7 +1658,10 @@ export default function App() {
               </button>
               <button
                 className={showGraph ? "active" : ""}
-                onClick={() => showSpecialPanel(showGraph ? null : "graph")}
+                onClick={() => {
+                  setGraphInitialMode("full");
+                  showSpecialPanel(showGraph ? null : "graph");
+                }}
                 title="Graph"
               >
                 <Waypoints size={17} />
@@ -1991,7 +2014,7 @@ export default function App() {
       </aside>
       <main className={`editor-pane ${rightPanelCollapsed ? "right-panel-collapsed" : ""}`}>
         {showGraph ? (
-          <GraphView activePath={activePath} onNavigate={openNote} />
+          <GraphView activePath={activePath} onNavigate={openNote} initialMode={graphInitialMode} />
         ) : showTable ? (
           <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
         ) : showFlashcards ? (
@@ -2005,6 +2028,7 @@ export default function App() {
             editingPath={activePath}
             editingYtext={localSession?.ytext ?? null}
             editingRaw={raw}
+            onViewInGraph={onViewInGraph}
           />
         ) : showCanvasGrid ? (
           <CanvasGridView notes={notes} onNavigate={openNote} onNewCanvas={onNewCanvas} />

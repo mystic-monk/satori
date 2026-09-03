@@ -2520,6 +2520,24 @@ button:disabled:hover {
   letter-spacing: 0.04em;
 }
 
+.journal-entry-graph-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+
+.journal-entry-graph-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
 .journal-entry-loading {
   color: var(--text-dim);
   font-size: 13px;
@@ -3248,6 +3266,10 @@ button:disabled:hover {
   flex: 1;
   min-height: 0;
   display: flex;
+  /* A flat solid fill read as flat/empty behind a sparse graph — a soft
+     radial glow centered on the canvas gives it some depth without
+     competing with node/link colors. */
+  background: radial-gradient(circle at 50% 45%, var(--bg-elevated) 0%, var(--bg) 70%);
 }
 
 .graph-svg {
@@ -3263,29 +3285,30 @@ button:disabled:hover {
 
 .graph-links line {
   stroke: var(--text-dim);
-  stroke-width: 1;
-  opacity: 0.45;
+  stroke-width: 1.2;
+  opacity: 0.6;
   transition: opacity 0.15s, stroke 0.15s, stroke-width 0.15s;
 }
 
 .graph-links line.graph-link-highlight {
   stroke: var(--accent);
-  stroke-width: 2;
+  stroke-width: 2.2;
   opacity: 1;
 }
 
 .graph-node circle {
   fill: var(--accent);
   cursor: grab;
-  transition: opacity 0.15s, r 0.15s;
+  transition: opacity 0.15s, r 0.15s, filter 0.15s;
+  filter: drop-shadow(0 0 3px var(--accent));
 }
 
 .graph-node:hover circle {
-  r: 7;
+  r: 8;
 }
 
 .graph-node-active:hover circle {
-  r: 10;
+  r: 11;
 }
 
 /* Dragging reheats the simulation (GraphView.tsx), so position already
@@ -3317,46 +3340,55 @@ button:disabled:hover {
    decides it since both sides are a single class selector. */
 .graph-node-daily circle {
   fill: var(--type-daily);
+  filter: drop-shadow(0 0 3px var(--type-daily));
 }
 
 .graph-node-canvas circle {
   fill: var(--type-canvas);
+  filter: drop-shadow(0 0 3px var(--type-canvas));
 }
 
 .graph-node-flashcard circle {
   fill: var(--type-flashcard);
+  filter: drop-shadow(0 0 3px var(--type-flashcard));
 }
 
 .graph-node-template circle {
   fill: var(--type-template);
+  filter: drop-shadow(0 0 3px var(--type-template));
 }
 
 .graph-node-reference circle {
   fill: var(--type-reference);
+  filter: drop-shadow(0 0 3px var(--type-reference));
 }
 
 .graph-node-other circle {
   fill: var(--type-other);
+  filter: drop-shadow(0 0 3px var(--type-other));
 }
 
 .graph-node-active circle {
   fill: #fff;
   stroke: var(--accent);
   stroke-width: 2;
+  filter: drop-shadow(0 0 5px var(--accent));
 }
 
+/* fill was --text-dim with a 3px halo — at 10px that halo overwhelmed the
+   glyph strokes themselves, reading as broken/blurry rather than crisp
+   text. Full-contrast --text, a lighter halo, and a touch more size/weight
+   fixes actual legibility instead of just looking intentionally "quiet." */
 .graph-node text {
-  fill: var(--text-dim);
-  font-size: 10px;
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 500;
   text-anchor: middle;
   pointer-events: none;
   transition: opacity 0.15s;
-  /* A halo behind each glyph (stroke drawn first, fill on top) so labels
-     stay legible where they cross link lines or overlap a neighboring
-     label — cheap alternative to real force-directed label placement. */
   paint-order: stroke;
   stroke: var(--bg);
-  stroke-width: 3px;
+  stroke-width: 2px;
   stroke-linejoin: round;
 }
 

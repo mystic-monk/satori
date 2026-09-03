@@ -7,7 +7,7 @@ import { buildCitations } from "./Preview";
 import { parseFrontmatter } from "../shared/frontmatter";
 import { parseBlockDoc, renderBlockTreeHtml } from "./blockTree";
 import BlockOutline from "./BlockOutline";
-import { PenLine } from "lucide-react";
+import { PenLine, Waypoints } from "lucide-react";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,6 +52,11 @@ interface JournalViewProps {
   editingPath: string | null;
   editingYtext: Y.Text | null;
   editingRaw: string;
+  // Today's live entry is the one place in Journal that never routes
+  // through the normal per-note toolbar (isListView is false while this
+  // whole view is showing) — without this, there'd be no way to see this
+  // note's connections in Graph without first navigating away from Journal.
+  onViewInGraph: () => void;
 }
 
 // One continuous scrollable page — bold date heading, that day's content
@@ -68,6 +73,7 @@ export default function JournalView({
   editingPath,
   editingYtext,
   editingRaw,
+  onViewInGraph,
 }: JournalViewProps) {
   const dailyNotes = useMemo(
     () =>
@@ -160,6 +166,18 @@ export default function JournalView({
                     {n.title !== formatJournalHeading(n.title) ? `${n.title} · ` : ""}
                     Last edited {new Date(n.updatedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                   </span>
+                  {isLive && (
+                    <button
+                      className="journal-entry-graph-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewInGraph();
+                      }}
+                      title="View this entry's connections in Graph"
+                    >
+                      <Waypoints size={13} /> Graph
+                    </button>
+                  )}
                 </header>
                 {isLive ? (
                   <div className="journal-entry-body">
