@@ -2369,13 +2369,14 @@ button:disabled:hover {
   outline: none;
 }
 
-/* Logseq's own editing state has no border/box around the active block —
-   it just reads as plain text with a caret. A visible outline here made
-   every focused block look like a form field, worst on Journal's today
-   entry where it was often the only content on the page. */
-.block-textarea:focus {
-  background: var(--bg-hover);
-}
+/* No focus styling at all, deliberately — Logseq's editing state has zero
+   visual chrome around the active block, just plain text with a native
+   caret; that's the only affordance a real Logseq block gets. A previous
+   version of this rule gave the focused block a background highlight
+   instead of a border, but that still reads as a big flat rectangle
+   spanning the row's full flex:1 width (same problem, filled instead of
+   outlined) rather than blending in as text the way .block-rendered's
+   read-only siblings already do. */
 
 .block-rendered {
   cursor: text;
