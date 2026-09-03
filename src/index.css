@@ -1876,7 +1876,7 @@ button:disabled:hover {
   padding: 20px;
   font-size: 14px;
   line-height: 1.65;
-  max-width: 760px;
+  max-width: 900px;
 }
 
 .preview h1,
@@ -2297,7 +2297,7 @@ button:disabled:hover {
   min-height: 0;
   overflow-y: auto;
   padding: 24px 32px;
-  max-width: 760px;
+  max-width: 900px;
 }
 
 .block-row {
@@ -2401,9 +2401,10 @@ button:disabled:hover {
 }
 
 /* A continuous scrollable page of daily entries, most recent first —
-   same 760px reading width as .history-view/.preview. */
+   same 900px reading width as .preview/.block-outline now (widened from
+   720px, which read as cramped/narrow against a Logseq-sized window). */
 .journal-view {
-  max-width: 720px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 40px 24px 60px;
 }

@@ -221,6 +221,12 @@ export default function BlockOutline({ raw, ytext, notes }: BlockOutlineProps) {
     <div className="block-outline" ref={containerRef}>
       {flat.map((entry) => {
         const isFocused = entry.block.id === focusedId;
+        // A bullet's job is signaling hierarchy — a top-level line with no
+        // children isn't part of one yet, so it reads as a plain line, not
+        // a list item. Indenting it under something (Tab) or giving it a
+        // child immediately brings the bullet back, since at that point it
+        // genuinely is one.
+        const isFlatLine = entry.depth === 0 && entry.block.children.length === 0;
         return (
           <div
             key={entry.block.id}
@@ -228,19 +234,22 @@ export default function BlockOutline({ raw, ytext, notes }: BlockOutlineProps) {
             data-block-id={entry.block.id}
             style={{ marginLeft: entry.depth * 22 }}
           >
-            {entry.block.children.length > 0 ? (
-              <button
-                type="button"
-                className={`block-chevron ${entry.block.collapsed ? "" : "open"}`}
-                onClick={() => onToggleCollapse(entry.block.id)}
-                aria-label={entry.block.collapsed ? "Expand" : "Collapse"}
-              >
-                <ChevronRight size={12} />
-              </button>
-            ) : (
-              <span className="block-chevron-spacer" />
+            {!isFlatLine &&
+              (entry.block.children.length > 0 ? (
+                <button
+                  type="button"
+                  className={`block-chevron ${entry.block.collapsed ? "" : "open"}`}
+                  onClick={() => onToggleCollapse(entry.block.id)}
+                  aria-label={entry.block.collapsed ? "Expand" : "Collapse"}
+                >
+                  <ChevronRight size={12} />
+                </button>
+              ) : (
+                <span className="block-chevron-spacer" />
+              ))}
+            {!isFlatLine && (
+              <span className={`block-bullet ${entry.block.children.length > 0 ? "block-bullet-parent" : ""}`} />
             )}
-            <span className={`block-bullet ${entry.block.children.length > 0 ? "block-bullet-parent" : ""}`} />
             {isFocused ? (
               <BlockTextarea
                 entry={entry}
