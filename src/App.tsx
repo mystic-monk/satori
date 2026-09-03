@@ -1474,7 +1474,12 @@ export default function App() {
                   >
                     <Download size={14} />
                   </button>
-                  <button className="app-topbar-icon-btn" onClick={onReindex} title="Reindex vault" aria-label="Reindex vault">
+                  <button
+                    className="app-topbar-icon-btn app-topbar-icon-btn-prominent"
+                    onClick={onReindex}
+                    title="Reindex vault"
+                    aria-label="Reindex vault"
+                  >
                     <RotateCw size={14} />
                   </button>
                 </>

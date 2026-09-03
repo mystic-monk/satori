@@ -187,10 +187,10 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
-  border: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 5px 8px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
@@ -198,6 +198,7 @@ body {
 
 .app-topbar-vault:hover {
   background: var(--bg-hover);
+  border-color: var(--accent);
 }
 
 .app-topbar-icon-btn {
@@ -214,6 +215,25 @@ body {
 
 .app-topbar-icon-btn:hover {
   color: var(--text);
+  background: var(--bg-hover);
+}
+
+/* Reindex sits next to the vault switcher and shares its "this matters,
+   don't make me hover to find it" treatment — a plain dim icon blended
+   into the bar too easily, and reindexing is the fix for the exact
+   confusing state (a file on disk the app doesn't know about yet) a
+   user has no other way to notice they're in. */
+.app-topbar-icon-btn-prominent {
+  width: auto;
+  padding: 0 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.app-topbar-icon-btn-prominent:hover {
+  border-color: var(--accent);
+  color: var(--accent);
   background: var(--bg-hover);
 }
 
