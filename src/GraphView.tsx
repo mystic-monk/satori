@@ -237,6 +237,13 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     linkForceRef.current = linkForce;
 
     const sim = forceSimulation(nodeList)
+      .velocityDecay(0.55) // more damping than d3's 0.4 default — settles
+      // down quietly instead of the initial charge burst sending weakly-
+      // connected nodes flying outward before the link/center forces have
+      // a chance to rein them back in.
+      .alphaDecay(0.04) // faster than the ~0.023 default, so the sim
+      // reaches a settled low-alpha state in noticeably fewer ticks —
+      // less total time spent visibly drifting/jittering.
       .force("charge", chargeForce)
       .force("link", linkForce)
       .force("center", forceCenter(0, 0))

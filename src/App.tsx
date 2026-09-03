@@ -904,12 +904,17 @@ export default function App() {
       openNote(p, title, null);
     } else if (mode === "canvas") {
       const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
-      // Left unset, an empty scene inherits the app's dark theme as its
-      // canvas background too — a brand new canvas then reads as a plain
-      // black void with nothing to signal "this is a sketch surface."
-      // A sketch is drawn on paper, not on the app chrome, so it gets its
-      // own light background regardless of which app theme is active.
-      const scene = { type: "excalidraw", version: 2, elements: [], appState: { viewBackgroundColor: "#ffffff" } };
+      // In dark mode, plain white would render as Excalidraw's own default
+      // near-black #121212 (its dark theme is a CSS invert filter over the
+      // whole canvas, not a distinct dark fill — see CanvasNote.tsx) —
+      // visibly flatter/darker than the app's own --bg-elevated chrome
+      // tone right next to it. #e3e9f7 is the exact pre-invert color that
+      // inverts to this app's own --bg-elevated (#202531) instead, solved
+      // via the same invert(93%) hue-rotate(180deg) matrix math Excalidraw
+      // applies, so a new dark-mode canvas reads as part of the app's own
+      // palette rather than a colder, unrelated black.
+      const bg = isDarkTheme(themeId) ? "#e3e9f7" : "#ffffff";
+      const scene = { type: "excalidraw", version: 2, elements: [], appState: { viewBackgroundColor: bg } };
       const template = `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`;
       await createNote(p, template);
       await loadNotes();
