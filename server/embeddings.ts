@@ -1,6 +1,9 @@
 import path from "node:path";
+import { createRequire } from "node:module";
 import type { FlagEmbedding as FlagEmbeddingType } from "fastembed";
 import { getIndexedText, upsertEmbedding, listNotesFromIndex } from "./db.js";
+
+const require = createRequire(import.meta.url);
 
 // fastembed defaults to a bare local_cache/ at cwd, which doesn't match
 // this app's own dot-prefixed cache-directory convention (.pkm/,
@@ -21,9 +24,18 @@ const MODEL_CACHE_DIR = path.resolve(process.cwd(), ".pkm", "models");
 let modelPromise: Promise<FlagEmbeddingType> | null = null;
 function getModel(): Promise<FlagEmbeddingType> {
   if (!modelPromise) {
-    modelPromise = import("fastembed").then(({ EmbeddingModel, FlagEmbedding }) =>
-      FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2, cacheDir: MODEL_CACHE_DIR })
-    );
+    // Not `import("fastembed")`: its ESM build does `import tar from
+    // "tar"`, which throws at module-evaluation time under the
+    // tar@7.5.22 override in package.json (a real ESM module with no
+    // default export — fastembed's own dependency range wants tar@6.x's
+    // CJS shape). Every call failed as a result. fastembed's CJS build
+    // isn't affected — TypeScript's __importDefault interop wrapper
+    // already copes with a default-less required module — so this loads
+    // that build directly instead of waiting on fastembed to fix its own
+    // ESM entrypoint (or reintroducing the tar CVE the override exists
+    // to patch by downgrading it back).
+    const { EmbeddingModel, FlagEmbedding } = require("fastembed") as typeof import("fastembed");
+    modelPromise = FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2, cacheDir: MODEL_CACHE_DIR });
   }
   return modelPromise;
 }
