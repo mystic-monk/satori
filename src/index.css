@@ -2402,8 +2402,17 @@ button:disabled:hover {
 
 /* A continuous scrollable page of daily entries, most recent first —
    same 900px reading width as .preview/.block-outline now (widened from
-   720px, which read as cramped/narrow against a Logseq-sized window). */
+   720px, which read as cramped/narrow against a Logseq-sized window).
+   Needs an explicit width: 100% here, not just max-width + margin: 0
+   auto — .journal-view is a direct flex item of .editor-pane's column
+   layout, and auto margins in a flex item's cross axis (horizontal,
+   in a column container) take precedence over align-items: stretch,
+   collapsing the box to its shrink-to-fit content width instead of
+   filling the container before max-width caps it. .block-outline
+   doesn't hit this because it uses flex: 1 (grow) instead of stretch +
+   auto margins. */
 .journal-view {
+  width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: 40px 24px 60px;
@@ -2526,9 +2535,9 @@ button:disabled:hover {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  width: 100%;
+  width: fit-content;
   margin: 0 0 28px;
-  padding: 12px;
+  padding: 12px 20px;
   font-weight: 500;
   color: #fff;
   border: none;
