@@ -866,6 +866,22 @@ export default function App() {
     setCreatePromptMode("note");
   }
 
+  // A plain slug.md, disambiguated only if that path is actually taken —
+  // replaces always appending Date.now() (still guaranteed-unique, but
+  // every single note paid for it: my-note-1788432825572.md instead of
+  // just my-note.md) with the same "try the obvious name first" approach
+  // any file manager uses. type wasn't worth encoding in the filename
+  // either — it already lives in frontmatter, and nothing reads it back
+  // out of the path (confirmed before removing it).
+  function uniqueNotePath(slug: string): string {
+    const base = slug || "untitled";
+    const taken = new Set(notes.map((n) => n.path));
+    if (!taken.has(`${base}.md`)) return `${base}.md`;
+    for (let i = 2; ; i++) {
+      if (!taken.has(`${base}-${i}.md`)) return `${base}-${i}.md`;
+    }
+  }
+
   async function submitCreatePrompt(title: string) {
     const mode = createPromptMode;
     const chosenTemplatePath = templatePath;
@@ -878,7 +894,7 @@ export default function App() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
     if (mode === "note") {
-      const p = `${slug || "untitled"}-${Date.now()}.md`;
+      const p = uniqueNotePath(slug);
       let template: string;
       if (chosenTemplatePath) {
         const templateNote = await fetchNote(chosenTemplatePath, shareToken);
@@ -903,7 +919,7 @@ export default function App() {
       await loadNotes();
       openNote(p, title, null);
     } else if (mode === "canvas") {
-      const p = `${slug || "untitled"}-canvas-${Date.now()}.md`;
+      const p = uniqueNotePath(slug);
       // In dark mode, plain white would render as Excalidraw's own default
       // near-black #121212 (its dark theme is a CSS invert filter over the
       // whole canvas, not a distinct dark fill — see CanvasNote.tsx) —
@@ -924,7 +940,7 @@ export default function App() {
       // Starter content spells out the front/back convention directly in
       // the note, since there's nowhere else a first-time user would
       // learn it — the "---" line is real, not a placeholder to delete.
-      const p = `${slug || "untitled"}-flashcard-${Date.now()}.md`;
+      const p = uniqueNotePath(slug);
       const template = `---\ntitle: ${title}\ntype: flashcard\n---\n${title}\n---\nType the answer here, after a line containing exactly "---".\n`;
       await createNote(p, template);
       await loadNotes();
