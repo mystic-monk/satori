@@ -2409,15 +2409,6 @@ button:disabled:hover {
   padding: 40px 24px 60px;
 }
 
-.journal-view-title {
-  margin: 0 0 20px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 .journal-view-empty {
   color: var(--text-dim);
 }
@@ -2451,25 +2442,19 @@ button:disabled:hover {
   padding-top: 8px;
 }
 
-/* Today reads as the "live" entry — a bit of accent weight, the same way
-   Logseq's journals feed visually leads with the current day even though
-   every entry uses the same markup underneath. */
-.journal-entry-today .journal-entry-header h2 {
-  color: var(--accent);
-}
-
 .journal-entry-header {
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 22px;
 }
 
 .journal-entry-header h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--text-dim);
   letter-spacing: -0.01em;
 }
 

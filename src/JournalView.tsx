@@ -129,7 +129,6 @@ export default function JournalView({
 
   return (
     <div className="journal-view">
-      <h1 className="journal-view-title">Journal</h1>
       {!hasToday && (
         <button className="journal-today-cta" onClick={onWriteToday}>
           <PenLine size={15} aria-hidden="true" />
