@@ -263,6 +263,9 @@ pub fn run() {
                 )
                 .item(&MenuItemBuilder::with_id("reindex", "Reindex").build(app)?)
                 .separator()
+                .item(&MenuItemBuilder::with_id("import_bib", "Import .bib References…").build(app)?)
+                .item(&MenuItemBuilder::with_id("import_data_dictionary", "Import Data Dictionary…").build(app)?)
+                .separator()
                 .item(&MenuItemBuilder::with_id("switch_vault", "Open a Different Vault…").build(app)?)
                 .separator()
                 .close_window()
@@ -307,7 +310,8 @@ pub fn run() {
                 "switch_vault" => switch_vault_dialog(app_handle),
                 "quick_capture" => open_quick_capture(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
-                | "view_source" | "view_live" | "view_preview" | "check_for_updates") => {
+                | "view_source" | "view_live" | "view_preview" | "check_for_updates" | "import_bib"
+                | "import_data_dictionary") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
                 }
                 _ => {}

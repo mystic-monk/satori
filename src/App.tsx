@@ -86,6 +86,7 @@ import {
   MessageSquare,
   Paintbrush,
   FolderKanban,
+  Plus,
   RotateCw,
   Settings as SettingsIcon,
   Share2,
@@ -464,6 +465,8 @@ export default function App() {
       listen("menu:view-live", () => setViewMode("live")),
       listen("menu:view-preview", () => setViewMode("preview")),
       listen("menu:check-for-updates", () => onCheckForUpdates()),
+      listen("menu:import-bib", () => onImportBib()),
+      listen("menu:import-data-dictionary", () => onImportDataDictionary()),
     ];
     return () => {
       unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
@@ -879,6 +882,18 @@ export default function App() {
   function onNewProject() {
     const projectTemplate = notes.find((n) => n.type === "template" && n.properties.note_type === "project");
     if (projectTemplate) pickTemplate(projectTemplate.path);
+    else onNewFromTemplate();
+  }
+
+  // Same shortcut as onNewProject above, for the same reason: burying a
+  // one-note-type template behind the generic "New From Template" list
+  // is exactly what made it undiscoverable in the first place. Looked up
+  // by title, not note_type — a timetable note doesn't need a special
+  // type (the ```timetable block itself is what the renderer keys off
+  // of, not frontmatter), so the template never declared one.
+  function onNewTimetable() {
+    const timetableTemplate = notes.find((n) => n.type === "template" && n.title === "Timetable");
+    if (timetableTemplate) pickTemplate(timetableTemplate.path);
     else onNewFromTemplate();
   }
 
@@ -1829,8 +1844,13 @@ export default function App() {
             server/index.ts). */}
         {!shareToken && (
           <div className="sidebar-create">
-            <button className="create-button btn-primary" onClick={() => setCreateMenuOpenState((o) => !o)}>
-              + Create
+            <button
+              className="create-button btn-primary"
+              onClick={() => setCreateMenuOpenState((o) => !o)}
+              title="Create"
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span>Create</span>
             </button>
             {createMenuOpenState && (
               <div className="create-menu">
@@ -1866,6 +1886,14 @@ export default function App() {
                 >
                   New Flashcard
                 </button>
+                <button
+                  onClick={() => {
+                    setCreateMenuOpenState(false);
+                    onNewTimetable();
+                  }}
+                >
+                  New Timetable
+                </button>
                 {templateNotes.length > 0 && (
                   <button
                     onClick={() => {
@@ -1876,22 +1904,30 @@ export default function App() {
                     New From Template
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setCreateMenuOpenState(false);
-                    onImportBib();
-                  }}
-                >
-                  Import .bib References…
-                </button>
-                <button
-                  onClick={() => {
-                    setCreateMenuOpenState(false);
-                    onImportDataDictionary();
-                  }}
-                >
-                  Import Data Dictionary…
-                </button>
+                {/* Tauri has its own native File menu for these (see
+                    src-tauri/src/lib.rs) — kept here too in the browser
+                    deployment, which has no menu bar of its own to move
+                    them into. */}
+                {!IS_TAURI && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setCreateMenuOpenState(false);
+                        onImportBib();
+                      }}
+                    >
+                      Import .bib References…
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCreateMenuOpenState(false);
+                        onImportDataDictionary();
+                      }}
+                    >
+                      Import Data Dictionary…
+                    </button>
+                  </>
+                )}
               </div>
             )}
             {!IS_TAURI && (

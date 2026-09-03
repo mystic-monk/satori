@@ -508,7 +508,8 @@ body {
    still identifies it on hover, same as any icon-only toolbar button
    elsewhere in the app. */
 .sidebar.icon-only .sidebar-nav button span,
-.sidebar.icon-only .sidebar-bottom button span {
+.sidebar.icon-only .sidebar-bottom button span,
+.sidebar.icon-only .create-button span {
   display: none;
 }
 
@@ -752,6 +753,10 @@ body {
 
 .create-button {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .create-menu {
