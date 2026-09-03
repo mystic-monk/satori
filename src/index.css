@@ -2292,6 +2292,70 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+.canvas-grid-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 40px;
+}
+
+.canvas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  max-width: 900px;
+}
+
+.canvas-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  aspect-ratio: 1;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.canvas-tile:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-dim);
+}
+
+.canvas-tile-icon {
+  color: var(--text-dim);
+}
+
+.canvas-tile-title {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.canvas-tile-date {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.canvas-tile-new {
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed var(--accent);
+}
+
+.canvas-tile-new:hover {
+  background: var(--bg-hover);
+}
+
 .block-outline {
   flex: 1;
   min-height: 0;

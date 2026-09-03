@@ -48,6 +48,7 @@ import TableView from "./TableView";
 import CalendarView from "./CalendarView";
 import FlashcardReview from "./FlashcardReview";
 import JournalView from "./JournalView";
+import CanvasGridView from "./CanvasGridView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
 // most notes never touch — lazy-loaded so it's not part of the bundle
 // every user pays for on first load, only the ones who open a canvas note.
@@ -138,14 +139,14 @@ type ViewMode = "source" | "preview" | "live";
 // "all"/"canvas" drive the existing typeFilter mechanism under the hood
 // (see selectView) — "favorites" is a pure client-side filter over
 // whatever's already loaded, since a favorited note can be any type.
-// Journal used to be a third typeFilter-driven member here too, but it's
-// its own full-width view now (JournalView.tsx, a continuous scrollable
-// page of entries rather than a filtered list you click into one at a
-// time), so it's handled the same way Graph/Table/etc. are. Tutorials used
+// Journal and Canvas used to be typeFilter-driven members here too, but
+// they're their own full-width views now (JournalView.tsx's continuous
+// entry feed; CanvasGridView.tsx's Logseq-style whiteboard tile grid),
+// so they're handled the same way Graph/Table/etc. are. Tutorials used
 // to be a fourth member the same way Favorites is, but it's a collapsible
 // inline sidebar section now (like Favorites/For You), not a separate view
 // to switch into.
-type SidebarView = "all" | "canvas" | "favorites";
+type SidebarView = "all" | "favorites";
 
 // PersonaShortcut.icon is a plain string key (identity.ts stays a plain
 // logic module, no React/lucide import) — this is the one place it gets
@@ -196,6 +197,7 @@ export default function App() {
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [showCanvasGrid, setShowCanvasGrid] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -205,7 +207,7 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left the Calendar view stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "journal" | null;
+  type SpecialPanel = "graph" | "table" | "calendar" | "flashcards" | "journal" | "canvas" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -231,6 +233,7 @@ export default function App() {
     setShowCalendar(panel === "calendar");
     setShowFlashcards(panel === "flashcards");
     setShowJournal(panel === "journal");
+    setShowCanvasGrid(panel === "canvas");
     setSidebarOpen(false);
   }
   // Properties/Comments/History used to sit stacked above the editor,
@@ -752,7 +755,7 @@ export default function App() {
   function selectView(view: SidebarView) {
     setSidebarView(view);
     showSpecialPanel(null);
-    setTypeFilter(view === "canvas" ? "canvas" : ""); // "all" and "favorites" both draw from the full set
+    setTypeFilter(""); // "all" and "favorites" both draw from the full set
   }
 
   // Opening Journal also puts today's daily note "live" — see
@@ -781,7 +784,7 @@ export default function App() {
       return;
     }
     if (shortcut.navView === "canvas") {
-      selectView("canvas");
+      showSpecialPanel("canvas");
     } else if (shortcut.navView === "journal") {
       openJournal();
     } else if (shortcut.navView) {
@@ -1121,7 +1124,7 @@ export default function App() {
   // (Graph/Table/Calendar/Flashcards/History) — used throughout the rail
   // and the wide panel below to avoid repeating all five negations at
   // every active-state check.
-  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showJournal;
+  const isListView = !showGraph && !showTable && !showCalendar && !showFlashcards && !showJournal && !showCanvasGrid;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   // For an outline note, body text is spread across many small block
@@ -1565,8 +1568,8 @@ export default function App() {
                 <span>Journal</span>
               </button>
               <button
-                className={sidebarView === "canvas" && isListView ? "active" : ""}
-                onClick={() => selectView("canvas")}
+                className={showCanvasGrid ? "active" : ""}
+                onClick={() => (showCanvasGrid ? showSpecialPanel(null) : showSpecialPanel("canvas"))}
                 title="Canvas"
               >
                 <Paintbrush size={17} className="type-color-canvas" />
@@ -1927,6 +1930,8 @@ export default function App() {
             editingYtext={localSession?.ytext ?? null}
             editingRaw={raw}
           />
+        ) : showCanvasGrid ? (
+          <CanvasGridView notes={notes} onNavigate={openNote} onNewCanvas={onNewCanvas} />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.
