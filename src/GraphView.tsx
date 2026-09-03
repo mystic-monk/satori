@@ -151,6 +151,16 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   const [isPanning, setIsPanning] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
+  // Kept in sync with `viewBox` below, but readable from closures (the
+  // tick handler, in particular) that were created before the latest
+  // value existed — a plain closed-over `viewBox` there would always see
+  // whatever it was when the simulation effect last ran, not the current
+  // one.
+  const viewBoxRef = useRef(DEFAULT_VIEWBOX);
+  useEffect(() => {
+    viewBoxRef.current = viewBox;
+  }, [viewBox]);
+  const viewBoxAnimRef = useRef<number | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
@@ -208,6 +218,49 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     };
   }, []);
 
+  // Snaps viewBox immediately (no tween) and cancels any in-flight
+  // auto-fit animation — for user-driven changes (pan, wheel zoom, reset)
+  // that need to track the cursor/click exactly, not glide toward it.
+  function setViewBoxImmediate(vb: string) {
+    if (viewBoxAnimRef.current != null) {
+      cancelAnimationFrame(viewBoxAnimRef.current);
+      viewBoxAnimRef.current = null;
+    }
+    viewBoxRef.current = vb;
+    setViewBox(vb);
+  }
+
+  // The auto-fit used to snap viewBox instantly on every tick past the
+  // settle-in window — on a small graph the box barely moves tick to
+  // tick, but on a larger one the very first fit (jumping from the tight
+  // default box to whatever actually fits the real layout) could be a
+  // big enough size change to read as the whole view suddenly zooming
+  // out, even though the underlying physics had already calmed down by
+  // then. Tweened instead — a small change (already-close incremental
+  // refits, the common case once settled) still applies immediately, so
+  // this doesn't turn every settling tick into a 350ms animation.
+  function animateViewBoxTo(target: string) {
+    const [sx, sy, sw, sh] = parseViewBox(viewBoxRef.current);
+    const [tx, ty, tw, th] = parseViewBox(target);
+    const sizeChanged = Math.abs(tw - sw) / sw > 0.08 || Math.abs(th - sh) / sh > 0.08;
+    if (!sizeChanged) {
+      setViewBoxImmediate(target);
+      return;
+    }
+    if (viewBoxAnimRef.current != null) cancelAnimationFrame(viewBoxAnimRef.current);
+    const duration = 350;
+    const start = performance.now();
+    function step(now: number) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const vb = `${sx + (tx - sx) * eased} ${sy + (ty - sy) * eased} ${sw + (tw - sw) * eased} ${sh + (th - sh) * eased}`;
+      viewBoxRef.current = vb;
+      setViewBox(vb);
+      viewBoxAnimRef.current = t < 1 ? requestAnimationFrame(step) : null;
+    }
+    viewBoxAnimRef.current = requestAnimationFrame(step);
+  }
+
   // Rebuilds the simulation from scratch whenever the scoped node/link set
   // changes (including a mode switch) — fresh objects rather than reusing
   // prior x/y so switching scope doesn't inherit stale full-graph layout
@@ -217,7 +270,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     tickCountRef.current = 0;
     userAdjustedViewRef.current = false;
     setPinnedIds(new Set());
-    setViewBox(DEFAULT_VIEWBOX);
+    setViewBoxImmediate(DEFAULT_VIEWBOX);
     if (rawNodes.length === 0) {
       setNodes([]);
       setLinks([]);
@@ -280,7 +333,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
           // end up pinned to one corner.
           const cx = (minX + maxX) / 2;
           const cy = (minY + maxY) / 2;
-          setViewBox(`${cx - w / 2} ${cy - h / 2} ${w} ${h}`);
+          animateViewBoxTo(`${cx - w / 2} ${cy - h / 2} ${w} ${h}`);
         }
       });
 
@@ -320,7 +373,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
       const cy = vbY + ((e.clientY - rect.top) / rect.height) * vbH;
       const newX = cx - (cx - vbX) * (newW / vbW);
       const newY = cy - (cy - vbY) * (newH / vbH);
-      setViewBox(`${newX} ${newY} ${newW} ${newH}`);
+      setViewBoxImmediate(`${newX} ${newY} ${newW} ${newH}`);
     }
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
@@ -416,7 +469,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
     const [vbX, vbY, vbW, vbH] = startVb;
     const dx = ((e.clientX - startClientX) / rect.width) * vbW;
     const dy = ((e.clientY - startClientY) / rect.height) * vbH;
-    setViewBox(`${vbX - dx} ${vbY - dy} ${vbW} ${vbH}`);
+    setViewBoxImmediate(`${vbX - dx} ${vbY - dy} ${vbW} ${vbH}`);
   }
 
   function onBackgroundPointerUp() {
@@ -427,7 +480,7 @@ export default function GraphView({ onNavigate, activePath }: GraphViewProps) {
   function resetView() {
     userAdjustedViewRef.current = false;
     tickCountRef.current = 0;
-    setViewBox(DEFAULT_VIEWBOX);
+    setViewBoxImmediate(DEFAULT_VIEWBOX);
     setPinnedIds((prev) => {
       for (const n of nodes) {
         if (prev.has(n.id)) {
