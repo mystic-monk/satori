@@ -313,6 +313,15 @@ export default function GraphView({ onNavigate, activePath, initialMode = "full"
       .alphaDecay(0.04) // faster than the ~0.023 default, so the sim
       // reaches a settled low-alpha state in noticeably fewer ticks —
       // less total time spent visibly drifting/jittering.
+      .alphaMin(0.01) // d3's default (0.001) means the sim keeps ticking
+      // — and so keeps re-rendering every node/label position and
+      // re-running the auto-fit below — for a long tail of vanishingly
+      // small corrections, especially in a dense/crowded cluster where
+      // forceCollide's constraint-solving rarely settles to *exactly*
+      // zero. Stopping at a higher (but still well-settled) alpha makes
+      // the simulation commit to "done" and genuinely stop moving,
+      // instead of jittering at a diminishing-but-perceptible rate
+      // indefinitely once the view is zoomed in enough to see it.
       .force("charge", chargeForce)
       .force("link", linkForce)
       .force("center", forceCenter(0, 0))
