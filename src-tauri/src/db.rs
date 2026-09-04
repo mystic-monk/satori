@@ -761,8 +761,10 @@ pub struct SearchResult {
 
 // FTS5 MATCH syntax treats *, ", :, ( ) as special. Strip them and turn each
 // remaining token into a prefix match so partial words work as-you-type —
-// same as server/db.ts's sanitizeFtsQuery.
-fn sanitize_fts_query(q: &str) -> String {
+// same as server/db.ts's sanitizeFtsQuery. pub(crate) (not private) so
+// chat.rs's search_for_chat can reuse it for the same "turn arbitrary
+// typed text into a workable FTS query" job, rather than duplicating it.
+pub(crate) fn sanitize_fts_query(q: &str) -> String {
     let cleaned: String = q
         .chars()
         .map(|c| if "\"*:()".contains(c) { ' ' } else { c })
@@ -815,6 +817,39 @@ pub fn search_notes(conn: &Connection, query: &str) -> Result<Vec<SearchResult>,
                 path: row.get(0)?,
                 title: row.get(1)?,
                 snippet: markify(&snippet),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+// Chat's retrieval step — a separate function from search_notes above
+// rather than a variant of it: this needs the full body (to build a RAG
+// context) instead of a truncated snippet, and has no reason to share
+// search_notes' own behavior/callers. Same bm25-ranked FTS5 query
+// otherwise, same sanitize_fts_query prefix-matching.
+pub struct ChatMatch {
+    pub path: String,
+    pub title: String,
+    pub body: String,
+}
+
+pub fn search_for_chat(conn: &Connection, query: &str, k: i64) -> Result<Vec<ChatMatch>, String> {
+    let fts = sanitize_fts_query(query);
+    if fts.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut stmt = conn
+        .prepare(
+            "SELECT path, title, body FROM notes_fts WHERE notes_fts MATCH ?1 ORDER BY bm25(notes_fts) LIMIT ?2",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![fts, k], |row| {
+            Ok(ChatMatch {
+                path: row.get(0)?,
+                title: row.get(1)?,
+                body: row.get(2)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -899,4 +934,45 @@ pub fn record_card_review(state_conn: &Connection, note_path: &str, rating: Rati
         )
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod chat_search_tests {
+    use super::*;
+
+    fn seed(conn: &Connection, path: &str, title: &str, body: &str) {
+        conn.execute(
+            "INSERT INTO notes_fts (path, title, body) VALUES (?1, ?2, ?3)",
+            params![path, title, body],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn ranks_by_relevance_and_returns_full_body_not_a_snippet() {
+        let conn = open_index(std::path::Path::new(":memory:")).unwrap();
+        seed(&conn, "a.md", "Photosynthesis Notes", "Photosynthesis converts sunlight into chemical energy stored in glucose.");
+        seed(&conn, "b.md", "Roman History", "The Roman Empire was founded by Augustus and lasted for centuries.");
+
+        let results = search_for_chat(&conn, "photosynthesis sunlight", 5).unwrap();
+
+        assert_eq!(results[0].path, "a.md");
+        assert!(results[0].body.contains("chemical energy"), "should return the full body, not a truncated snippet");
+    }
+
+    #[test]
+    fn respects_the_k_limit() {
+        let conn = open_index(std::path::Path::new(":memory:")).unwrap();
+        for i in 0..10 {
+            seed(&conn, &format!("n{i}.md"), &format!("Note {i}"), "shared keyword content here");
+        }
+        assert_eq!(search_for_chat(&conn, "shared keyword", 3).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn returns_empty_for_a_query_that_sanitizes_to_nothing() {
+        let conn = open_index(std::path::Path::new(":memory:")).unwrap();
+        seed(&conn, "a.md", "A", "content");
+        assert_eq!(search_for_chat(&conn, "***\"\"", 5).unwrap().len(), 0);
+    }
 }

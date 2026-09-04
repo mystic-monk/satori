@@ -95,22 +95,27 @@ export async function fetchRelated(p: string, token?: string | null): Promise<Si
   return res.json();
 }
 
+// Matches src-tauri/src/chat.rs's ChatProviderConfig exactly (serde's
+// rename_all = "snake_case" on that enum's variants already lines up with
+// these lowercase tags) — same shape sent to either backend, Node/Express
+// or the Tauri command, depending on IS_TAURI below.
 export type ChatProviderConfig =
   | { kind: "ollama"; baseUrl: string; model: string }
-  | { kind: "cloud"; apiKey: string; baseUrl: string; model: string };
+  | { kind: "openai"; apiKey: string; baseUrl: string; model: string }
+  | { kind: "anthropic"; apiKey: string; baseUrl: string; model: string };
 
 export interface ChatAnswer {
   answer: string;
   sources: { path: string; title: string }[];
 }
 
-// Same v1 scope cut as fetchRelated above, for the same reason — chat's
-// retrieval step depends on the same Node/browser-only embeddings, so it
-// inherits that gap rather than reopening it. Throws (not a silent []),
-// since ChatPanel.tsx needs to distinguish "no provider configured yet"
-// from "this genuinely can't run here" and show the right empty state.
+// Retrieval differs by platform (semantic embeddings here, FTS5 keyword
+// search natively — see chat.rs's own doc comment for why that's a
+// deliberate choice, not a downgrade) but the request/response shape to
+// the caller is identical either way, so ChatPanel.tsx doesn't need to
+// know which backend actually answered.
 export async function sendChatMessage(message: string, provider: ChatProviderConfig): Promise<ChatAnswer> {
-  if (IS_TAURI) throw new Error("Chat isn't available in the native app yet — it needs the same local embeddings Related Notes does.");
+  if (IS_TAURI) return invoke("chat_with_notes", { message, provider });
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

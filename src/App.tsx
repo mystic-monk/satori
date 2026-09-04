@@ -1899,20 +1899,14 @@ export default function App() {
                 <Bell size={17} />
                 <span>Reminders</span>
               </button>
-              {/* Same v1 scope cut as Related Notes (App.tsx's other
-                  !IS_TAURI-gated entry point) — retrieval depends on the
-                  same Node/browser-only embeddings, so this inherits that
-                  gap rather than reopening it. */}
-              {!IS_TAURI && (
-                <button
-                  className={showChat ? "active" : ""}
-                  onClick={() => showSpecialPanel(showChat ? null : "chat")}
-                  title="Chat"
-                >
-                  <Sparkles size={17} />
-                  <span>Chat</span>
-                </button>
-              )}
+              <button
+                className={showChat ? "active" : ""}
+                onClick={() => showSpecialPanel(showChat ? null : "chat")}
+                title="Chat"
+              >
+                <Sparkles size={17} />
+                <span>Chat</span>
+              </button>
             </nav>
           )}
           {isListView && (

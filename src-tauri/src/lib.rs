@@ -1,3 +1,4 @@
+mod chat;
 mod commands;
 mod db;
 mod frontmatter;
@@ -346,6 +347,7 @@ pub fn run() {
             commands::pick_bib_file,
             commands::pick_data_dictionary_file,
             commands::pick_pdf_file,
+            commands::chat_with_notes,
             commands::print_current_window,
             commands::get_due_cards,
             commands::record_card_review,

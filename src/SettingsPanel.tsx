@@ -4,7 +4,7 @@ import { THEMES } from "./themes";
 import { TriangleAlert } from "lucide-react";
 import { IS_TAURI } from "./platform";
 import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "./api";
-import type { ChatSettings } from "./chatConfig";
+import { OPENAI_COMPATIBLE_PRESETS, type ChatSettings } from "./chatConfig";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -273,78 +273,127 @@ export default function SettingsPanel({
           )}
         </div>
 
-        {/* Same reasoning as fetchRelated's Tauri gap — this depends on
-            the same Node/browser-only embeddings Related Notes does, so
-            there's nothing to configure in the native app yet. */}
-        {!IS_TAURI && (
-          <div className="settings-section">
-            <div className="settings-section-label">AI Chat</div>
-            <div className="cloud-role-toggle" role="radiogroup" aria-label="Chat provider">
-              <button
-                className={chatSettings.kind === "ollama" ? "active" : ""}
-                onClick={() => onChatSettingsChange({ ...chatSettings, kind: "ollama" })}
-                aria-pressed={chatSettings.kind === "ollama"}
-              >
-                Local (Ollama)
-              </button>
-              <button
-                className={chatSettings.kind === "cloud" ? "active" : ""}
-                onClick={() => onChatSettingsChange({ ...chatSettings, kind: "cloud" })}
-                aria-pressed={chatSettings.kind === "cloud"}
-              >
-                Cloud API key
-              </button>
-            </div>
-            {chatSettings.kind === "ollama" ? (
-              <div className="cloud-bar">
-                <input
-                  className="cloud-input"
-                  placeholder="Ollama server (http://localhost:11434)"
-                  aria-label="Ollama server address"
-                  value={chatSettings.ollamaBaseUrl}
-                  onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaBaseUrl: e.target.value })}
-                />
-                <input
-                  className="cloud-input"
-                  placeholder="Model (e.g. llama3)"
-                  aria-label="Ollama model name"
-                  value={chatSettings.ollamaModel}
-                  onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaModel: e.target.value })}
-                />
-              </div>
-            ) : (
-              <div className="cloud-bar">
-                <input
-                  className="cloud-input"
-                  placeholder="API base URL (https://api.openai.com/v1)"
-                  aria-label="Cloud chat API base URL"
-                  value={chatSettings.cloudBaseUrl}
-                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudBaseUrl: e.target.value })}
-                />
-                <input
-                  className="cloud-input"
-                  type="password"
-                  placeholder="API key"
-                  aria-label="Cloud chat API key"
-                  value={chatSettings.cloudApiKey}
-                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudApiKey: e.target.value })}
-                />
-                <input
-                  className="cloud-input"
-                  placeholder="Model (e.g. gpt-4o-mini)"
-                  aria-label="Cloud chat model name"
-                  value={chatSettings.cloudModel}
-                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudModel: e.target.value })}
-                />
-              </div>
-            )}
-            <p className="settings-note">
-              {chatSettings.kind === "ollama"
-                ? "Talks to a local Ollama install — nothing leaves your machine. Install Ollama and pull a model separately first."
-                : "Sends your question and relevant note excerpts to this API on every message — not local, opt in deliberately."}
-            </p>
+        {/* Works in both deployments — native mode retrieves via FTS5
+            keyword search (src-tauri/src/chat.rs) instead of the semantic
+            embeddings the Node/browser deployment uses, since fastembed
+            has no Rust path yet. Different retrieval, same provider
+            options either way. */}
+        <div className="settings-section">
+          <div className="settings-section-label">AI Chat</div>
+          <div className="cloud-role-toggle" role="radiogroup" aria-label="Chat provider">
+            <button
+              className={chatSettings.kind === "ollama" ? "active" : ""}
+              onClick={() => onChatSettingsChange({ ...chatSettings, kind: "ollama" })}
+              aria-pressed={chatSettings.kind === "ollama"}
+            >
+              Local (Ollama)
+            </button>
+            <button
+              className={chatSettings.kind === "openai" ? "active" : ""}
+              onClick={() => onChatSettingsChange({ ...chatSettings, kind: "openai" })}
+              aria-pressed={chatSettings.kind === "openai"}
+            >
+              OpenAI-compatible
+            </button>
+            <button
+              className={chatSettings.kind === "anthropic" ? "active" : ""}
+              onClick={() => onChatSettingsChange({ ...chatSettings, kind: "anthropic" })}
+              aria-pressed={chatSettings.kind === "anthropic"}
+            >
+              Anthropic (Claude)
+            </button>
           </div>
-        )}
+          {chatSettings.kind === "ollama" ? (
+            <div className="cloud-bar">
+              <input
+                className="cloud-input"
+                placeholder="Ollama server (http://localhost:11434)"
+                aria-label="Ollama server address"
+                value={chatSettings.ollamaBaseUrl}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaBaseUrl: e.target.value })}
+              />
+              <input
+                className="cloud-input"
+                placeholder="Model (e.g. llama3)"
+                aria-label="Ollama model name"
+                value={chatSettings.ollamaModel}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaModel: e.target.value })}
+              />
+            </div>
+          ) : chatSettings.kind === "openai" ? (
+            <div className="cloud-bar">
+              <select
+                className="cloud-input"
+                aria-label="OpenAI-compatible service preset"
+                value={OPENAI_COMPATIBLE_PRESETS.find((p) => p.baseUrl === chatSettings.openaiBaseUrl)?.baseUrl ?? "custom"}
+                onChange={(e) => {
+                  if (e.target.value !== "custom") onChatSettingsChange({ ...chatSettings, openaiBaseUrl: e.target.value });
+                }}
+              >
+                {OPENAI_COMPATIBLE_PRESETS.map((p) => (
+                  <option key={p.baseUrl} value={p.baseUrl}>
+                    {p.label}
+                  </option>
+                ))}
+                <option value="custom">Custom…</option>
+              </select>
+              <input
+                className="cloud-input"
+                placeholder="API base URL"
+                aria-label="OpenAI-compatible API base URL"
+                value={chatSettings.openaiBaseUrl}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, openaiBaseUrl: e.target.value })}
+              />
+              <input
+                className="cloud-input"
+                type="password"
+                placeholder="API key"
+                aria-label="OpenAI-compatible API key"
+                value={chatSettings.openaiApiKey}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, openaiApiKey: e.target.value })}
+              />
+              <input
+                className="cloud-input"
+                placeholder="Model (e.g. gpt-4o-mini)"
+                aria-label="OpenAI-compatible model name"
+                value={chatSettings.openaiModel}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, openaiModel: e.target.value })}
+              />
+            </div>
+          ) : (
+            <div className="cloud-bar">
+              <input
+                className="cloud-input"
+                placeholder="API base URL (https://api.anthropic.com)"
+                aria-label="Anthropic API base URL"
+                value={chatSettings.anthropicBaseUrl}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, anthropicBaseUrl: e.target.value })}
+              />
+              <input
+                className="cloud-input"
+                type="password"
+                placeholder="API key"
+                aria-label="Anthropic API key"
+                value={chatSettings.anthropicApiKey}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, anthropicApiKey: e.target.value })}
+              />
+              <input
+                className="cloud-input"
+                placeholder="Model (e.g. claude-sonnet-5)"
+                aria-label="Anthropic model name"
+                value={chatSettings.anthropicModel}
+                onChange={(e) => onChatSettingsChange({ ...chatSettings, anthropicModel: e.target.value })}
+              />
+            </div>
+          )}
+          <p className="settings-note">
+            {chatSettings.kind === "ollama"
+              ? "Talks to a local Ollama install — nothing leaves your machine. Install Ollama and pull a model separately first."
+              : chatSettings.kind === "anthropic"
+                ? "A Claude.ai subscription doesn't grant API access — this needs a separate Anthropic API key from console.anthropic.com, billed per use. Sends your question and relevant note excerpts on every message."
+                : "Sends your question and relevant note excerpts to this API on every message — not local, opt in deliberately."}
+          </p>
+        </div>
 
         <div className="settings-section">
           <div className="settings-section-label">Export current note</div>

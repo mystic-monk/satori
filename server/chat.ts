@@ -9,11 +9,14 @@ export interface ChatMessage {
 // Never persisted server-side — sent per-request from the client the same
 // way cloud sync's relay URL/passphrase are client-owned and only ever
 // passed through (SettingsPanel.tsx's "Cloud sync" section is the
-// precedent this mirrors). Two shapes, neither required, neither the
-// sole path — see the plan this was built from for why both exist.
+// precedent this mirrors). Three shapes, none required, none the sole
+// path. Mirrored in src-tauri/src/chat.rs for the native app, which uses
+// FTS5 keyword search here where this file uses semantic embeddings —
+// same provider shapes either way, different retrieval underneath.
 export type ChatProviderConfig =
   | { kind: "ollama"; baseUrl: string; model: string }
-  | { kind: "cloud"; apiKey: string; baseUrl: string; model: string };
+  | { kind: "openai"; apiKey: string; baseUrl: string; model: string }
+  | { kind: "anthropic"; apiKey: string; baseUrl: string; model: string };
 
 const MAX_CONTEXT_CHARS_PER_NOTE = 1500;
 
@@ -52,11 +55,11 @@ export async function ollamaChat(baseUrl: string, model: string, messages: ChatM
 
 // OpenAI-compatible chat-completions shape specifically — covers OpenAI
 // itself plus most third-party OpenAI-compatible endpoints (Groq,
-// Together, a local llama.cpp server, ...) people would plausibly point
-// this at. Anthropic's differently-shaped Messages API is a clean,
-// separate addition later behind this same ChatProviderConfig union, not
-// built here.
-export async function cloudChat(apiKey: string, baseUrl: string, model: string, messages: ChatMessage[]): Promise<string> {
+// OpenRouter, Together, Mistral, a local llama.cpp server, ...) people
+// would plausibly point this at; src/chatConfig.ts's OPENAI_COMPATIBLE_PRESETS
+// is just a base-URL quick-pick over this one function, not separate
+// integrations.
+export async function openaiChat(apiKey: string, baseUrl: string, model: string, messages: ChatMessage[]): Promise<string> {
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -69,10 +72,39 @@ export async function cloudChat(apiKey: string, baseUrl: string, model: string, 
   return content;
 }
 
-async function runProvider(provider: ChatProviderConfig, messages: ChatMessage[]): Promise<string> {
-  return provider.kind === "ollama"
-    ? ollamaChat(provider.baseUrl, provider.model, messages)
-    : cloudChat(provider.apiKey, provider.baseUrl, provider.model, messages);
+// Genuinely different shape from openaiChat above, not a copy: Anthropic's
+// Messages API takes the system prompt as a top-level field (not a
+// message in the array), wants x-api-key/anthropic-version headers
+// instead of a Bearer token, and returns content as an array of blocks
+// rather than a single string.
+export async function anthropicChat(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  system: string,
+  messages: ChatMessage[]
+): Promise<string> {
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      system,
+      messages: messages.filter((m) => m.role !== "system"),
+    }),
+  });
+  if (!res.ok) throw new Error(`Anthropic request failed (${res.status}): ${await res.text()}`);
+  const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+  const content = data.content?.[0]?.text;
+  if (!content) throw new Error("Anthropic response had no content");
+  return content;
+}
+
+async function runProvider(provider: ChatProviderConfig, system: string, messages: ChatMessage[]): Promise<string> {
+  if (provider.kind === "ollama") return ollamaChat(provider.baseUrl, provider.model, messages);
+  if (provider.kind === "openai") return openaiChat(provider.apiKey, provider.baseUrl, provider.model, messages);
+  return anthropicChat(provider.apiKey, provider.baseUrl, provider.model, system, messages);
 }
 
 export interface ChatAnswer {
@@ -89,10 +121,11 @@ export async function answerFromNotes(message: string, provider: ChatProviderCon
   const vector = await embedQuery(message);
   const matches = findSimilarToVector(vector, 5);
   const context = buildContext(matches);
+  const system = `${SYSTEM_PROMPT}\n\n${context}`;
   const messages: ChatMessage[] = [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\n${context}` },
+    { role: "system", content: system },
     { role: "user", content: message },
   ];
-  const answer = await runProvider(provider, messages);
+  const answer = await runProvider(provider, system, messages);
   return { answer, sources: matches.map((m) => ({ path: m.path, title: m.title })) };
 }

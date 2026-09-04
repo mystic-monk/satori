@@ -96,6 +96,16 @@ pub fn search_notes(state: State<AppState>, query: String) -> Result<Vec<db::Sea
 }
 
 #[tauri::command]
+pub fn chat_with_notes(
+    state: State<AppState>,
+    message: String,
+    provider: crate::chat::ChatProviderConfig,
+) -> Result<crate::chat::ChatAnswer, String> {
+    let conn = state.conn.lock().map_err(lock_err)?;
+    crate::chat::answer_from_notes(&conn, &message, &provider)
+}
+
+#[tauri::command]
 pub fn reindex(state: State<AppState>) -> Result<serde_json::Value, String> {
     let conn = state.conn.lock().map_err(lock_err)?;
     let count = db::rebuild_index(&conn, &state.vault)?;
