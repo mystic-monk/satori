@@ -11,6 +11,8 @@ import { yCollab } from "y-codemirror.next";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { checkText, suggest, addWord, type Misspelling } from "./spellcheck";
+import { STYLE_PATTERN, parseStyleAttrs, styleAttrsToCss, styleAttrsToSyntax, type StyleAttrs } from "./styledText";
+import TextStylePopover from "./TextStylePopover";
 
 // oneDark covers all dark app themes reasonably well (an approximation for
 // solarized-dark, not a pixel-perfect match — full per-theme syntax color
@@ -198,8 +200,48 @@ class TaskCheckboxWidget extends WidgetType {
   }
 }
 
-function buildLiveDecorations(view: EditorView): DecorationSet {
+// [text]{color=#hex font=serif} isn't part of the base Markdown/GFM
+// grammar, so there's no Lezer node for it to switch on the way every
+// other case below does — a regex scan over each visible range's own
+// text instead, guarded against firing inside code (InlineCode/
+// FencedCode/IndentedCode), since a match found this way isn't aware of
+// the syntax tree on its own the way an `enter` callback already is.
+function isInsideCode(state: EditorState, pos: number): boolean {
+  let node = syntaxTree(state).resolveInner(pos, 1);
+  while (node) {
+    if (node.name === "InlineCode" || node.name === "FencedCode" || node.name === "IndentedCode") return true;
+    if (!node.parent) break;
+    node = node.parent;
+  }
+  return false;
+}
+
+function buildStyledTextDecorations(view: EditorView): Range<Decoration>[] {
   const ranges: Range<Decoration>[] = [];
+  const { state } = view;
+
+  for (const { from, to } of view.visibleRanges) {
+    const text = state.sliceDoc(from, to);
+    for (const match of text.matchAll(STYLE_PATTERN)) {
+      const matchStart = from + (match.index ?? 0);
+      const innerStart = matchStart + 1; // past "["
+      const innerEnd = innerStart + match[1].length;
+      const matchEnd = matchStart + match[0].length;
+      if (isInsideCode(state, matchStart) || isInsideCode(state, innerEnd)) continue;
+      if (isCursorOnNodeLines(state, matchStart, matchEnd)) continue;
+      const css = styleAttrsToCss(parseStyleAttrs(match[2]));
+      if (!css) continue; // both attrs invalid — leave the brackets as plain text, same as the renderer
+      ranges.push(Decoration.mark({ attributes: { style: css } }).range(innerStart, innerEnd));
+      ranges.push(Decoration.replace({}).range(matchStart, innerStart)); // "["
+      ranges.push(Decoration.replace({}).range(innerEnd, matchEnd)); // "]{attrs}"
+    }
+  }
+
+  return ranges;
+}
+
+function buildLiveDecorations(view: EditorView): DecorationSet {
+  const ranges: Range<Decoration>[] = [...buildStyledTextDecorations(view)];
   const { state } = view;
 
   for (const { from, to } of view.visibleRanges) {
@@ -351,6 +393,14 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [selected, setSelected] = useState(0);
   const [commentTrigger, setCommentTrigger] = useState<{ from: number; to: number; x: number; y: number } | null>(null);
+  const [styleTrigger, setStyleTrigger] = useState<{ from: number; to: number; x: number; y: number } | null>(null);
+  // Set instead when the selection exactly matches an existing
+  // [text]{attrs} span — TextStylePopover pre-fills from these and Apply
+  // replaces the whole match instead of nesting a second wrap around it.
+  const [stylePopoverOpen, setStylePopoverOpen] = useState(false);
+  const [existingStyleMatch, setExistingStyleMatch] = useState<{ from: number; to: number; attrs: StyleAttrs } | null>(
+    null
+  );
   const [misspellingPopup, setMisspellingPopup] = useState<{
     from: number;
     to: number;
@@ -430,6 +480,33 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       setCommentTrigger({ from, to, x: coords.left - hostRect.left, y: coords.bottom - hostRect.top });
     });
 
+    // Same floating-button-on-selection mechanism as the Comment trigger
+    // above, for the [text]{color=#hex font=serif} syntax (styledText.ts).
+    // Gated on !readOnly directly (not a separate prop the way Comment's
+    // onCommentOnSelection is) since applying a style is a plain edit,
+    // not a distinct permission.
+    const styleSelectionWatcher = EditorView.updateListener.of((update) => {
+      if (readOnly || !update.selectionSet) return;
+      const { from, to } = update.view.state.selection.main;
+      if (from === to) {
+        setStyleTrigger(null);
+        return;
+      }
+      const coords = update.view.coordsAtPos(to);
+      if (!coords) {
+        setStyleTrigger(null);
+        return;
+      }
+      const hostRect = hostRef.current!.getBoundingClientRect();
+      // +30 on y: the Comment trigger above anchors at this same
+      // coordsAtPos(to) point, so without an offset the two buttons stack
+      // exactly on top of each other whenever both are available (only
+      // the topmost is ever clickable) — stacking Style's trigger just
+      // below Comment's instead of guessing at Comment's own pixel width
+      // to offset sideways.
+      setStyleTrigger({ from, to, x: coords.left - hostRect.left, y: coords.bottom - hostRect.top + 30 });
+    });
+
     // Debounced (600ms of no typing) rather than on every keystroke — a
     // Hunspell pass over a whole chapter is cheap but not free, and no one
     // needs underlines to repaint mid-word. "auto" only; "off" leaves
@@ -499,6 +576,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         yCollab(ytext, awareness, { undoManager }),
         slashWatcher,
         selectionWatcher,
+        styleSelectionWatcher,
         spellcheckWatcher,
         misspellingClickHandler,
         commentRangesField,
@@ -623,6 +701,65 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     }
   }
 
+  // Scans the line(s) spanning [from, to] for an existing [text]{attrs}
+  // match whose inner range exactly equals the current selection — lets
+  // the popover pre-fill and Apply *replace* that span instead of
+  // wrapping a second one around it. An overlapping-but-not-exact
+  // selection (e.g. only part of an existing span, or the span plus
+  // surrounding text) is treated as "no existing match" — deliberately:
+  // guessing at partial-overlap intent risks mangling text neither this
+  // click nor a plain re-selection asked for.
+  function findExistingStyleMatch(view: EditorView, from: number, to: number): { from: number; to: number; attrs: StyleAttrs } | null {
+    const firstLine = view.state.doc.lineAt(from);
+    const lastLine = view.state.doc.lineAt(to);
+    const text = view.state.sliceDoc(firstLine.from, lastLine.to);
+    for (const match of text.matchAll(STYLE_PATTERN)) {
+      const matchStart = firstLine.from + (match.index ?? 0);
+      const innerStart = matchStart + 1;
+      const innerEnd = innerStart + match[1].length;
+      const matchEnd = matchStart + match[0].length;
+      if (innerStart === from && innerEnd === to) {
+        return { from: matchStart, to: matchEnd, attrs: parseStyleAttrs(match[2]) };
+      }
+    }
+    return null;
+  }
+
+  function openStylePopover() {
+    const view = viewRef.current;
+    if (!view || !styleTrigger) return;
+    setExistingStyleMatch(findExistingStyleMatch(view, styleTrigger.from, styleTrigger.to));
+    setStylePopoverOpen(true);
+  }
+
+  function applyTextStyle(attrs: StyleAttrs) {
+    const view = viewRef.current;
+    if (!view || !styleTrigger) return;
+    const css = styleAttrsToCss(attrs);
+    if (existingStyleMatch) {
+      // Replace the whole existing [text]{attrs} span — if both attrs
+      // were cleared, that means leaving the plain inner text behind
+      // with no wrapper at all, not an empty {}.
+      const inner = view.state.sliceDoc(styleTrigger.from, styleTrigger.to);
+      const insert = css ? `[${inner}]${styleAttrsToSyntax(attrs)}` : inner;
+      view.dispatch({ changes: { from: existingStyleMatch.from, to: existingStyleMatch.to, insert } });
+    } else if (css) {
+      // Two-part insert around the untouched selection (not a replace-
+      // and-retype) so the wrapped text itself, cursor position, and
+      // undo history all behave normally.
+      view.dispatch({
+        changes: [
+          { from: styleTrigger.from, insert: "[" },
+          { from: styleTrigger.to, insert: `]${styleAttrsToSyntax(attrs)}` },
+        ],
+      });
+    }
+    setStylePopoverOpen(false);
+    setStyleTrigger(null);
+    setExistingStyleMatch(null);
+    view.focus();
+  }
+
   function applySuggestion(word: string) {
     const view = viewRef.current;
     if (!view || !misspellingPopup) return;
@@ -678,6 +815,37 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         >
           💬 Comment
         </button>
+      )}
+      {styleTrigger && !stylePopoverOpen && (
+        <button
+          className="style-selection-trigger"
+          style={{ left: styleTrigger.x, top: styleTrigger.y }}
+          onMouseDown={(e) => {
+            e.preventDefault(); // keeps the selection from collapsing before the click registers
+            // Also stop this same mousedown from reaching document — the
+            // popover about to open attaches its own document-level
+            // mousedown listener (for click-outside-to-close) essentially
+            // immediately, and without this it can catch this originating
+            // click and close itself before ever becoming visible.
+            e.stopPropagation();
+            openStylePopover();
+          }}
+        >
+          🎨 Style
+        </button>
+      )}
+      {styleTrigger && stylePopoverOpen && (
+        <TextStylePopover
+          x={styleTrigger.x}
+          y={styleTrigger.y}
+          initial={existingStyleMatch?.attrs ?? {}}
+          onApply={applyTextStyle}
+          onClose={() => {
+            setStylePopoverOpen(false);
+            setStyleTrigger(null);
+            setExistingStyleMatch(null);
+          }}
+        />
       )}
       {misspellingPopup && (
         <div className="spellcheck-popup" style={{ left: misspellingPopup.x, top: misspellingPopup.y }}>

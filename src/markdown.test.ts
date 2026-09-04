@@ -124,3 +124,60 @@ describe("math placeholders (KaTeX rendering is deferred, see math-render.ts)", 
     expect(html).toContain("data-tex=\"a &lt; b\"");
   });
 });
+
+describe("[text]{color=#hex font=serif} styled-text rendering", () => {
+  it("renders a valid color as a styled span", () => {
+    const html = renderNoteBody("[red text]{color=#ff0000}", env());
+    expect(html).toContain('<span style="color: #ff0000">red text</span>');
+  });
+
+  it("renders a valid font as a styled span", () => {
+    const html = renderNoteBody("[mono text]{font=mono}", env());
+    expect(html).toContain("<span style=\"font-family:");
+    expect(html).toContain("mono text</span>");
+  });
+
+  it("renders combined color and font in one span", () => {
+    const html = renderNoteBody("[both]{color=#00ff00 font=serif}", env());
+    expect(html).toContain("color: #00ff00");
+    expect(html).toContain("font-family:");
+  });
+
+  it("falls back to plain (unstyled) text when the color is invalid", () => {
+    const html = renderNoteBody("[plain]{color=notacolor}", env());
+    expect(html).not.toContain("<span");
+    expect(html).toContain("plain");
+  });
+
+  it("does not collide with a plain markdown link", () => {
+    const html = renderNoteBody("[a link](https://example.com)", env());
+    expect(html).toContain('href="https://example.com"');
+    expect(html).not.toContain("<span style");
+  });
+
+  it("does not collide with a wikilink", () => {
+    const html = renderNoteBody("[[Target Note]]", env());
+    expect(html).not.toContain("<span style");
+  });
+
+  it("does not collide with a citation", () => {
+    const html = renderNoteBody("[@somekey]", env());
+    expect(html).toContain("citation");
+    expect(html).not.toContain("<span style");
+  });
+
+  it("escapes embedded quotes in the font stack so the style attribute isn't corrupted", () => {
+    const html = renderNoteBody("[serif text]{font=serif}", env());
+    // FONT_STACKS.serif contains literal "Times New Roman" — unescaped,
+    // that " would end the style="..." attribute early and the rest
+    // would parse as bogus separate HTML attributes.
+    expect(html).toContain('style="font-family: Georgia, Cambria, &quot;Times New Roman&quot;, Times, serif"');
+    expect(html).not.toContain('times=""');
+  });
+
+  it("escapes HTML-significant characters in the styled text", () => {
+    const html = renderNoteBody("[<script>]{color=#ff0000}", env());
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});

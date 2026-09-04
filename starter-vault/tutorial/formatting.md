@@ -15,8 +15,12 @@ tags: [tutorial]
 | `` `inline code` `` | `inline code` |
 | `==highlight==` | ==highlight== |
 | `%%inline comment%%` | %%inline comment%% |
+| `[colored text]{color=#e05252}` | [colored text]{color=#e05252} |
+| `[a different font]{font=serif}` | [a different font]{font=serif} |
 
 The inline comment renders with a 💬 marker — meant for annotating without touching the "real" text underneath it.
+
+Select any text and a **🎨 Style** button appears above it — pick a color and/or a font (serif, sans, mono, or rounded) and Apply. Selecting already-styled text and clicking it again lets you change or clear what's there instead of stacking a new style on top.
 
 ## Headings, lists, tables
 

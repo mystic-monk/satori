@@ -2,6 +2,7 @@ import MarkdownIt from "markdown-it";
 import { extractWikilinkRefs as extractWikilinkRefsFromBody, type WikilinkRef } from "../shared/wikilinks.js";
 import { fragmentLabel, resolveFragment, stripBlockMarker } from "../shared/blockrefs.js";
 import { parseTimetable, renderTimetableHtml } from "./timetable";
+import { parseStyleAttrs, styleAttrsToCss, type StyleAttrs } from "./styledText";
 
 type MDInstance = InstanceType<typeof MarkdownIt>;
 // The full "highlight.js" package bundles ~190 languages (~1MB+) eagerly;
@@ -247,6 +248,53 @@ function highlightsAndCommentsPlugin(md: MDInstance) {
   );
 }
 
+// [styled text]{color=#hex font=serif} — per-selection font/color, applied
+// via the floating "Style" button on a text selection (Editor.tsx). Same
+// "before link" registration as wikilinks below and for the same reason:
+// [ is also how a plain markdown link starts, so this needs first refusal
+// on it. Requiring "]" to be *immediately* followed by "{" is what keeps
+// this from ever colliding with [[wikilink]], [@citation], [text](url), or
+// [text][ref] — none of those have a { right after their closing ] — so
+// unlike wikilink/citation there's no need to also special-case those
+// prefixes here; a plain [ that isn't followed by "]{" just falls through
+// to whichever other inline rule actually wants it.
+function styledTextPlugin(md: MDInstance) {
+  md.inline.ruler.before("link", "styled_text", (state, silent) => {
+    const src = state.src;
+    const pos = state.pos;
+    if (src[pos] !== "[") return false;
+    const closeBracket = src.indexOf("]", pos + 1);
+    if (closeBracket === -1 || src[closeBracket + 1] !== "{") return false;
+    const closeBrace = src.indexOf("}", closeBracket + 2);
+    if (closeBrace === -1) return false;
+
+    if (!silent) {
+      const inner = src.slice(pos + 1, closeBracket);
+      const attrsRaw = src.slice(closeBracket + 2, closeBrace);
+      const token = state.push("styled_text", "", 0);
+      token.meta = parseStyleAttrs(attrsRaw) as unknown as Record<string, unknown>;
+      token.content = inner;
+    }
+    state.pos = closeBrace + 1;
+    return true;
+  });
+
+  md.renderer.rules.styled_text = (tokens, idx) => {
+    const token = tokens[idx];
+    const css = styleAttrsToCss((token.meta ?? {}) as StyleAttrs);
+    // Both attrs invalid/absent (styleAttrsToCss returns "") — render the
+    // inner text plain rather than an empty style="" attribute.
+    if (!css) return md.utils.escapeHtml(token.content);
+    // escapeHtml on the CSS value too, not just the text content — the
+    // font stacks in styledText.ts's FONT_STACKS contain literal "quoted
+    // font names", and interpolating that unescaped into style="..." lets
+    // the embedded " end the attribute early, corrupting the surrounding
+    // HTML (the rest of the stack ends up parsed as bogus extra
+    // attributes rather than part of the style value).
+    return `<span style="${md.utils.escapeHtml(css)}">${md.utils.escapeHtml(token.content)}</span>`;
+  };
+}
+
 // `- [ ] text` / `- [x] text` list items become an interactive checkbox.
 // Runs as a core rule after inline parsing (not a custom inline/block rule)
 // because it needs to inspect an already-parsed list item's first inline
@@ -471,6 +519,7 @@ md.use(wikilinksPlugin);
 md.use(blockIdMarkerPlugin);
 md.use(citationsPlugin);
 md.use(highlightsAndCommentsPlugin);
+md.use(styledTextPlugin);
 md.use(taskListsPlugin);
 
 // ```mermaid fenced blocks render as diagrams. Mermaid needs an async,
