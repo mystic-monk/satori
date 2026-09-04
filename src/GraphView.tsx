@@ -50,6 +50,15 @@ const DEFAULT_VIEWBOX = `${-WIDTH / 2} ${-HEIGHT / 2} ${WIDTH} ${HEIGHT}`;
 const MAX_LABEL_LEN = 28;
 const MIN_ZOOM_W = 80;
 const MAX_ZOOM_W = 6000;
+// Ceiling on the *auto-fit* box specifically (well under MAX_ZOOM_W, which
+// is how far someone can deliberately scroll-zoom out by hand) — a weakly-
+// connected node only feels the global centering force, not the link
+// force, so it can drift well outside the main cluster before the
+// simulation settles. Left uncapped, the auto-fit used to zoom out to fit
+// that single stray node, shrinking everything else's labels to an
+// illegible smudge for a graph that otherwise would have framed nicely.
+const MAX_FIT_W = WIDTH * 2.5;
+const MAX_FIT_H = HEIGHT * 2.5;
 
 // Same category set as App.tsx's NoteTypeIcon, so a type reads the same
 // color wherever it shows up — a class per type rather than an inline
@@ -331,8 +340,8 @@ export default function GraphView({ onNavigate, activePath, initialMode = "full"
           const maxX = Math.max(...xs) + pad;
           const minY = Math.min(...ys) - pad;
           const maxY = Math.max(...ys) + pad;
-          const w = Math.max(maxX - minX, 240);
-          const h = Math.max(maxY - minY, 180);
+          const w = Math.min(Math.max(maxX - minX, 240), MAX_FIT_W);
+          const h = Math.min(Math.max(maxY - minY, 180), MAX_FIT_H);
           // Center the fitted box the same way the box itself is centered,
           // rather than anchoring to minX/minY, so a small cluster doesn't
           // end up pinned to one corner.
