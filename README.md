@@ -17,18 +17,19 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 ## Features
 
 **Writing & organizing**
-- Markdown editing with live preview (CodeMirror 6), formatting shortcuts, Mermaid diagrams, KaTeX math, callouts, highlights
+- Three editing modes — **Live** (the default: headings/bold/italic/strikethrough/code/blockquotes/task checkboxes render styled inline, raw markup only shown on the cursor's current line), **Source** (exact raw text), and **Preview** (full rendering — Mermaid diagrams, KaTeX math, callouts, highlights, query blocks, wikilinks) — switchable without losing cursor position or undo history
 - Syntax-highlighted code blocks with a one-click copy button; the editor itself syntax-highlights ~180 languages as you type
 - Interactive task/checkbox lists (`- [ ]`) — click to toggle, right in preview
 - Excalidraw canvas notes, embedded natively
-- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections. Nodes are draggable (reheats the layout, so neighbors nudge out of the way rather than just repositioning the one node), double-click to pin one in place, scroll to zoom toward the cursor, drag the background to pan
+- Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections. Nodes are draggable (reheats the layout, so neighbors nudge out of the way rather than just repositioning the one node), double-click to pin one in place, scroll to zoom toward the cursor, drag the background to pan. A small query language (`degree > 5`, `type: project`, `connected: [[Note]]`, `isolated`) filters the graph itself, on top of plain-text search
 - Section and block references: `[[Note#Heading]]` links/embeds just that section, `[[Note#^block-id]]` links/embeds one specific line — not just whole-note transclusion
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
 - PDF import: drag a PDF onto the sidebar, paste one, or **+ Create → Import PDF…** — creates a searchable `type: reference` note (extracted text) plus an annotatable note seeded with every page as an image, markable up with the same pen tool Canvas notes use
 - Full-text search (SQLite FTS5)
 - **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
 - **Chat with your notes**: ask a question, get an answer grounded in — and citing — the notes it's actually drawn from. Works in every deployment, including the native app — Node/browser retrieves by meaning (local semantic embeddings, same as Related Notes), the native app retrieves by full-text keyword search instead, since it has no embeddings path yet. Pick a local Ollama server (private, nothing leaves your machine), an OpenAI-compatible key (OpenAI, Groq, OpenRouter, Together AI, Mistral, or a custom endpoint), or an Anthropic (Claude) API key — entirely your call, none required
-- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Projects / Table / Reminders)
+- Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Projects / Graph / Table / Flashcards / Reminders / Chat). All Notes, Canvas, Projects, and Flashcards each open as a tile grid in the main panel — click a nav item and see what's actually there, not a blank screen until you pick something from the sidebar
+- Data dictionary import: **+ Create → Import Data Dictionary…** reads a CSV (one row per column, grouped by table) and creates one note per table, with foreign keys becoming real `[[wikilinks]]` to the referenced table — shows up in Graph/Backlinks like any other link
 - Tabs for open notes — every note you visit stays open in its own tab (persists across restarts, Cmd/Ctrl+Option+Right/Left to cycle) instead of replacing whatever was open before
 - A command palette (⌘K) for jumping to any note or action instantly
 - Quick Capture: a global hotkey (⌘⇧N) opens a small always-on-top window for jotting a thought with zero friction, even when Satori isn't focused

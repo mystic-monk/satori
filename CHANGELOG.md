@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-04
+
 ### Added
 
 - All Notes gets the same tile-grid treatment Canvas/Projects/Flashcards already have (`src/AllNotesGridView.tsx`) — the main panel used to just sit on a bare "No note open" placeholder the whole time you were browsing the sidebar list (All Notes, Favorites, or a type filter), instead of showing what's actually in it the way every other nav destination does. Each tile carries its `NoteTypeIcon` (now takes an optional `size`/`className` rather than a fixed 13px) since, unlike Canvas/Flashcards' single-type grids, All Notes is a mixed bag — plus tags where a note has any, date otherwise. Search results are unaffected — this only replaces the empty placeholder, not the sidebar's own list or search behavior

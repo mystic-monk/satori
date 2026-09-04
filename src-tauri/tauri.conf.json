@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Satori",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "identifier": "dev.satori.app",
   "build": {
     "frontendDist": "../dist",
