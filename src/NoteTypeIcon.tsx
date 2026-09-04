@@ -2,21 +2,30 @@ import { BookOpen, Brain, Calendar, FileStack, FileText, LayoutTemplate, Paintbr
 
 // Same category set GraphView.tsx's node coloring uses, so a type reads
 // the same way wherever it shows up (rail icons, History view, etc).
-export default function NoteTypeIcon({ type }: { type: string | null }) {
+export default function NoteTypeIcon({
+  type,
+  size = 13,
+  className = "",
+}: {
+  type: string | null;
+  size?: number;
+  className?: string;
+}) {
+  const cls = (typeClass: string) => [className, typeClass].filter(Boolean).join(" ");
   switch (type) {
     case "daily":
-      return <Calendar size={13} className="type-color-daily" />;
+      return <Calendar size={size} className={cls("type-color-daily")} />;
     case "canvas":
-      return <Paintbrush size={13} className="type-color-canvas" />;
+      return <Paintbrush size={size} className={cls("type-color-canvas")} />;
     case "flashcard":
-      return <Brain size={13} className="type-color-flashcard" />;
+      return <Brain size={size} className={cls("type-color-flashcard")} />;
     case "template":
-      return <LayoutTemplate size={13} className="type-color-template" />;
+      return <LayoutTemplate size={size} className={cls("type-color-template")} />;
     case "reference":
-      return <BookOpen size={13} className="type-color-reference" />;
+      return <BookOpen size={size} className={cls("type-color-reference")} />;
     case null:
-      return <FileText size={13} />;
+      return <FileText size={size} className={className || undefined} />;
     default:
-      return <FileStack size={13} className="type-color-other" />;
+      return <FileStack size={size} className={cls("type-color-other")} />;
   }
 }

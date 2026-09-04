@@ -2517,6 +2517,13 @@ button:disabled:hover {
   opacity: 0.9;
 }
 
+.tile-grid-empty {
+  max-width: 900px;
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 .tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

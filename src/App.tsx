@@ -59,6 +59,7 @@ import FlashcardGridView from "./FlashcardGridView";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
 import ProjectGridView from "./ProjectGridView";
+import AllNotesGridView from "./AllNotesGridView";
 import TabStrip from "./TabStrip";
 import RemindersView from "./RemindersView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
@@ -2303,6 +2304,18 @@ export default function App() {
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.
           </div>
+        ) : isListView && !results && !activePath ? (
+          // Same tile-grid pattern Canvas/Projects/Flashcards already use —
+          // previously the main panel sat on a bare "No note open"
+          // placeholder the entire time you were just browsing the list
+          // (All Notes, Favorites, or a type filter), instead of showing
+          // what's actually in it the way every other nav destination does.
+          <AllNotesGridView
+            notes={displayedNotes}
+            onNavigate={openNote}
+            onNewNote={onNewNote}
+            emptyLabel={sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}
+          />
         ) : activePath && localSession ? (
           <>
             {isCanvas || isPdf ? (
