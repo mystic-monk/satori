@@ -494,14 +494,17 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  flex: 1;
-  /* Without this, a flex item's default min-height:auto means it won't
-     shrink below its content's natural height — so a long note list
-     grows the whole sidebar instead of scrolling internally, pushing
-     .sidebar-footer down to wherever the list happens to end instead of
-     staying pinned to the bottom of the actual window. */
-  min-height: 0;
+  /* Not flex:1 — .sidebar-scroll (its parent) is the single scroll
+     region for the whole sidebar, and .note-list sits below several
+     other flex siblings there (For You, History, Tutorials, ...). A
+     flex:1 + min-height:0 item takes a flex-basis of 0 and only grows
+     into space left over after its siblings — once those siblings'
+     combined natural height already fills or exceeds the scroll
+     container, there's no space left to grow into and the list
+     collapses to 0px, hiding real <li> content entirely. Rendering at
+     natural height and letting .sidebar-scroll do the scrolling avoids
+     that collapse.
+  */
 }
 
 .note-list li {
