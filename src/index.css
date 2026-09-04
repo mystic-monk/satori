@@ -371,6 +371,55 @@ body {
   color: var(--bg);
 }
 
+.app-topbar-persona-wrap {
+  position: relative;
+}
+
+.persona-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.persona-menu button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 7px 8px;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: 4px;
+}
+
+.persona-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.persona-menu button.active {
+  background: var(--bg-active);
+  font-weight: 500;
+}
+
+.persona-menu-clear {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 8px !important;
+  color: var(--text-dim) !important;
+}
+
 /* The row that used to be .app's own direct flex layout — sidebar/main/
    right-panel — now nested one level in, below the top bar. */
 .app-body {
@@ -770,35 +819,6 @@ body {
 
 .sidebar-section-chevron.open {
   transform: rotate(90deg);
-}
-
-.persona-shortcut-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.persona-shortcut-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 12px;
-  font-size: 13px;
-  color: var(--text);
-  background: transparent;
-  border: none;
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-
-.persona-shortcut-item:hover {
-  background: var(--bg-hover);
-}
-
-.persona-shortcut-item svg {
-  flex-shrink: 0;
-  color: var(--text-dim);
 }
 
 .note-list-compact {
@@ -4664,4 +4684,67 @@ button:disabled:hover {
 .chat-input-row button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* ProductTour.tsx — z-index 1000 matches .timetable-fullscreen-overlay's
+   "above genuinely everything, including an open modal" precedent
+   (every other overlay in this app tops out at .modal-backdrop's 30). */
+.product-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.product-tour-cutout {
+  position: fixed;
+  border-radius: 8px;
+  /* The dim layer itself — a giant spread box-shadow around a
+     transparent box, so the box's own rect is a genuine hole rather
+     than a painted-to-look-transparent one. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+
+.product-tour-tooltip {
+  position: fixed;
+  z-index: 1;
+  width: 300px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: top 0.25s ease, left 0.25s ease;
+}
+
+.product-tour-tooltip h4 {
+  margin: 4px 0 8px;
+  font-size: 15px;
+}
+
+.product-tour-tooltip p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.product-tour-step-count {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.product-tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.product-tour-nav {
+  display: flex;
+  gap: 6px;
 }

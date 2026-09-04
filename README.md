@@ -59,6 +59,8 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Auto-updates: checks for new releases and installs them in place
 - A real native menu bar and a proper vault picker (choose or create your notes folder on first launch)
 - A new, empty vault is seeded with a real built-in tutorial — written and kept up to date using the app's own features (wikilinks, embeds, callouts, citations, task lists), not a static walkthrough
+- An interactive product tour on first launch (dimmed screen, a spotlight around one real button at a time, a short tooltip) — skippable, and replayable any time from Settings
+- Pick "what kind of user you are" (Author, Researcher, Student, Journaler, ...) from the top bar, and the first pick offers to create a couple of real starter notes matching that workflow — a Project + Character for an Author, example flashcards for a Student, a starter Canvas for a Visual thinker, and so on — never silent, always confirmed first
 - Ten built-in themes (Dark, Light, Solarized Dark/Light, Nord, Dracula, Gruvbox Dark/Light, Catppuccin Mocha/Latte)
 - Also runs as a browser-based web app if you'd rather self-host it that way
 

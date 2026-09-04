@@ -18,7 +18,8 @@ class MemoryStorage {
 }
 (globalThis as unknown as { localStorage: MemoryStorage }).localStorage = new MemoryStorage();
 
-const { clearEmailIdentity, getIdentity, setDisplayName, setIdentityFromEmail } = await import("./identity");
+const { clearEmailIdentity, getIdentity, setDisplayName, setIdentityFromEmail, setPersona, markPersonaSeeded } =
+  await import("./identity");
 
 beforeEach(() => {
   localStorage.clear();
@@ -77,6 +78,35 @@ describe("getIdentity self-heal", () => {
       JSON.stringify({ id: "id", name: "Ada Lovelace", color: "#30bced", email: "ada@example.com" })
     );
     expect(getIdentity().name).toBe("Ada Lovelace");
+  });
+});
+
+describe("markPersonaSeeded", () => {
+  it("records a persona as seeded", () => {
+    setPersona("author");
+    expect(getIdentity().seededPersonas).toBeUndefined();
+    markPersonaSeeded("author");
+    expect(getIdentity().seededPersonas).toEqual(["author"]);
+  });
+
+  it("accumulates across different personas", () => {
+    markPersonaSeeded("author");
+    markPersonaSeeded("student");
+    expect(getIdentity().seededPersonas).toEqual(["author", "student"]);
+  });
+
+  it("does not duplicate an already-seeded persona", () => {
+    markPersonaSeeded("author");
+    markPersonaSeeded("author");
+    expect(getIdentity().seededPersonas).toEqual(["author"]);
+  });
+
+  it("survives clearing and re-picking the same persona (the whole point of tracking it separately from persona itself)", () => {
+    setPersona("author");
+    markPersonaSeeded("author");
+    setPersona(undefined);
+    setPersona("author");
+    expect(getIdentity().seededPersonas).toEqual(["author"]);
   });
 });
 

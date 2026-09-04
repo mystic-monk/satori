@@ -87,7 +87,6 @@ import { resolveFragment } from "../shared/blockrefs";
 import { parseBlockDoc, flattenAllBlockText, createBlock, serializeBlockDoc } from "./blockTree";
 import {
   Bell,
-  BookOpen,
   Brain,
   Calendar,
   ChevronRight,
@@ -114,12 +113,20 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { getIdentity, getPersona, PERSONA_SHORTCUTS, type PersonaShortcut } from "./identity";
+import {
+  getIdentity,
+  getPersona,
+  setPersona,
+  markPersonaSeeded,
+  PERSONAS,
+  PERSONA_STARTER_CONTENT,
+} from "./identity";
 import IdentityPanel from "./IdentityPanel";
 import { getRecent, recordOpened, pruneDeleted, type RecentNote } from "./recentNotes";
 import { getOpenTabs, saveOpenTabs, openTab, closeTab, pruneOpenTabs } from "./openTabs";
 import { queryNotes } from "./noteQuery";
 import TemplatePickerDialog from "./TemplatePickerDialog";
+import ProductTour from "./ProductTour";
 import { getStoredTheme, applyTheme, isDarkTheme } from "./themes";
 import { setMermaidDark } from "./mermaid-render";
 import { useResizableWidth } from "./useResizableWidth";
@@ -169,17 +176,6 @@ type ViewMode = "source" | "preview" | "live";
 // to switch into.
 type SidebarView = "all" | "favorites";
 
-// PersonaShortcut.icon is a plain string key (identity.ts stays a plain
-// logic module, no React/lucide import) — this is the one place it gets
-// mapped to an actual icon component.
-const PERSONA_SHORTCUT_ICONS = {
-  tutorial: BookOpen,
-  journal: Calendar,
-  table: Table2,
-  canvas: Paintbrush,
-  flashcards: Brain,
-} as const;
-
 export default function App() {
   const [notes, setNotes] = useState<NoteListItem[]>([]);
   const [types, setTypes] = useState<{ type: string; count: number }[]>([]);
@@ -216,6 +212,23 @@ export default function App() {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [reminderPopupOpen]);
+  const [personaMenuOpen, setPersonaMenuOpen] = useState(false);
+  const personaMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!personaMenuOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (personaMenuRef.current && !personaMenuRef.current.contains(e.target as Node)) {
+        setPersonaMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [personaMenuOpen]);
+  // Confirmation before seeding starter notes for a freshly-picked persona
+  // (never silent — switching persona shouldn't surprise anyone with new
+  // notes appearing) — set once onPersonaChange below decides seeding
+  // applies, cleared on confirm/cancel either way.
+  const [pendingPersonaSeed, setPendingPersonaSeed] = useState<string | null>(null);
   // Keyed by "path:remind_at" (reminderSchedule.ts) so editing a reminder
   // to a new time can fire again — reset per app load, not persisted,
   // same "session-local" scope as everything else in this feature (see
@@ -301,16 +314,6 @@ export default function App() {
       return !collapsed;
     });
   }
-  // Defaults to expanded (unlike the right panel above) — the whole point
-  // of this section is to be seen at least once; collapsing it is
-  // something the user opts into, not the default state.
-  const [foryouCollapsed, setForyouCollapsed] = useState(() => localStorage.getItem("pkm-foryou-collapsed") === "1");
-  function toggleForyouCollapsed() {
-    setForyouCollapsed((collapsed) => {
-      localStorage.setItem("pkm-foryou-collapsed", collapsed ? "0" : "1");
-      return !collapsed;
-    });
-  }
   // History/Tutorials used to be full-panel rail destinations; now they're
   // collapsible inline sections like Favorites, but — unlike "For you"
   // above — default to COLLAPSED: secondary/glanceable content, not
@@ -376,6 +379,22 @@ export default function App() {
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templatePath, setTemplatePath] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  // Auto-opens once, the very first time — never again after finishing
+  // OR skipping (both count as "seen," same as a dismissed banner never
+  // nagging a returning user). Skipped entirely for a shareToken guest
+  // session — a tour of your own app's chrome isn't useful to someone
+  // who only has one shared note and no sidebar/rail to speak of.
+  useEffect(() => {
+    if (shareToken) return;
+    if (localStorage.getItem("pkm-tour-seen") === "1") return;
+    setTourOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function closeTour() {
+    localStorage.setItem("pkm-tour-seen", "1");
+    setTourOpen(false);
+  }
 
   const [localSession, setLocalSession] = useState<CollabHandle | null>(null);
   const [raw, setRaw] = useState("");
@@ -907,27 +926,6 @@ export default function App() {
     if (notes.some((n) => n.path === todayPath)) setActivePath(todayPath);
   }
 
-  // A "For you" shortcut is either a tutorial page (opens at the top, no
-  // fragment — see identity.ts's PersonaShortcut doc comment) or a nav
-  // view, dispatched through the exact same calls the real sidebar-nav
-  // buttons make so it behaves identically to clicking that nav item.
-  function onPersonaShortcutClick(shortcut: PersonaShortcut) {
-    if (shortcut.tutorialPath) {
-      openNote(shortcut.tutorialPath);
-      return;
-    }
-    if (shortcut.navView === "canvas") {
-      showSpecialPanel("canvas");
-    } else if (shortcut.navView === "journal") {
-      openJournal();
-    } else if (shortcut.navView === "flashcards") {
-      setFlashcardsMode("grid");
-      showSpecialPanel("flashcards");
-    } else if (shortcut.navView) {
-      showSpecialPanel(shortcut.navView);
-    }
-  }
-
   // Toggles the `favorite` frontmatter property directly — not a separate
   // local-only list — so it's consistent across devices/collaborators on
   // the same vault, same principle as `type`/`tags`.
@@ -1051,6 +1049,55 @@ export default function App() {
     }
   }
 
+  // Shared by the interactive New Note/New From Template flow below and
+  // persona starter-content seeding (onPersonaChange) — extracted from
+  // what used to be submitCreatePrompt's own inline "note" branch so
+  // seeding doesn't have to duplicate the {{title}}/{{date}} substitution
+  // and note_type -> type promotion logic. templatePath null builds a
+  // plain note the same shape onNewNote's own no-template case always
+  // has (opts.tags/opts.body, defaulting to the exact empty-note shape
+  // that path already produced before this extraction).
+  async function createNoteFromTemplate(
+    templatePath: string | null,
+    title: string,
+    opts?: { tags?: string[]; body?: string; extraFrontmatter?: Record<string, unknown> }
+  ): Promise<string> {
+    const slug = title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const p = uniqueNotePath(slug);
+    let template: string;
+    if (templatePath) {
+      const templateNote = await fetchNote(templatePath, shareToken);
+      const parsed = parseFrontmatter(templateNote.raw);
+      const date = new Date().toISOString().slice(0, 10);
+      const body = parsed.body.replaceAll("{{date}}", date).replaceAll("{{title}}", title);
+      // The template's own `type` is always "template" (that's the whole
+      // convention — see TemplatePickerDialog.tsx) and is never carried
+      // over as-is, or a note created from one would itself show up as a
+      // template next time. What the CREATED note's real type should be
+      // is a separate declaration, `note_type` (e.g. book.md carries
+      // `note_type: book`) — without it a created note used to end up
+      // permanently untyped, silently breaking anything that keys off
+      // that type afterwards (Book's "Compile chapters" export, its own
+      // `type: chapter` query block, Project's share-scoping, ...).
+      const { type: _templateType, note_type, ...rest } = parsed.data;
+      template = stringifyFrontmatter(
+        { ...rest, ...(note_type ? { type: note_type } : {}), title, ...(opts?.extraFrontmatter ?? {}) },
+        body
+      );
+    } else {
+      template = stringifyFrontmatter(
+        { title, tags: opts?.tags ?? [], ...(opts?.extraFrontmatter ?? {}) },
+        opts?.body ?? "\n"
+      );
+    }
+    await createNote(p, template);
+    return p;
+  }
+
   async function submitCreatePrompt(title: string) {
     const mode = createPromptMode;
     const chosenTemplatePath = templatePath;
@@ -1063,28 +1110,7 @@ export default function App() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
     if (mode === "note") {
-      const p = uniqueNotePath(slug);
-      let template: string;
-      if (chosenTemplatePath) {
-        const templateNote = await fetchNote(chosenTemplatePath, shareToken);
-        const parsed = parseFrontmatter(templateNote.raw);
-        const date = new Date().toISOString().slice(0, 10);
-        const body = parsed.body.replaceAll("{{date}}", date).replaceAll("{{title}}", title);
-        // The template's own `type` is always "template" (that's the whole
-        // convention — see TemplatePickerDialog.tsx) and is never carried
-        // over as-is, or a note created from one would itself show up as a
-        // template next time. What the CREATED note's real type should be
-        // is a separate declaration, `note_type` (e.g. book.md carries
-        // `note_type: book`) — without it a created note used to end up
-        // permanently untyped, silently breaking anything that keys off
-        // that type afterwards (Book's "Compile chapters" export, its own
-        // `type: chapter` query block, Project's share-scoping, ...).
-        const { type: _templateType, note_type, ...rest } = parsed.data;
-        template = stringifyFrontmatter({ ...rest, ...(note_type ? { type: note_type } : {}), title }, body);
-      } else {
-        template = `---\ntitle: ${title}\ntags: []\n---\n\n`;
-      }
-      await createNote(p, template);
+      const p = await createNoteFromTemplate(chosenTemplatePath, title);
       await loadNotes();
       openNote(p, title, null);
     } else if (mode === "canvas") {
@@ -1146,6 +1172,91 @@ export default function App() {
       setActivePath(p);
     } else {
       openNote(p, date, "daily");
+    }
+  }
+
+  // Centralized so both the top-bar persona switcher and IdentityPanel's
+  // own dropdown funnel through one place — otherwise starter-content
+  // seeding could fire twice (once per UI) for the exact same change.
+  // Never seeds silently: a fresh pick (not already in seededPersonas)
+  // only queues a confirmation (pendingPersonaSeed), actual note creation
+  // happens in confirmPersonaSeed once the user explicitly agrees.
+  function onPersonaChange(next: string | undefined) {
+    const identity = getIdentity();
+    const previous = identity.persona;
+    setPersona(next);
+    setPersonaMenuOpen(false);
+    if (!next || previous === next) return;
+    if (identity.seededPersonas?.includes(next)) return;
+    if (!PERSONA_STARTER_CONTENT[next]) return;
+    // Closes IdentityPanel too, if that's where this came from — leaving
+    // it open would stack its own modal-backdrop behind the confirm
+    // dialog's, two dimmed layers for what should read as one prompt.
+    setIdentityPanelOpen(false);
+    setPendingPersonaSeed(next);
+  }
+
+  async function confirmPersonaSeed() {
+    const persona = pendingPersonaSeed;
+    setPendingPersonaSeed(null);
+    if (!persona) return;
+    const content = PERSONA_STARTER_CONTENT[persona];
+    if (!content) return;
+    let lastPath: string | null = null;
+    let lastTitle = "";
+    // journaler/visual bypass createNoteFromTemplate — a daily note's body
+    // is block-outliner JSON and a canvas note's is an Excalidraw scene,
+    // neither is the plain-markdown/template shape that function builds
+    // (see identity.ts's PERSONA_STARTER_CONTENT doc comment for why).
+    if (persona === "journaler") {
+      const date = new Date().toISOString().slice(0, 10);
+      const p = `daily/${date}.md`;
+      try {
+        await fetchNote(p); // already exists — don't overwrite today's real entry
+      } catch {
+        const prompts = [
+          "What am I grateful for today?",
+          "What's on my mind right now?",
+          "One thing I want to remember about today",
+        ];
+        const seed = serializeBlockDoc({ blocks: prompts.map((t) => createBlock(t)) });
+        await createNote(p, `---\ntitle: ${date}\ntype: daily\n---\n${seed}`);
+      }
+      lastPath = p;
+      lastTitle = date;
+    } else if (persona === "visual") {
+      const title = content.notes[0]?.title ?? "My First Canvas";
+      const bg = isDarkTheme(themeId) ? "#e3e9f7" : "#ffffff";
+      const scene = { type: "excalidraw", version: 2, elements: [], appState: { viewBackgroundColor: bg } };
+      const slug = title
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+      const p = uniqueNotePath(slug);
+      await createNote(p, `---\ntitle: ${title}\ntype: canvas\n---\n${JSON.stringify(scene, null, 2)}\n`);
+      lastPath = p;
+      lastTitle = title;
+    } else {
+      for (const note of content.notes) {
+        lastPath = await createNoteFromTemplate(note.templatePath ?? null, note.title, {
+          tags: note.tags,
+          body: note.body,
+          extraFrontmatter: note.extraFrontmatter,
+        });
+        lastTitle = note.title;
+      }
+    }
+    await loadNotes();
+    fetchTypes().then(setTypes);
+    markPersonaSeeded(persona);
+    if (content.openView === "flashcards") {
+      setFlashcardsMode("grid");
+      showSpecialPanel("flashcards");
+    } else if (content.openView === "canvas") {
+      showSpecialPanel("canvas");
+    } else if (lastPath) {
+      openNote(lastPath, lastTitle, null);
     }
   }
 
@@ -1468,10 +1579,6 @@ export default function App() {
   // Memoized so an editing session over a large vault doesn't rescan the
   // full notes array per keystroke for a value that hasn't changed.
   const favoriteNotes = useMemo(() => notes.filter((n) => n.favorite), [notes]);
-  // Computed once (not inline in JSX) so the sidebar's "For you" section
-  // doesn't need repeated getIdentity() calls or non-null assertions to
-  // convince TypeScript the persona is still set a few lines later.
-  const personaShortcuts = PERSONA_SHORTCUTS[getIdentity().persona ?? ""];
   // typeFilter narrows what the sidebar list (and Table view, which reads
   // this same value) shows — applied here, client-side, rather than by
   // fetching a pre-filtered `notes` from the server (see loadNotes above).
@@ -1671,7 +1778,9 @@ export default function App() {
           notes={notes}
         />
       )}
-      {identityPanelOpen && <IdentityPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} />}
+      {identityPanelOpen && (
+        <IdentityPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onPersonaChange={onPersonaChange} />
+      )}
       {settingsPanelOpen && (
         <SettingsPanel
           onClose={() => setSettingsPanelOpen(false)}
@@ -1715,6 +1824,10 @@ export default function App() {
           onCompileHtml={onCompileHtml}
           onCompilePdf={onCompilePdf}
           compileStatus={compileStatus}
+          onTakeTour={() => {
+            setSettingsPanelOpen(false);
+            setTourOpen(true);
+          }}
         />
       )}
       {activePath && (
@@ -1881,14 +1994,34 @@ export default function App() {
             <span className="identity-color-dot" style={{ background: getIdentity().color }} aria-hidden="true" />
             You: {getIdentity().name}
           </button>
-          {getPersona(getIdentity().persona) && (
-            <button
-              className="app-topbar-persona"
-              title={`${getPersona(getIdentity().persona)!.label} — open the matching part of the tutorial`}
-              onClick={() => openNote("tutorial/who-its-for.md", undefined, undefined, getPersona(getIdentity().persona)!.heading)}
-            >
-              {getPersona(getIdentity().persona)!.label}
-            </button>
+          {!shareToken && (
+            <div className="app-topbar-persona-wrap" ref={personaMenuRef}>
+              <button
+                className="app-topbar-persona"
+                title="What kind of user are you? Picking one seeds a couple of starter notes."
+                onClick={() => setPersonaMenuOpen((o) => !o)}
+              >
+                {getPersona(getIdentity().persona)?.label ?? "Set persona"}
+              </button>
+              {personaMenuOpen && (
+                <div className="persona-menu">
+                  {PERSONAS.map((p) => (
+                    <button
+                      key={p.id}
+                      className={getIdentity().persona === p.id ? "active" : ""}
+                      onClick={() => onPersonaChange(p.id)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                  {getIdentity().persona && (
+                    <button className="persona-menu-clear" onClick={() => onPersonaChange(undefined)}>
+                      Clear persona
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </header>
@@ -2037,29 +2170,6 @@ export default function App() {
           )}
         {isListView && (
           <>
-            {!results && sidebarView === "all" && !typeFilter && !shareToken && personaShortcuts?.length && (
-              <div className="sidebar-section">
-                <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleForyouCollapsed}>
-                  <ChevronRight size={12} className={`sidebar-section-chevron ${foryouCollapsed ? "" : "open"}`} />
-                  <span>For you</span>
-                </button>
-                {!foryouCollapsed && (
-                  <ul className="persona-shortcut-list">
-                    {personaShortcuts.map((shortcut) => {
-                      const Icon = PERSONA_SHORTCUT_ICONS[shortcut.icon];
-                      return (
-                        <li key={shortcut.label}>
-                          <button className="persona-shortcut-item" onClick={() => onPersonaShortcutClick(shortcut)}>
-                            <Icon size={14} />
-                            {shortcut.label}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
             {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
               <div className="sidebar-section">
                 <div className="sidebar-section-label">
@@ -2574,6 +2684,15 @@ export default function App() {
           onCancel={() => setDeleteConfirmOpen(false)}
         />
       )}
+      {pendingPersonaSeed && (
+        <ConfirmDialog
+          title={`Set up starter notes for ${getPersona(pendingPersonaSeed)?.label ?? pendingPersonaSeed}?`}
+          message={`Creates ${PERSONA_STARTER_CONTENT[pendingPersonaSeed]?.notes.length ?? 0} note(s) to help you get started — you can delete or ignore them any time.`}
+          confirmLabel="Create notes"
+          onConfirm={confirmPersonaSeed}
+          onCancel={() => setPendingPersonaSeed(null)}
+        />
+      )}
       {createPromptMode && (
         <PromptDialog
           title={
@@ -2606,6 +2725,7 @@ export default function App() {
           onCancel={() => setTemplatePickerOpen(false)}
         />
       )}
+      {tourOpen && <ProductTour onClose={closeTour} />}
     </div>
   );
 }

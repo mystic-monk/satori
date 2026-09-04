@@ -21,89 +21,215 @@ export interface Identity {
   // email on a different device deterministically reproduces the same
   // `id`, which is the actual point: portability without an export file.
   email?: string;
-  // Self-declared, optional — one of PERSONAS' ids, or unset. Purely a
-  // display label (the topbar tag, IdentityPanel) and a shortcut into the
-  // matching section of tutorial/who-its-for; nothing else reads it.
+  // Self-declared, optional — one of PERSONAS' ids, or unset. A display
+  // label (the topbar switcher, IdentityPanel) that also seeds starter
+  // content the first time it's picked — see PERSONA_STARTER_CONTENT.
   persona?: string;
+  // Persona ids that have already had their starter content created —
+  // distinct from "persona was ever set," so clearing a persona and
+  // re-picking it later doesn't silently re-seed a second copy.
+  seededPersonas?: string[];
 }
 
-// Mirrors the section headings in starter-vault/tutorial/who-its-for.md —
-// `heading` is that section's exact heading text, used to deep-link the
-// topbar persona tag into the matching part of the tutorial.
 export interface Persona {
   id: string;
   label: string;
-  heading: string;
 }
 
 export const PERSONAS: Persona[] = [
-  { id: "author", label: "Author / Screenwriter", heading: "Script & screenwriters, novelists" },
-  { id: "researcher", label: "Researcher", heading: "Researchers & academics" },
-  { id: "student", label: "Student", heading: "Students" },
-  { id: "team", label: "Team member", heading: "Teams & small orgs" },
-  { id: "planner", label: "Planner", heading: "Project managers & planners" },
-  { id: "journaler", label: "Journaler", heading: "Journalers & personal note-takers" },
-  { id: "developer", label: "Developer", heading: "Developers & technical writers" },
-  { id: "consultant", label: "Consultant", heading: "Consultants & freelancers" },
-  { id: "privacy", label: "Privacy-focused", heading: "Privacy-conscious professionals" },
-  { id: "visual", label: "Visual thinker", heading: "Visual thinkers" },
+  { id: "author", label: "Author / Screenwriter" },
+  { id: "researcher", label: "Researcher" },
+  { id: "student", label: "Student" },
+  { id: "team", label: "Team member" },
+  { id: "planner", label: "Planner" },
+  { id: "journaler", label: "Journaler" },
+  { id: "developer", label: "Developer" },
+  { id: "consultant", label: "Consultant" },
+  { id: "privacy", label: "Privacy-focused" },
+  { id: "visual", label: "Visual thinker" },
 ];
 
 export function getPersona(id: string | undefined): Persona | undefined {
   return PERSONAS.find((p) => p.id === id);
 }
 
-// What makes the persona tag more than a label — App.tsx's sidebar "For
-// you" section renders these as shortcuts. `icon` is a plain string key
-// (not a component) so this file stays a plain logic module with no
-// React/lucide import; App.tsx maps it to an actual icon. `tutorialPath`
-// opens that page at the top (no fragment — only who-its-for.md's own
-// headings are confirmed anchor targets, already used by the topbar
-// badge). `navView` reuses the exact handler the matching sidebar-nav
-// button already calls, so a shortcut behaves identically to clicking
-// that nav item directly. Sourced from who-its-for.md's own curated
-// "→ [[...]]" link per persona — not a separate judgment call.
-export type PersonaShortcutIcon = "tutorial" | "journal" | "table" | "canvas" | "flashcards";
-
-export interface PersonaShortcut {
-  label: string;
-  icon: PersonaShortcutIcon;
-  tutorialPath?: string;
-  navView?: "journal" | "table" | "canvas" | "flashcards";
+// What makes picking a persona more than a label — App.tsx's
+// onPersonaChange runs each persona's `notes` through createNoteFromTemplate
+// the first time it's chosen (see Identity.seededPersonas above), so there's
+// something real to look at immediately instead of an empty vault.
+// `templatePath` reuses one of the app's own existing templates (Author/
+// Planner map cleanly onto Project/Character — see vault/templates/); the
+// rest don't have a matching template, so `tags`/`body` build a plain note
+// the same shape createNoteFromTemplate's own no-template branch already
+// does. `extraFrontmatter` is for properties a template doesn't declare by
+// default (e.g. linking a seeded Character into a seeded Project via
+// `project: [[...]]` — that relation is inbound-only, the Project's own
+// `​```query` block picks it up from the Character's frontmatter, not the
+// other way around). `openView` sends the user straight to the most
+// relevant place to see the result, when that's not just "the note itself"
+// (Flashcards' queue, Canvas' whiteboard) — App.tsx's onPersonaChange
+// interprets it.
+export interface StarterNote {
+  title: string;
+  templatePath?: string;
+  tags?: string[];
+  body?: string;
+  extraFrontmatter?: Record<string, unknown>;
 }
 
-export const PERSONA_SHORTCUTS: Record<string, PersonaShortcut[]> = {
-  author: [{ label: "Writing books & scripts", icon: "tutorial", tutorialPath: "tutorial/writing-books-and-scripts.md" }],
-  researcher: [
-    { label: "Citations & references", icon: "tutorial", tutorialPath: "tutorial/citations.md" },
-    { label: "Related Notes & local AI", icon: "tutorial", tutorialPath: "tutorial/ai-related-notes.md" },
-  ],
-  student: [
-    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
-    { label: "Flashcards", icon: "flashcards", navView: "flashcards" },
-  ],
-  team: [
-    { label: "Team, Workspace & self-hosting", icon: "tutorial", tutorialPath: "tutorial/team-workspace.md" },
-    { label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" },
-  ],
-  planner: [
-    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
-    { label: "Table view", icon: "table", navView: "table" },
-  ],
-  journaler: [
-    { label: "Organizing & finding your notes", icon: "tutorial", tutorialPath: "tutorial/organizing.md" },
-    { label: "Journal", icon: "journal", navView: "journal" },
-  ],
-  developer: [
-    { label: "Formatting", icon: "tutorial", tutorialPath: "tutorial/formatting.md" },
-    { label: "Diagrams", icon: "tutorial", tutorialPath: "tutorial/diagrams.md" },
-  ],
-  consultant: [{ label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" }],
-  privacy: [{ label: "Collaboration & sharing", icon: "tutorial", tutorialPath: "tutorial/collaboration.md" }],
-  visual: [
-    { label: "Diagrams", icon: "tutorial", tutorialPath: "tutorial/diagrams.md" },
-    { label: "Canvas", icon: "canvas", navView: "canvas" },
-  ],
+export interface PersonaStarterContent {
+  notes: StarterNote[];
+  openView?: "flashcards" | "canvas";
+}
+
+export const PERSONA_STARTER_CONTENT: Record<string, PersonaStarterContent> = {
+  author: {
+    notes: [
+      { title: "My First Project", templatePath: "templates/project.md" },
+      {
+        title: "My First Character",
+        templatePath: "templates/character.md",
+        extraFrontmatter: { project: "[[My First Project]]" },
+      },
+    ],
+  },
+  researcher: {
+    notes: [
+      {
+        title: "How citations work here",
+        tags: ["reference"],
+        body: [
+          "Citing something in any note is just `[@citekey]` — it renders as `(Author, Year)` and links to a `type: reference` note with a matching `citekey` property.",
+          "",
+          "For example: [@example2024] — until a reference note with that citekey exists, it shows up as a broken link, which is the honest state to be in rather than a silent failure.",
+          "",
+          "Add a `​```bibliography` block anywhere to list every citation used in that note. Import an existing `.bib` file (**+ Create → Import .bib References…**) to bulk-create reference notes instead of typing them by hand.",
+        ].join("\n"),
+      },
+    ],
+  },
+  student: {
+    // Body format matches App.tsx's own flashcard convention exactly:
+    // front text, then a line containing exactly "---", then back text —
+    // that's what FlashcardReview.tsx splits on, not a tag or heading.
+    notes: [
+      {
+        title: "What is spaced repetition?",
+        extraFrontmatter: { type: "flashcard" },
+        body: "What is spaced repetition?\n---\nA review schedule that spaces out repeat exposure to a fact over increasing intervals, timed just before you'd naturally forget it — this app schedules your reviews with the SM-2 algorithm automatically.",
+      },
+      {
+        title: "How do I make more of these?",
+        extraFrontmatter: { type: "flashcard" },
+        body: "How do I make more flashcards?\n---\n**+ Create → New Flashcard**, or turn any note into one by adding `type: flashcard` to its frontmatter.",
+      },
+      {
+        title: "When am I quizzed on these?",
+        extraFrontmatter: { type: "flashcard" },
+        body: "When does a card come up for review?\n---\nOpen **Flashcards** in the sidebar — it shows how many cards are due right now and starts the review queue.",
+      },
+    ],
+    openView: "flashcards",
+  },
+  team: {
+    notes: [
+      {
+        title: "Team Handbook",
+        tags: ["team"],
+        body: [
+          "A place to keep whatever your team needs to find quickly — decisions, conventions, who owns what.",
+          "",
+          "## Decisions",
+          "",
+          "## Conventions",
+          "",
+          "---",
+          "",
+          "Real accounts and vault-wide membership (not just this one note) live under **Set up team access** at the bottom of the sidebar — an admin invites people with a link, the same way sharing one note already works, just scoped to the whole vault instead.",
+        ].join("\n"),
+      },
+    ],
+  },
+  planner: {
+    notes: [
+      { title: "My First Project", templatePath: "templates/project.md" },
+      {
+        title: "First task",
+        tags: [],
+        extraFrontmatter: { project: "[[My First Project]]", status: "to-do", due: "" },
+        body: "Switch to **Table view** and add a rollup column to see every task like this one, grouped and totaled automatically as you add more.",
+      },
+    ],
+  },
+  journaler: {
+    // Handled specially in App.tsx's onPersonaChange — a daily note's
+    // body is block-outliner JSON (see BlockOutline.tsx/blockTree.ts), not
+    // plain markdown, so it can't go through createNoteFromTemplate the
+    // way every other persona's seed notes do. This entry exists so
+    // PERSONA_STARTER_CONTENT still names 1 note for the confirmation
+    // dialog's count; the actual creation is bespoke.
+    notes: [{ title: "Today" }],
+  },
+  developer: {
+    notes: [
+      {
+        title: "Code blocks & diagrams",
+        tags: ["dev"],
+        body: [
+          "```js",
+          "function greet(name) {",
+          "  return `Hello, ${name}!`;",
+          "}",
+          "```",
+          "",
+          "Hover a code block in Preview for a one-click **Copy** button — the editor itself syntax-highlights as you type, no separate preview step needed.",
+          "",
+          "```mermaid",
+          "graph LR",
+          "  A[Idea] --> B[Note]",
+          "  B --> C[Linked notes]",
+          "  C --> D[Graph view]",
+          "```",
+        ].join("\n"),
+      },
+    ],
+  },
+  consultant: {
+    notes: [
+      { title: "Client Project", templatePath: "templates/project.md" },
+      {
+        title: "Kickoff meeting notes",
+        tags: ["meeting"],
+        extraFrontmatter: { project: "[[Client Project]]" },
+        body: "## Attendees\n\n## Notes\n\n## Action items\n\n- [ ] ",
+      },
+    ],
+  },
+  privacy: {
+    notes: [
+      {
+        title: "How your data is protected here",
+        tags: ["privacy"],
+        body: [
+          "**Local mode** (this device, or your LAN): notes are plain markdown files you control; the local server can read them in order to serve them to you, same as any editor would.",
+          "",
+          "**Cloud sync**, if you turn it on: everything is encrypted on your device before it ever leaves — XSalsa20-Poly1305 with an Argon2id-derived key from a passphrase you choose. The relay server that shuttles data between your devices only ever sees ciphertext; it has no way to decrypt it even if it wanted to.",
+          "",
+          "A passphrase grants edit access; a separate view-only key (derived from it, but not reversible back to it) can be shared instead for read-only access.",
+          "",
+          "See the README's \"Security & privacy model\" section, or read `server/relay.ts`/`src/crypto.ts` directly — the point of open source is not needing to take a vendor's word for it.",
+        ].join("\n"),
+      },
+    ],
+  },
+  visual: {
+    // Handled specially in App.tsx's onPersonaChange, same reason as
+    // journaler above — a canvas note's body is an Excalidraw JSON scene
+    // (see CanvasNote.tsx/App.tsx's own onNewCanvas), not markdown, so it
+    // can't go through createNoteFromTemplate the way a plain note can.
+    notes: [{ title: "My First Canvas" }],
+    openView: "canvas",
+  },
 };
 
 const IDENTITY_KEY = "pkm-identity";
@@ -181,6 +307,16 @@ export function setDisplayName(name: string): Identity {
 // any persona, not just the initial default.
 export function setPersona(persona: string | undefined): Identity {
   return save({ ...getIdentity(), persona });
+}
+
+// Records that a persona's starter content has been created, so
+// App.tsx's onPersonaChange knows not to offer to seed it again.
+export function markPersonaSeeded(persona: string): Identity {
+  const current = getIdentity();
+  const seededPersonas = current.seededPersonas?.includes(persona)
+    ? current.seededPersonas
+    : [...(current.seededPersonas ?? []), persona];
+  return save({ ...current, seededPersonas });
 }
 
 // Public info only (id/name/color) — safe to paste anywhere, unlike a

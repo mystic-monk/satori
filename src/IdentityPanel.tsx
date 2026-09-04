@@ -7,7 +7,6 @@ import {
   PERSONAS,
   setDisplayName,
   setIdentityFromEmail,
-  setPersona,
   type Identity,
 } from "./identity";
 import PromptDialog from "./PromptDialog";
@@ -15,6 +14,12 @@ import PromptDialog from "./PromptDialog";
 interface IdentityPanelProps {
   open: boolean;
   onClose: () => void;
+  // App.tsx owns the actual persona change now (setPersona + possibly
+  // queuing the starter-content seed confirmation) — this panel just
+  // reports the selection, so seeding fires through one path regardless
+  // of whether it's picked here or from the top bar's own persona
+  // switcher, not duplicated per UI.
+  onPersonaChange: (persona: string | undefined) => void;
 }
 
 // A modal now (SettingsPanel/WorkspacePanel's pattern), not the inline
@@ -23,7 +28,7 @@ interface IdentityPanelProps {
 // space before the search box even started, which is exactly the
 // clutter this was moved to fix. Reached from the rail's bottom "You:
 // name" button (App.tsx), same place Settings/Workspace already live.
-export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
+export default function IdentityPanel({ open, onClose, onPersonaChange }: IdentityPanelProps) {
   const [identity, setIdentity] = useState<Identity>(() => getIdentity());
   const [nameDraft, setNameDraft] = useState(identity.name);
   const [importDraft, setImportDraft] = useState("");
@@ -81,8 +86,13 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
     setIdentity(clearEmailIdentity());
   }
 
-  function onPersonaChange(value: string) {
-    setIdentity(setPersona(value || undefined));
+  function handlePersonaSelect(value: string) {
+    onPersonaChange(value || undefined);
+    // App.tsx's onPersonaChange already writes through setPersona — this
+    // just keeps the <select>'s own displayed value (bound to local
+    // `identity` state, not read fresh from storage on every render the
+    // way App.tsx's topbar switcher does) in sync immediately.
+    setIdentity((current) => ({ ...current, persona: value || undefined }));
   }
 
   return (
@@ -115,7 +125,7 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
           id="identity-persona-select"
           className="identity-persona-select"
           value={identity.persona ?? ""}
-          onChange={(e) => onPersonaChange(e.target.value)}
+          onChange={(e) => handlePersonaSelect(e.target.value)}
         >
           <option value="">Not set</option>
           {PERSONAS.map((p) => (
@@ -125,8 +135,8 @@ export default function IdentityPanel({ open, onClose }: IdentityPanelProps) {
           ))}
         </select>
         <p className="identity-note">
-          Shown as a tag next to your name in the top bar. Purely a label for you and collaborators — it also picks
-          out the part of the tutorial most relevant to you.
+          Picking one for the first time offers to create a couple of starter notes to help you get going — also
+          changeable any time from the top bar's own persona button.
         </p>
         <div className="identity-email">
           {identity.email ? (

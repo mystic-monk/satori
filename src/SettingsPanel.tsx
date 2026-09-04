@@ -44,6 +44,7 @@ interface SettingsPanelProps {
   onCompileHtml: () => void;
   onCompilePdf: () => void;
   compileStatus: string | null;
+  onTakeTour: () => void;
 }
 
 // One consolidated home for settings that used to be scattered: theme
@@ -85,6 +86,7 @@ export default function SettingsPanel({
   onCompileHtml,
   onCompilePdf,
   compileStatus,
+  onTakeTour,
 }: SettingsPanelProps) {
   const [viewKeyPreview, setViewKeyPreview] = useState<string | null>(null);
   const [viewKeyCopied, setViewKeyCopied] = useState(false);
@@ -152,6 +154,11 @@ export default function SettingsPanel({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Help</div>
+          <button onClick={onTakeTour}>Take a tour</button>
         </div>
 
         <div className="settings-section">
