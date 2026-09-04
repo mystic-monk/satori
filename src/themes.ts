@@ -9,6 +9,12 @@ export const THEMES: Theme[] = [
   { id: "light", label: "Light", dark: false },
   { id: "solarized-dark", label: "Solarized Dark", dark: true },
   { id: "solarized-light", label: "Solarized Light", dark: false },
+  { id: "nord", label: "Nord", dark: true },
+  { id: "dracula", label: "Dracula", dark: true },
+  { id: "gruvbox-dark", label: "Gruvbox Dark", dark: true },
+  { id: "gruvbox-light", label: "Gruvbox Light", dark: false },
+  { id: "catppuccin-mocha", label: "Catppuccin Mocha", dark: true },
+  { id: "catppuccin-latte", label: "Catppuccin Latte", dark: false },
 ];
 
 const KEY = "pkm-theme";

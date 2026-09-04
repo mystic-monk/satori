@@ -18,23 +18,28 @@ import { checkText, suggest, addWord, type Misspelling } from "./spellcheck";
 // light themes there's no bundled light package, so this covers just the
 // editor chrome (matching whichever light palette is active) and leaves
 // syntax colors to CodeMirror's own defaults, which read fine on white.
+//
+// References the CSS custom properties directly (var(--bg), not a
+// getComputedStyle() snapshot resolved to a literal hex value) — the
+// browser keeps these live, so switching between light themes (Light →
+// Solarized Light → Catppuccin Latte → ...) repaints correctly with no
+// JS involved. A resolved-once snapshot would go stale the moment a
+// second light theme existed: the effect that (re)creates this object is
+// keyed on the dark/light boundary (the `dark` prop), not on every theme
+// change, so a light→light switch was silently keeping the previous
+// light theme's colors baked in until this was changed to reference the
+// variables live instead.
 function lightCmTheme() {
-  const style = getComputedStyle(document.documentElement);
-  const bg = style.getPropertyValue("--bg").trim() || "#ffffff";
-  const text = style.getPropertyValue("--text").trim() || "#1a1a1a";
-  const border = style.getPropertyValue("--border").trim() || "#e2e2e5";
-  const hover = style.getPropertyValue("--bg-hover").trim() || "#f0f0f0";
-  const accent = style.getPropertyValue("--accent").trim() || "#2563eb";
   return EditorView.theme(
     {
-      "&": { backgroundColor: bg, color: text },
-      ".cm-content": { caretColor: text },
-      ".cm-cursor, .cm-dropCursor": { borderLeftColor: text },
-      ".cm-gutters": { backgroundColor: bg, color: border, border: "none" },
-      ".cm-activeLine": { backgroundColor: hover },
-      ".cm-activeLineGutter": { backgroundColor: hover },
+      "&": { backgroundColor: "var(--bg)", color: "var(--text)" },
+      ".cm-content": { caretColor: "var(--text)" },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--text)" },
+      ".cm-gutters": { backgroundColor: "var(--bg)", color: "var(--border)", border: "none" },
+      ".cm-activeLine": { backgroundColor: "var(--bg-hover)" },
+      ".cm-activeLineGutter": { backgroundColor: "var(--bg-hover)" },
       "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-        backgroundColor: `${accent}33`,
+        backgroundColor: "color-mix(in srgb, var(--accent) 20%, transparent)",
       },
     },
     { dark: false }
