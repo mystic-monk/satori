@@ -1,10 +1,12 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cookieParser from "cookie-parser";
+import multer from "multer";
 import { createServer } from "node:http";
 import {
   listNoteFiles,
   readNoteRaw,
   writeNoteRaw,
+  writeAssetBinary,
   deleteNote,
   seedStarterVaultIfEmpty,
 } from "./vault.js";
@@ -179,6 +181,25 @@ app.post("/api/notes", requireOwner, (req, res) => {
   writeNoteRaw(relPath, raw);
   upsertNoteIndex(relPath);
   scheduleEmbeddingUpdate(relPath);
+  res.json({ ok: true, path: relPath });
+});
+
+// Binary assets (attachments/ — PDF originals, currently the only use)
+// go through multipart/form-data, not JSON like every other route here —
+// base64-encoding a multi-MB file into a JSON body would inflate the
+// payload by roughly a third for no benefit. memoryStorage is fine at
+// this scale (single PDF at a time, not a bulk upload endpoint); nothing
+// here touches the notes index — assets aren't notes, just bytes a
+// note's frontmatter points at.
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post("/api/assets", requireOwner, upload.single("file"), (req, res) => {
+  const relPath = (req.body as { path: string }).path;
+  if (!req.file) {
+    res.status(400).json({ error: "no file" });
+    return;
+  }
+  writeAssetBinary(relPath, req.file.buffer);
   res.json({ ok: true, path: relPath });
 });
 

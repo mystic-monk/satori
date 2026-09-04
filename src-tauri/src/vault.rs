@@ -63,6 +63,17 @@ impl Vault {
         fs::remove_file(self.to_abs(rel_path)?).map_err(|e| e.to_string())
     }
 
+    // The only binary write path here — everything else in this file is
+    // text (write_raw takes &str). Used for attachments/ (PDF originals) —
+    // reuses to_abs's traversal guard exactly like every other method.
+    pub fn write_binary(&self, rel_path: &str, data: &[u8]) -> Result<(), String> {
+        let abs = self.to_abs(rel_path)?;
+        if let Some(parent) = abs.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(abs, data).map_err(|e| e.to_string())
+    }
+
     pub fn mtime_ms(&self, rel_path: &str) -> Result<f64, String> {
         let meta = fs::metadata(self.to_abs(rel_path)?).map_err(|e| e.to_string())?;
         let modified = meta.modified().map_err(|e| e.to_string())?;

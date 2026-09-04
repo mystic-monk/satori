@@ -74,6 +74,14 @@ pub fn create_note(state: State<AppState>, path: String, raw: String) -> Result<
     db::upsert_note_index(&conn, &state.vault, &path)
 }
 
+// Binary assets (attachments/ — PDF originals, currently the only use)
+// never go through the notes index at all, unlike create_note above —
+// they're not notes, just bytes a note's frontmatter points at.
+#[tauri::command]
+pub fn write_asset(state: State<AppState>, path: String, data: Vec<u8>) -> Result<(), String> {
+    state.vault.write_binary(&path, &data)
+}
+
 #[tauri::command]
 pub fn delete_note(state: State<AppState>, path: String) -> Result<(), String> {
     state.vault.delete(&path)?;
@@ -233,6 +241,30 @@ pub fn pick_data_dictionary_file() -> Result<Option<String>, String> {
         return Ok(None);
     };
     std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct PickedPdf {
+    name: String,
+    data: Vec<u8>,
+}
+
+// Unlike pick_bib_file/pick_data_dictionary_file above, a PDF is binary —
+// std::fs::read_to_string would fail (or corrupt) on it, so this reads
+// bytes and also returns the original filename, which the frontend needs
+// to title the reference note (a raw dropped-in PDF has no bibliographic
+// metadata to derive a title from otherwise).
+#[tauri::command]
+pub fn pick_pdf_file() -> Result<Option<PickedPdf>, String> {
+    let Some(path) = rfd::FileDialog::new().add_filter("PDF", &["pdf"]).pick_file() else {
+        return Ok(None);
+    };
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(Some(PickedPdf { name, data }))
 }
 
 #[tauri::command]

@@ -84,6 +84,16 @@ export function deleteNote(relPath: string): void {
   fs.rmSync(toAbsPath(relPath));
 }
 
+// The only binary write path in this file — everything else here is text
+// (writeNoteRaw forces "utf8"). Used for attachments/ (PDF originals) —
+// reuses toAbsPath's traversal guard exactly like every other function
+// here, no separate validation needed.
+export function writeAssetBinary(relPath: string, data: Buffer): void {
+  const abs = toAbsPath(relPath);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, data);
+}
+
 export function parseNote(relPath: string, raw: string): { meta: NoteMeta; body: string } {
   const parsed = parseFrontmatter(raw);
   const stat = fs.statSync(toAbsPath(relPath));

@@ -376,6 +376,13 @@ body {
   transition: none;
 }
 
+/* Dragging a PDF over the sidebar (App.tsx's onSidebarDragOver/onDrop) —
+   an inset accent outline reads as "drop here" without needing a whole
+   separate overlay element. */
+.sidebar.pdf-drag-active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .resize-handle {
   position: absolute;
   top: 0;

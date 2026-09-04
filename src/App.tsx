@@ -11,9 +11,11 @@ import {
   importFolder,
   pickBibFile,
   pickDataDictionaryFile,
+  pickPdfFile,
   reindex,
   search,
   switchVault,
+  uploadAsset,
   writeNoteApi,
   type NoteListItem,
   type SearchResult,
@@ -21,6 +23,11 @@ import {
 } from "./api";
 import { parseBibtex } from "../shared/bibtex";
 import { parseDataDictionary } from "../shared/dataDictionary";
+// Dynamically imported at the point of use (processPdfImport below), not
+// statically here — pdfjs-dist and, transitively via pdfScene.ts,
+// @excalidraw/excalidraw are both large; App.tsx otherwise never pulls
+// either in until something that actually needs them runs (CanvasNote is
+// already `lazy()`-loaded for the same reason).
 import { applyTextDiff, openLocalCollab, openTauriLocalSession, type CollabHandle } from "./collab";
 // cloud-collab.ts pulls in crypto.ts -> libsodium-wrappers-sumo (~550KB of
 // WASM) — most users never touch cloud sync, so this is a dynamic import
@@ -315,6 +322,8 @@ export default function App() {
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
   const bibFileInputRef = useRef<HTMLInputElement | null>(null);
   const dataDictionaryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pdfDragActive, setPdfDragActive] = useState(false);
   const [createPromptMode, setCreatePromptMode] = useState<"note" | "canvas" | "flashcard" | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templatePath, setTemplatePath] = useState<string | null>(null);
@@ -478,6 +487,7 @@ export default function App() {
       listen("menu:check-for-updates", () => onCheckForUpdates()),
       listen("menu:import-bib", () => onImportBib()),
       listen("menu:import-data-dictionary", () => onImportDataDictionary()),
+      listen("menu:import-pdf", () => onImportPdf()),
     ];
     return () => {
       unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
@@ -1221,9 +1231,125 @@ export default function App() {
     await processDataDictionaryImport(await file.text());
   }
 
+  // Two linked notes, not one: a `type: reference` note (the same type
+  // .bib imports already create) holding the extracted text — searchable,
+  // linkable, shows up in Graph/Table with zero special-casing — plus a
+  // `type: pdf` note (rendered by CanvasNote.tsx, same as type: canvas —
+  // see isPdf below) seeded with one image element per rendered page,
+  // for annotating with Excalidraw's existing pen tool. pdfImport.ts and
+  // pdfScene.ts are both dynamically imported here, not statically —
+  // pdfjs-dist and (transitively, via pdfScene.ts) @excalidraw/excalidraw
+  // are both large, and nothing before this point needs either.
+  async function processPdfImport(file: File) {
+    setStatus("importing PDF…");
+    const { processPdf, PdfTooLargeError } = await import("./pdfImport");
+    let processed: Awaited<ReturnType<typeof processPdf>>;
+    try {
+      processed = await processPdf(file);
+    } catch (err) {
+      setStatus(err instanceof PdfTooLargeError ? err.message : "couldn't read that PDF");
+      return;
+    }
+
+    const baseTitle = file.name.replace(/\.pdf$/i, "");
+    const slug = baseTitle
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
+    const refPath = uniqueNotePath(slug);
+    await createNote(refPath, stringifyFrontmatter({ title: baseTitle, type: "reference" }, processed.text));
+
+    // Original bytes are kept (attachments/), even though nothing renders
+    // them after import — pdf.js only needs them once, but the source
+    // shouldn't be lossily discarded just because it isn't rendered again.
+    const assetPath = `attachments/${refPath.replace(/\.md$/, "")}.pdf`;
+    await uploadAsset(assetPath, file);
+
+    const { buildPdfScene } = await import("./pdfScene");
+    const sceneJson = buildPdfScene(processed.pages);
+
+    const pdfTitle = `${baseTitle} (annotated)`;
+    const pdfPath = uniqueNotePath(`${slug}-annotated`);
+    await createNote(
+      pdfPath,
+      stringifyFrontmatter({ title: pdfTitle, type: "pdf", pdfAsset: assetPath, source: `[[${baseTitle}]]` }, sceneJson)
+    );
+
+    await loadNotes();
+    setStatus("");
+    openNote(pdfPath, pdfTitle, "pdf");
+  }
+
+  async function onImportPdf() {
+    if (IS_TAURI) {
+      const picked = await pickPdfFile();
+      if (picked) {
+        const file = new File([new Uint8Array(picked.data)], picked.name, { type: "application/pdf" });
+        await processPdfImport(file);
+      }
+      return;
+    }
+    pdfFileInputRef.current?.click();
+  }
+
+  async function onPdfFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await processPdfImport(file);
+  }
+
+  function findDroppedPdf(files: FileList | File[]): File | undefined {
+    return Array.from(files).find((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+  }
+
+  // Global drop target (the sidebar), not scoped to an open note — the
+  // CodeMirror editor has no paste/drop handling of its own, and
+  // inserting a PDF into running prose is a different, more complex
+  // mechanic than importing one at the vault level (matches Obsidian/
+  // Notion's own "drop a file into the app" model).
+  function onSidebarDragOver(e: React.DragEvent) {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setPdfDragActive(true);
+  }
+
+  function onSidebarDragLeave() {
+    setPdfDragActive(false);
+  }
+
+  async function onSidebarDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setPdfDragActive(false);
+    const file = findDroppedPdf(e.dataTransfer.files);
+    if (file) await processPdfImport(file);
+  }
+
+  // Same "drop a file into the app" model, via Cmd/Ctrl+V instead — a
+  // document-level listener, not scoped to any particular element, since
+  // there's no one obvious paste target for "a whole new PDF" the way
+  // there is for pasting text into an open note.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const file = findDroppedPdf(e.clipboardData?.files ?? []);
+      if (file) processPdfImport(file);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes]);
+
   const resolver = useMemo(() => buildResolver(notes), [notes]);
   const activeNote = notes.find((n) => n.path === activePath);
   const isCanvas = raw ? parseFrontmatter(raw).data.type === "canvas" : false;
+  // A type: pdf note (PDF import's annotation half) is rendered by the
+  // exact same CanvasNote.tsx as type: canvas — once the note's body is a
+  // seeded Excalidraw scene, there's nothing left that's PDF-specific
+  // about how it's displayed/persisted, just the frontmatter type that
+  // got it there.
+  const isPdf = raw ? parseFrontmatter(raw).data.type === "pdf" : false;
   // A daily note whose body is valid block-JSON — falls back to the normal
   // Editor/Preview path for any daily note whose body ISN'T (existing
   // prose journal entries, or a not-yet-written empty one), so nothing
@@ -1427,6 +1553,7 @@ export default function App() {
         { id: "reindex", label: "Reindex Vault", action: onReindex },
         { id: "import-bib", label: "Import .bib References…", action: onImportBib },
         { id: "import-data-dictionary", label: "Import Data Dictionary…", action: onImportDataDictionary },
+        { id: "import-pdf", label: "Import PDF…", action: onImportPdf },
         {
           id: "spellcheck-note",
           label: "Check Spelling: Whole Note",
@@ -1499,7 +1626,7 @@ export default function App() {
           cloudStatus={cloudStatus}
           activePath={activePath}
           canConnectCloud={role === "owner" && !!activePath && !!localSession}
-          canExport={!!activePath && !isCanvas && !isOutline}
+          canExport={!!activePath && !isCanvas && !isPdf && !isOutline}
           onExportMd={onExportMd}
           onExportHtml={onExportHtml}
           onExportPdf={onExportPdf}
@@ -1587,8 +1714,8 @@ export default function App() {
                 {status}
                 {peerCount > 0 ? ` · ${peerCount} other editor${peerCount > 1 ? "s" : ""} online` : ""}
               </span>
-              {!isCanvas && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
-              {!isCanvas && !isOutline && (
+              {!isCanvas && !isPdf && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
+              {!isCanvas && !isPdf && !isOutline && (
                 <div className="view-mode-toggle">
                   {(["source", "live", "preview"] as ViewMode[]).map((m) => (
                     <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
@@ -1597,7 +1724,7 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {role !== "view" && role !== "comment" && !isCanvas && (
+              {role !== "view" && role !== "comment" && !isCanvas && !isPdf && (
                 <div className="reminder-trigger-wrap">
                   <button
                     className={currentRemindAt ? "active" : ""}
@@ -1657,8 +1784,11 @@ export default function App() {
       </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside
-        className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarResize.resizing ? "resizing" : ""} ${sidebarIconOnly ? "icon-only" : ""}`}
+        className={`sidebar ${sidebarOpen ? "open" : ""} ${sidebarResize.resizing ? "resizing" : ""} ${sidebarIconOnly ? "icon-only" : ""} ${pdfDragActive ? "pdf-drag-active" : ""}`}
         style={{ width: sidebarResize.width }}
+        onDragOver={onSidebarDragOver}
+        onDragLeave={onSidebarDragLeave}
+        onDrop={onSidebarDrop}
       >
         <div
           className={`resize-handle resize-handle-left ${sidebarResize.resizing ? "resizing" : ""}`}
@@ -2014,6 +2144,14 @@ export default function App() {
                     >
                       Import Data Dictionary…
                     </button>
+                    <button
+                      onClick={() => {
+                        setCreateMenuOpenState(false);
+                        onImportPdf();
+                      }}
+                    >
+                      Import PDF…
+                    </button>
                   </>
                 )}
               </div>
@@ -2033,6 +2171,13 @@ export default function App() {
                   accept=".csv"
                   className="visually-hidden"
                   onChange={onDataDictionaryFileSelected}
+                />
+                <input
+                  ref={pdfFileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="visually-hidden"
+                  onChange={onPdfFileSelected}
                 />
               </>
             )}
@@ -2123,7 +2268,7 @@ export default function App() {
           </div>
         ) : activePath && localSession ? (
           <>
-            {isCanvas ? (
+            {isCanvas || isPdf ? (
               <Suspense fallback={<div className="canvas-loading">Loading canvas…</div>}>
                 <CanvasNote key={activePath} raw={raw} ytext={localSession.ytext} dark={isDarkTheme(themeId)} />
               </Suspense>

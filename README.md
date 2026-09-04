@@ -24,6 +24,7 @@ Most notes apps make you choose: keep your notes local and private (Obsidian, Lo
 - Wikilinks (`[[note]]`), transclusion (`![[note]]`), backlinks, and a visual link graph — full-vault or scoped to just one note's connections. Nodes are draggable (reheats the layout, so neighbors nudge out of the way rather than just repositioning the one node), double-click to pin one in place, scroll to zoom toward the cursor, drag the background to pan
 - Section and block references: `[[Note#Heading]]` links/embeds just that section, `[[Note#^block-id]]` links/embeds one specific line — not just whole-note transclusion
 - Citations: `[@citekey]` links to a `type: reference` note and renders as "(Author, Year)"; a `​```bibliography` block lists everything cited in that note; import an existing `.bib` file to bulk-create reference notes
+- PDF import: drag a PDF onto the sidebar, paste one, or **+ Create → Import PDF…** — creates a searchable `type: reference` note (extracted text) plus an annotatable note seeded with every page as an image, markable up with the same pen tool Canvas notes use
 - Full-text search (SQLite FTS5)
 - **Related Notes**: a fully local semantic-similarity panel (small on-device embedding model, no network calls, on by default) surfaces notes that are conceptually close even without an explicit `[[link]]` between them — Node/browser deployment only for now, see Roadmap
 - Favorites, Recent notes (with a type indicator), and organized sidebar navigation (All Notes / Journal / Canvas / Projects / Table / Reminders)

@@ -265,6 +265,7 @@ pub fn run() {
                 .separator()
                 .item(&MenuItemBuilder::with_id("import_bib", "Import .bib References…").build(app)?)
                 .item(&MenuItemBuilder::with_id("import_data_dictionary", "Import Data Dictionary…").build(app)?)
+                .item(&MenuItemBuilder::with_id("import_pdf", "Import PDF…").build(app)?)
                 .separator()
                 .item(&MenuItemBuilder::with_id("switch_vault", "Open a Different Vault…").build(app)?)
                 .separator()
@@ -311,7 +312,7 @@ pub fn run() {
                 "quick_capture" => open_quick_capture(app_handle),
                 id @ ("new_note" | "new_canvas" | "today" | "reindex" | "toggle_sidebar" | "toggle_graph"
                 | "view_source" | "view_live" | "view_preview" | "check_for_updates" | "import_bib"
-                | "import_data_dictionary") => {
+                | "import_data_dictionary" | "import_pdf") => {
                     let _ = app_handle.emit(&format!("menu:{}", id.replace('_', "-")), ());
                 }
                 _ => {}
@@ -327,6 +328,7 @@ pub fn run() {
             commands::read_note,
             commands::write_note,
             commands::create_note,
+            commands::write_asset,
             commands::delete_note,
             commands::search_notes,
             commands::reindex,
@@ -343,6 +345,7 @@ pub fn run() {
             commands::save_export_file,
             commands::pick_bib_file,
             commands::pick_data_dictionary_file,
+            commands::pick_pdf_file,
             commands::print_current_window,
             commands::get_due_cards,
             commands::record_card_review,

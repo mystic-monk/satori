@@ -155,6 +155,25 @@ export async function createNote(p: string, raw: string): Promise<void> {
   });
 }
 
+// Binary assets (attachments/ — PDF originals) — same IS_TAURI split as
+// createNote above, but the browser branch is multipart/form-data instead
+// of JSON (base64-encoding a multi-MB file into a JSON body would inflate
+// it by roughly a third for nothing). The Tauri branch converts to a plain
+// number array since invoke's JSON bridge doesn't pass Uint8Array/
+// ArrayBuffer directly — worth revisiting if this turns out to be slow
+// for large files, but functionally correct as written.
+export async function uploadAsset(p: string, file: File): Promise<void> {
+  if (IS_TAURI) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await invoke("write_asset", { path: p, data: Array.from(bytes) });
+    return;
+  }
+  const formData = new FormData();
+  formData.append("path", p);
+  formData.append("file", file);
+  await fetch("/api/assets", { method: "POST", body: formData });
+}
+
 export async function deleteNoteApi(p: string): Promise<void> {
   if (IS_TAURI) {
     await invoke("delete_note", { path: p });
@@ -311,6 +330,20 @@ export async function pickBibFile(): Promise<string | null> {
 // onImportDataDictionary).
 export async function pickDataDictionaryFile(): Promise<string | null> {
   return invoke("pick_data_dictionary_file");
+}
+
+export interface PickedPdf {
+  name: string;
+  data: number[];
+}
+
+// Same convention as pickBibFile/pickDataDictionaryFile above — Tauri-
+// only, browser deployment uses a plain <input type="file"> instead
+// (App.tsx's onImportPdf). Unlike those two, this reads bytes, not text
+// (a PDF isn't valid UTF-8) — `data` arrives as a plain number array over
+// invoke's JSON bridge, converted back to a Uint8Array by the caller.
+export async function pickPdfFile(): Promise<PickedPdf | null> {
+  return invoke("pick_pdf_file");
 }
 
 export type Rating = "again" | "hard" | "good" | "easy";
