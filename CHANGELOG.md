@@ -10,10 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Cmd/Ctrl+F focuses the top bar's search — it already searches every note regardless of type, so this replaces the browser's native find-in-page (which was never wired to anything useful here) rather than competing with it. Pressing it again selects the existing query, same as a browser address bar, so a repeat press starts fresh instead of appending
+- A clear (×) button on the top bar's search — previously the only way to empty it was backspacing out every character by hand
+- The reminder popup's date/time fields respond to scroll now — hover either one and scroll to step it by a day (date) or 15 minutes (time), on top of the existing quick-pick buttons, which also gained two more options ("In 30 min", "Tonight, 8pm")
+
+### Changed
+
+- The editor's Source/Live/Preview switch is two icon buttons now, not three same-weight text buttons — Source toggles raw markdown on/off (returning to whichever of Live/Preview was last active), the second button toggles between Live and Preview directly. Titles/aria-labels carry the names now that the buttons themselves don't spell them out
 
 ### Fixed
 
 - The **+ Create** dropdown only ever closed by clicking Create again — clicking anywhere else (a nav item, the note list, empty space) left it hanging open over whatever was underneath. Closes on any outside click now, the way every other dropdown/menu is expected to behave
+- The reminder popup had the same only-closes-via-its-own-buttons gap as +Create above — same outside-click fix
+- For You/Favorites/History/Tutorials sidebar sections had no icon-only treatment for a narrowed sidebar the way nav buttons do (their content is plain note titles/persona shortcuts, not one fixed icon each) — labels and lists just wrapped or overflowed instead. Each section's label collapses to a plain "•••" and its list hides entirely at icon-only width now, rather than trying to force text into a column too narrow for it
 
 ## [0.2.0] — 2026-09-04
 

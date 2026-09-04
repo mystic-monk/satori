@@ -250,15 +250,37 @@ body {
   flex-shrink: 0;
 }
 
-.app-topbar-search {
+.app-topbar-search-wrap {
+  position: relative;
   flex-shrink: 0;
+}
+
+.app-topbar-search {
   width: 220px;
-  padding: 5px 8px;
+  padding: 5px 22px 5px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
   font-size: 12px;
+}
+
+.app-topbar-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--text-dim);
+  border-radius: 3px;
+}
+
+.app-topbar-search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .app-topbar-vault {
@@ -624,6 +646,34 @@ body {
 .sidebar.icon-only .sidebar-nav button,
 .sidebar.icon-only .sidebar-bottom button {
   justify-content: center;
+}
+
+/* For You/Favorites/History/Tutorials have no per-item icon the way nav
+   buttons do (their content is plain note titles or persona shortcuts,
+   not a fixed icon each) — labels and lists just wrapped/overflowed at
+   icon-only width instead of degrading cleanly. Collapse each section to
+   a plain "•••" placeholder and hide its (unreadable at this width)
+   content entirely, rather than trying to force text into a column too
+   narrow for it. */
+.sidebar.icon-only .sidebar-section-label span {
+  display: none;
+}
+
+.sidebar.icon-only .sidebar-section-label::after {
+  content: "•••";
+  letter-spacing: 0;
+}
+
+.sidebar.icon-only .sidebar-section-label {
+  text-align: center;
+}
+
+.sidebar.icon-only .sidebar-section-chevron {
+  display: none;
+}
+
+.sidebar.icon-only .sidebar-section > *:not(.sidebar-section-label) {
+  display: none;
 }
 
 .sidebar-bottom {
@@ -1698,10 +1748,14 @@ button:disabled:hover {
 }
 
 .view-mode-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
   border: none;
   border-radius: 0;
   border-right: 1px solid var(--border);
-  text-transform: capitalize;
+  color: var(--text-dim);
 }
 
 .view-mode-toggle button:last-child {
@@ -3420,9 +3474,13 @@ button:disabled:hover {
     row-gap: 6px;
   }
 
-  .app-topbar-search {
+  .app-topbar-search-wrap {
     width: 100%;
     order: 1;
+  }
+
+  .app-topbar-search {
+    width: 100%;
   }
 
   .property-row {

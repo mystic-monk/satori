@@ -91,11 +91,14 @@ import {
   Brain,
   Calendar,
   ChevronRight,
+  Code2,
   Download,
+  Eye,
   FileText,
   History,
   Menu as MenuIcon,
   MessageSquare,
+  PenLine,
   Sparkles,
   Paintbrush,
   FolderKanban,
@@ -109,6 +112,7 @@ import {
   Users,
   Vault as VaultIcon,
   Waypoints,
+  X,
 } from "lucide-react";
 import { getIdentity, getPersona, PERSONA_SHORTCUTS, type PersonaShortcut } from "./identity";
 import IdentityPanel from "./IdentityPanel";
@@ -198,6 +202,20 @@ export default function App() {
   // way pendingCommentAnchor/commentRanges are (see the note-switch effect).
   const [compileStatus, setCompileStatus] = useState<string | null>(null);
   const [reminderPopupOpen, setReminderPopupOpen] = useState(false);
+  const reminderPopupRef = useRef<HTMLDivElement | null>(null);
+  // Same outside-click-to-close as the +Create dropdown — previously this
+  // only closed via its own Cancel/Set buttons, so it just sat open over
+  // whatever you clicked next until you came back and dismissed it by hand.
+  useEffect(() => {
+    if (!reminderPopupOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (reminderPopupRef.current && !reminderPopupRef.current.contains(e.target as Node)) {
+        setReminderPopupOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [reminderPopupOpen]);
   // Keyed by "path:remind_at" (reminderSchedule.ts) so editing a reminder
   // to a new time can fire again — reset per app load, not persisted,
   // same "session-local" scope as everything else in this feature (see
@@ -225,6 +243,13 @@ export default function App() {
   const [showChat, setShowChat] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
+  // Remembers whichever of live/preview was last active, so leaving Source
+  // (which has no live/preview distinction of its own) lands back on the
+  // same one instead of always resetting to "live".
+  const lastRenderModeRef = useRef<"live" | "preview">("live");
+  useEffect(() => {
+    if (viewMode !== "source") lastRenderModeRef.current = viewMode;
+  }, [viewMode]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Single source of truth for "which of the full-width special panels (if
@@ -1744,23 +1769,38 @@ export default function App() {
           )}
         </div>
         {!shareToken && (
-          <input
-            ref={searchInputRef}
-            className="app-topbar-search"
-            placeholder={IS_TAURI ? "Search notes… (⌘F)" : "Search notes…"}
-            aria-label="Search notes"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              // Search results render in the sidebar's note-list section,
-              // which only shows in a list view (Graph/Table/etc. have
-              // their own full-width content there instead) — typing a
-              // query while looking at one of those switches back so the
-              // results are actually visible, instead of typing into a
-              // box with no visible effect.
-              if (e.target.value && !isListView) showSpecialPanel(null);
-            }}
-          />
+          <div className="app-topbar-search-wrap">
+            <input
+              ref={searchInputRef}
+              className="app-topbar-search"
+              placeholder={IS_TAURI ? "Search notes… (⌘F)" : "Search notes…"}
+              aria-label="Search notes"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                // Search results render in the sidebar's note-list section,
+                // which only shows in a list view (Graph/Table/etc. have
+                // their own full-width content there instead) — typing a
+                // query while looking at one of those switches back so the
+                // results are actually visible, instead of typing into a
+                // box with no visible effect.
+                if (e.target.value && !isListView) showSpecialPanel(null);
+              }}
+            />
+            {query && (
+              <button
+                className="app-topbar-search-clear"
+                aria-label="Clear search"
+                title="Clear search"
+                onClick={() => {
+                  setQuery("");
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
         )}
         <div className="app-topbar-note">
           {isListView && activePath && localSession && role !== "denied" && (
@@ -1772,16 +1812,34 @@ export default function App() {
               </span>
               {!isCanvas && !isPdf && <span className="editor-word-count">{bodyWordCount.toLocaleString()} words</span>}
               {!isCanvas && !isPdf && !isOutline && (
+                // Two toggles instead of three same-weight buttons for what's
+                // really two independent choices: raw source or not, and (if
+                // not) styled-inline vs fully-rendered. Source's own button
+                // remembers nothing — leaving it always lands back on
+                // whichever of live/preview the second button is currently
+                // showing. Icons instead of spelled-out labels; title carries
+                // the name for anyone hovering.
                 <div className="view-mode-toggle">
-                  {(["source", "live", "preview"] as ViewMode[]).map((m) => (
-                    <button key={m} className={viewMode === m ? "active" : ""} onClick={() => setViewMode(m)}>
-                      {m}
-                    </button>
-                  ))}
+                  <button
+                    className={viewMode === "source" ? "active" : ""}
+                    title="Source (raw markdown)"
+                    aria-label="Source view"
+                    onClick={() => setViewMode(viewMode === "source" ? (lastRenderModeRef.current ?? "live") : "source")}
+                  >
+                    <Code2 size={14} />
+                  </button>
+                  <button
+                    className={viewMode !== "source" ? "active" : ""}
+                    title={viewMode === "preview" ? "Preview (click for Live)" : "Live (click for Preview)"}
+                    aria-label={viewMode === "preview" ? "Preview view — click to switch to Live" : "Live view — click to switch to Preview"}
+                    onClick={() => setViewMode(viewMode === "preview" ? "live" : "preview")}
+                  >
+                    {viewMode === "preview" ? <Eye size={14} /> : <PenLine size={14} />}
+                  </button>
                 </div>
               )}
               {role !== "view" && role !== "comment" && !isCanvas && !isPdf && (
-                <div className="reminder-trigger-wrap">
+                <div className="reminder-trigger-wrap" ref={reminderPopupRef}>
                   <button
                     className={currentRemindAt ? "active" : ""}
                     onClick={() => setReminderPopupOpen((o) => !o)}
@@ -1983,7 +2041,7 @@ export default function App() {
               <div className="sidebar-section">
                 <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleForyouCollapsed}>
                   <ChevronRight size={12} className={`sidebar-section-chevron ${foryouCollapsed ? "" : "open"}`} />
-                  For you
+                  <span>For you</span>
                 </button>
                 {!foryouCollapsed && (
                   <ul className="persona-shortcut-list">
@@ -2004,7 +2062,9 @@ export default function App() {
             )}
             {!results && sidebarView === "all" && !typeFilter && favoriteNotes.length > 0 && (
               <div className="sidebar-section">
-                <div className="sidebar-section-label">Favorites</div>
+                <div className="sidebar-section-label">
+                  <span>Favorites</span>
+                </div>
                 <ul className="note-list-compact">
                   {favoriteNotes.map((n) => (
                     <li
@@ -2080,7 +2140,7 @@ export default function App() {
               <div className="sidebar-section">
                 <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleHistoryCollapsed}>
                   <ChevronRight size={12} className={`sidebar-section-chevron ${historyCollapsed ? "" : "open"}`} />
-                  History
+                  <span>History</span>
                 </button>
                 {!historyCollapsed && (
                   <ul className="note-list-compact">
@@ -2104,7 +2164,7 @@ export default function App() {
               <div className="sidebar-section">
                 <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleTutorialsCollapsed}>
                   <ChevronRight size={12} className={`sidebar-section-chevron ${tutorialsCollapsed ? "" : "open"}`} />
-                  Tutorials
+                  <span>Tutorials</span>
                 </button>
                 {!tutorialsCollapsed && (
                   <ul className="note-list-compact">
