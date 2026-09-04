@@ -3687,18 +3687,27 @@ button:disabled:hover {
 /* fill was --text-dim with a 3px halo — at 10px that halo overwhelmed the
    glyph strokes themselves, reading as broken/blurry rather than crisp
    text. Full-contrast --text, a lighter halo, and a touch more size/weight
-   fixes actual legibility instead of just looking intentionally "quiet." */
+   fixes actual legibility instead of just looking intentionally "quiet."
+   Split into two stacked <text> elements (below) rather than one text
+   with paint-order: stroke — see the comment in GraphView.tsx by the JSX
+   for why. */
 .graph-node text {
-  fill: var(--text);
   font-size: 11px;
   font-weight: 500;
   text-anchor: middle;
   pointer-events: none;
   transition: opacity 0.15s;
-  paint-order: stroke;
+}
+
+.graph-node-text-halo {
+  fill: none;
   stroke: var(--bg);
   stroke-width: 2px;
   stroke-linejoin: round;
+}
+
+.graph-node-text-fill {
+  fill: var(--text);
 }
 
 .graph-node-dim circle,

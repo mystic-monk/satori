@@ -1983,6 +1983,61 @@ export default function App() {
                 </ul>
               </div>
             )}
+            {/* All Notes' own list sits directly after Favorites now, not
+                after History/Tutorials — History/Tutorials can each hold a
+                couple dozen entries (every starter vault ships ~14 tutorial
+                pages alone), and stacked above the actual note list, they
+                pushed it far enough down that on a shorter window it read
+                as "All Notes shows nothing" rather than "needs scrolling."
+                History/Tutorials moved below (still inline sections, still
+                collapsible, still off by default) so they stay reachable
+                without turning into their own nav destination. */}
+            <ul className="note-list">
+              {results
+                ? results.map((r) => (
+                    <li
+                      key={r.path}
+                      className={r.path === activePath ? "active" : ""}
+                      onClick={() => openNote(r.path)}
+                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(r.path))}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="note-title">{r.title}</div>
+                      <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
+                    </li>
+                  ))
+                : displayedNotes.map((n) => (
+                    <li
+                      key={n.path}
+                      className={n.path === activePath ? "active" : ""}
+                      onClick={() => openNote(n.path)}
+                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="note-title">{n.title}</div>
+                      {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
+                      {canFavorite && (
+                        <button
+                          className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(n.path);
+                          }}
+                          aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
+                          title={n.favorite ? "Remove from favorites" : "Add to favorites"}
+                        >
+                          <Star size={14} fill={n.favorite ? "currentColor" : "none"} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+              {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
+              {!results && displayedNotes.length === 0 && (
+                <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
+              )}
+            </ul>
             {!results && sidebarView === "all" && !typeFilter && recentNotes.length > 0 && (
               <div className="sidebar-section">
                 <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleHistoryCollapsed}>
@@ -2031,52 +2086,6 @@ export default function App() {
                 )}
               </div>
             )}
-            <ul className="note-list">
-              {results
-                ? results.map((r) => (
-                    <li
-                      key={r.path}
-                      className={r.path === activePath ? "active" : ""}
-                      onClick={() => openNote(r.path)}
-                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(r.path))}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="note-title">{r.title}</div>
-                      <div className="note-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
-                    </li>
-                  ))
-                : displayedNotes.map((n) => (
-                    <li
-                      key={n.path}
-                      className={n.path === activePath ? "active" : ""}
-                      onClick={() => openNote(n.path)}
-                      onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="note-title">{n.title}</div>
-                      {n.tags.length > 0 && <div className="note-tags">{n.tags.join(", ")}</div>}
-                      {canFavorite && (
-                        <button
-                          className={`favorite-toggle ${n.favorite ? "is-favorite" : ""}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(n.path);
-                          }}
-                          aria-label={n.favorite ? `Remove ${n.title} from favorites` : `Add ${n.title} to favorites`}
-                          title={n.favorite ? "Remove from favorites" : "Add to favorites"}
-                        >
-                          <Star size={14} fill={n.favorite ? "currentColor" : "none"} />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-              {results && results.length === 0 && <li className="empty-hint">No matches.</li>}
-              {!results && displayedNotes.length === 0 && (
-                <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
-              )}
-            </ul>
           </>
         )}
         </div>

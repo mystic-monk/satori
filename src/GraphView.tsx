@@ -729,56 +729,89 @@ export default function GraphView({ onNavigate, activePath, initialMode = "full"
               ))}
             </g>
             <g className="graph-nodes">
-              {nodes.map((n) => {
-                const dim = hoveredId
-                  ? n.id !== hoveredId && !connectedIds.has(n.id)
-                  : effectiveMatchIds
-                    ? !effectiveMatchIds.has(n.id)
-                    : false;
-                return (
-                  <g
-                    key={n.id}
-                    transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
-                    className={[
-                      "graph-node",
-                      graphNodeTypeClass(n.type),
-                      n.id === activePath ? "graph-node-active" : "",
-                      n.id === draggingId ? "graph-node-dragging" : "",
-                      pinnedIds.has(n.id) ? "graph-node-pinned" : "",
-                      dim ? "graph-node-dim" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => {
-                      if (dragMovedRef.current || clickTimerRef.current) return;
-                      clickTimerRef.current = setTimeout(() => {
-                        clickTimerRef.current = null;
-                        onNavigate(n.id);
-                      }, 220);
-                    }}
-                    onDoubleClick={(e) => {
-                      if (clickTimerRef.current) {
-                        clearTimeout(clickTimerRef.current);
-                        clickTimerRef.current = null;
-                      }
-                      onNodeDoubleClick(e, n);
-                    }}
-                    onPointerDown={(e) => onNodePointerDown(e, n)}
-                    onPointerMove={(e) => onNodePointerMove(e, n)}
-                    onPointerUp={() => endNodeDrag(n)}
-                    onPointerCancel={() => endNodeDrag(n)}
-                    onMouseEnter={() => setHoveredId(n.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                  >
-                    <title>{n.title}</title>
-                    {pinnedIds.has(n.id) && (
-                      <circle className="graph-node-pin-ring" r={(n.id === activePath ? 8 : 5) + 5} />
-                    )}
-                    <circle r={n.id === activePath ? 8 : 5} />
-                    <text dy={-10}>{truncateLabel(n.title)}</text>
-                  </g>
-                );
-              })}
+              {/* Label text lives in the same SVG user-coordinate space as
+                  everything else, so it shrinks along with nodes/links
+                  whenever viewBox grows past the default frame (auto-fit
+                  zooming out to fit a wide, sparse vault). Past a certain
+                  point the rendered glyphs get small enough that the halo
+                  stroke — sized in that same shrinking space — visually
+                  overwhelms them (anti-aliasing smears a thin, tiny glyph
+                  into its own halo), reading as washed-out/illegible even
+                  though the underlying colors are correct. Counter-scaling
+                  text by how far past the default frame the current
+                  viewBox is keeps labels close to their authored on-screen
+                  size regardless of zoom level; never shrinks below that
+                  authored size when zoomed in past the default, since
+                  content zoomed in already renders larger on its own. */}
+              {(() => {
+                const [, , vbW] = parseViewBox(viewBox);
+                const labelScale = Math.max(1, vbW / WIDTH);
+                return nodes.map((n) => {
+                  const dim = hoveredId
+                    ? n.id !== hoveredId && !connectedIds.has(n.id)
+                    : effectiveMatchIds
+                      ? !effectiveMatchIds.has(n.id)
+                      : false;
+                  return (
+                    <g
+                      key={n.id}
+                      transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}
+                      className={[
+                        "graph-node",
+                        graphNodeTypeClass(n.type),
+                        n.id === activePath ? "graph-node-active" : "",
+                        n.id === draggingId ? "graph-node-dragging" : "",
+                        pinnedIds.has(n.id) ? "graph-node-pinned" : "",
+                        dim ? "graph-node-dim" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => {
+                        if (dragMovedRef.current || clickTimerRef.current) return;
+                        clickTimerRef.current = setTimeout(() => {
+                          clickTimerRef.current = null;
+                          onNavigate(n.id);
+                        }, 220);
+                      }}
+                      onDoubleClick={(e) => {
+                        if (clickTimerRef.current) {
+                          clearTimeout(clickTimerRef.current);
+                          clickTimerRef.current = null;
+                        }
+                        onNodeDoubleClick(e, n);
+                      }}
+                      onPointerDown={(e) => onNodePointerDown(e, n)}
+                      onPointerMove={(e) => onNodePointerMove(e, n)}
+                      onPointerUp={() => endNodeDrag(n)}
+                      onPointerCancel={() => endNodeDrag(n)}
+                      onMouseEnter={() => setHoveredId(n.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    >
+                      <title>{n.title}</title>
+                      {pinnedIds.has(n.id) && (
+                        <circle className="graph-node-pin-ring" r={(n.id === activePath ? 8 : 5) + 5} />
+                      )}
+                      <circle r={n.id === activePath ? 8 : 5} />
+                      {/* Two stacked <text> elements (halo behind, fill on top
+                          via plain DOM paint order) instead of one text with
+                          paint-order: stroke — functionally equivalent when
+                          paint-order is honored, but doesn't depend on every
+                          engine supporting it. transform counteracts viewBox
+                          zoom (see labelScale above) so labels stay legible
+                          when the auto-fit is zoomed out over a wide, sparse
+                          graph, not just at the default frame. */}
+                      <g transform={`scale(${labelScale})`}>
+                        <text className="graph-node-text-halo" dy={-10} aria-hidden="true">
+                          {truncateLabel(n.title)}
+                        </text>
+                        <text className="graph-node-text-fill" dy={-10}>
+                          {truncateLabel(n.title)}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                });
+              })()}
             </g>
           </svg>
           {panelOpen && (
