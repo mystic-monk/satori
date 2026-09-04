@@ -326,6 +326,23 @@ export default function App() {
   const editorRef = useRef<EditorHandle>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [createMenuOpenState, setCreateMenuOpenState] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // The dropdown otherwise only ever closed by re-clicking Create itself —
+  // clicking anywhere else (another nav item, the note list, empty space)
+  // left it hanging open over whatever was underneath. mousedown (not
+  // click) so this fires before whatever's under the click handles its own
+  // click, same reasoning most outside-click-to-close menus use.
+  useEffect(() => {
+    if (!createMenuOpenState) return;
+    function onPointerDown(e: MouseEvent) {
+      if (createMenuRef.current && !createMenuRef.current.contains(e.target as Node)) {
+        setCreateMenuOpenState(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [createMenuOpenState]);
   const bibFileInputRef = useRef<HTMLInputElement | null>(null);
   const dataDictionaryFileInputRef = useRef<HTMLInputElement | null>(null);
   const pdfFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -563,6 +580,25 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Cmd/Ctrl+F focuses the top bar's own search — it already searches
+  // every note regardless of type, not just the one currently open — in
+  // place of the browser's native find-in-page (which the web deployment
+  // would otherwise intercept this for, and which was never wired to
+  // anything useful in the native app to begin with). Select the existing
+  // text too, same as a browser address bar, so a repeat Cmd/Ctrl+F starts
+  // a fresh query instead of appending to the last one.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -1709,8 +1745,9 @@ export default function App() {
         </div>
         {!shareToken && (
           <input
+            ref={searchInputRef}
             className="app-topbar-search"
-            placeholder="Search notes…"
+            placeholder={IS_TAURI ? "Search notes… (⌘F)" : "Search notes…"}
             aria-label="Search notes"
             value={query}
             onChange={(e) => {
@@ -2097,7 +2134,7 @@ export default function App() {
             resolution — see the requireOwner comment in
             server/index.ts). */}
         {!shareToken && (
-          <div className="sidebar-create">
+          <div className="sidebar-create" ref={createMenuRef}>
             <button
               className="create-button btn-primary"
               onClick={() => setCreateMenuOpenState((o) => !o)}

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Cmd/Ctrl+F focuses the top bar's search — it already searches every note regardless of type, so this replaces the browser's native find-in-page (which was never wired to anything useful here) rather than competing with it. Pressing it again selects the existing query, same as a browser address bar, so a repeat press starts fresh instead of appending
+
+### Fixed
+
+- The **+ Create** dropdown only ever closed by clicking Create again — clicking anywhere else (a nav item, the note list, empty space) left it hanging open over whatever was underneath. Closes on any outside click now, the way every other dropdown/menu is expected to behave
+
 ## [0.2.0] — 2026-09-04
 
 ### Added
