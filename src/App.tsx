@@ -2077,7 +2077,14 @@ export default function App() {
         {showGraph ? (
           <GraphView activePath={activePath} onNavigate={openNote} initialMode={graphInitialMode} />
         ) : showTable ? (
-          <TableView notes={displayedNotes} onNavigate={openNote} onNotesChanged={loadNotes} shareToken={shareToken} />
+          <TableView
+            notes={displayedNotes}
+            onNavigate={openNote}
+            onNotesChanged={loadNotes}
+            shareToken={shareToken}
+            onClearTypeFilter={() => setTypeFilter("")}
+            typeFilter={typeFilter}
+          />
         ) : showFlashcards ? (
           flashcardsMode === "review" ? (
             <FlashcardReview

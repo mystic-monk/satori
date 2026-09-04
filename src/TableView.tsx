@@ -4,13 +4,38 @@ import { parseFrontmatter, stringifyFrontmatter } from "../shared/frontmatter";
 import { getIdentity } from "./identity";
 import { buildResolver } from "./noteResolver";
 import { extractRelationRefs } from "./relations";
-import { Table2 } from "lucide-react";
+import { parseFilterText, queryNotes } from "./noteQuery";
+import {
+  getSavedViews,
+  saveSavedViews,
+  createView,
+  updateView,
+  deleteView,
+  getActiveViewId,
+  saveActiveViewId,
+  type Rollup,
+  type RollupMode,
+  type SortDir,
+  type SavedTableView,
+} from "./savedTableViews";
+import { Table2, Plus, X } from "lucide-react";
 
 interface TableViewProps {
   notes: NoteListItem[];
   onNavigate: (path: string, title: string) => void;
   onNotesChanged: () => Promise<void>;
   shareToken?: string | null;
+  // Called whenever a saved view is selected or created — a view's own
+  // filter text (see noteQuery.ts) is meant to be the sole source of
+  // scoping while it's active, not silently intersected with whatever the
+  // sidebar's global type filter happens to be set to (App.tsx's own
+  // displayedNotes already narrowed `notes` before it ever reaches here).
+  onClearTypeFilter: () => void;
+  // Read-only, just to pre-fill "+ New View"'s filter text with `type: X`
+  // when the sidebar happens to be scoped to a type already — capturing
+  // "save what I'm currently looking at" cheaply, without carrying
+  // forward rollups/sort too.
+  typeFilter: string;
 }
 
 // Deliberate MVP scope cuts (see the plan this was built from): a single
@@ -20,16 +45,6 @@ interface TableViewProps {
 // add a property via the Properties panel on any note and it appears here
 // automatically, same underlying data (NoteListItem.properties).
 const BUILTIN_COLUMNS = ["title", "type", "tags"] as const;
-
-type SortDir = "asc" | "desc";
-type RollupMode = "count" | "list" | "sum" | "average";
-interface Rollup {
-  property: string;
-  mode: RollupMode;
-  // Which numeric property on the *related* notes to aggregate — only
-  // meaningful (and required) for sum/average; unused for count/list.
-  field?: string;
-}
 
 const ROLLUPS_STORAGE_KEY = "pkm-table-rollups";
 
@@ -52,23 +67,86 @@ function loadStoredRollups(): Rollup[] {
 // view (localStorage, same per-browser-not-per-vault scope as every other
 // UI preference here — theme, sidebar width) and support sum/average over
 // a chosen numeric property on the related notes, not just count/list.
-export default function TableView({ notes, onNavigate, onNotesChanged, shareToken }: TableViewProps) {
-  const [sortKey, setSortKey] = useState<string>("title");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+export default function TableView({
+  notes,
+  onNavigate,
+  onNotesChanged,
+  shareToken,
+  onClearTypeFilter,
+  typeFilter,
+}: TableViewProps) {
+  // "All Notes" (no saved view selected) keeps the exact single-slot
+  // behavior this file always had — legacyRollups/legacySortKey/
+  // legacySortDir persist to the same ROLLUPS_STORAGE_KEY as before.
+  // Selecting a saved view switches `rollups`/`sortKey`/`sortDir` below to
+  // read from (and write into) that view's own record instead — plain
+  // derived values, not separate state, so there's no sync-loop between
+  // "load from the active view" and "persist changes back to it".
+  const [legacyRollups, setLegacyRollups] = useState<Rollup[]>(loadStoredRollups);
+  const [legacySortKey, setLegacySortKey] = useState<string>("title");
+  const [legacySortDir, setLegacySortDir] = useState<SortDir>("asc");
+  const [views, setViews] = useState<SavedTableView[]>(getSavedViews);
+  const [activeViewId, setActiveViewId] = useState<string | null>(getActiveViewId);
+  const [addingView, setAddingView] = useState(false);
   const [editingCell, setEditingCell] = useState<{ path: string; key: string; wasArray: boolean } | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [rollups, setRollups] = useState<Rollup[]>(loadStoredRollups);
   const [addingRollup, setAddingRollup] = useState(false);
 
+  const activeView = views.find((v) => v.id === activeViewId) ?? null;
+  const rollups = activeView ? activeView.rollups : legacyRollups;
+  const sortKey = activeView ? activeView.sortKey : legacySortKey;
+  const sortDir = activeView ? activeView.sortDir : legacySortDir;
+
   useEffect(() => {
-    localStorage.setItem(ROLLUPS_STORAGE_KEY, JSON.stringify(rollups));
-  }, [rollups]);
+    localStorage.setItem(ROLLUPS_STORAGE_KEY, JSON.stringify(legacyRollups));
+  }, [legacyRollups]);
+
+  useEffect(() => {
+    saveSavedViews(views);
+  }, [views]);
+
+  useEffect(() => {
+    saveActiveViewId(activeViewId);
+  }, [activeViewId]);
+
+  function setRollups(next: Rollup[] | ((prev: Rollup[]) => Rollup[])) {
+    const resolved = typeof next === "function" ? next(rollups) : next;
+    if (activeView) setViews((prev) => updateView(prev, activeView.id, { rollups: resolved }));
+    else setLegacyRollups(resolved);
+  }
+
+  function setSortKey(key: string) {
+    if (activeView) setViews((prev) => updateView(prev, activeView.id, { sortKey: key }));
+    else setLegacySortKey(key);
+  }
+
+  function setSortDir(dir: SortDir) {
+    if (activeView) setViews((prev) => updateView(prev, activeView.id, { sortDir: dir }));
+    else setLegacySortDir(dir);
+  }
+
+  function selectView(id: string | null) {
+    setActiveViewId(id);
+    onClearTypeFilter();
+  }
 
   const resolver = useMemo(() => buildResolver(notes), [notes]);
 
+  // The view's own filter (noteQuery.ts's simple key: value syntax) is the
+  // sole source of scoping while a view is active — selectView() above
+  // already clears App's global type filter so the two never compound
+  // into a confusing double-filtered/empty result.
+  const scopedNotes = useMemo(
+    () => (activeView ? queryNotes(notes, parseFilterText(activeView.filterText)) : notes),
+    [notes, activeView]
+  );
+
+  // Derived from scopedNotes, not the raw notes prop — a properly scoped
+  // view (e.g. "type: book") naturally shows only that type's columns
+  // instead of the full vault's property union.
   const propertyColumns = useMemo(() => {
     const keys = new Set<string>();
-    for (const n of notes) {
+    for (const n of scopedNotes) {
       for (const key of Object.keys(n.properties)) {
         // `properties` is the WHOLE frontmatter block, so title/type/tags
         // appear in it too, not just genuinely-extra fields — each of
@@ -79,15 +157,15 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
       }
     }
     return Array.from(keys).sort();
-  }, [notes]);
+  }, [scopedNotes]);
 
   // Which of those properties actually get used as a relation anywhere in
   // the currently visible notes — that's the pick-list for "add a rollup
   // column", since rolling up a property nobody uses as a relation would
   // always be empty.
   const relationPropertyNames = useMemo(
-    () => propertyColumns.filter((col) => notes.some((n) => extractRelationRefs(n.properties[col]) !== null)),
-    [propertyColumns, notes]
+    () => propertyColumns.filter((col) => scopedNotes.some((n) => extractRelationRefs(n.properties[col]) !== null)),
+    [propertyColumns, scopedNotes]
   );
 
   // One pass per rollup over the whole note list, not one pass per row —
@@ -151,7 +229,7 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
   }
 
   const sorted = useMemo(() => {
-    const copy = [...notes];
+    const copy = [...scopedNotes];
     copy.sort((a, b) => {
       const av = cellValue(a, sortKey);
       const bv = cellValue(b, sortKey);
@@ -160,11 +238,11 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
     });
     return copy;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, sortKey, sortDir]);
+  }, [scopedNotes, sortKey, sortDir]);
 
   function toggleSort(col: string) {
     if (sortKey === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortKey(col);
       setSortDir("asc");
@@ -240,6 +318,50 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
 
   return (
     <div className="table-view">
+      <div className="table-view-tabs">
+        <button className={`table-view-tab ${activeView ? "" : "active"}`} onClick={() => selectView(null)}>
+          All Notes
+        </button>
+        {views.map((v) => (
+          <button
+            key={v.id}
+            className={`table-view-tab ${activeView?.id === v.id ? "active" : ""}`}
+            onClick={() => selectView(v.id)}
+          >
+            <span className="table-view-tab-name">{v.name}</span>
+            <span
+              className="table-view-tab-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                setViews((prev) => deleteView(prev, v.id));
+                if (activeViewId === v.id) selectView(null);
+              }}
+              role="button"
+              aria-label={`Delete view ${v.name}`}
+            >
+              <X size={12} />
+            </span>
+          </button>
+        ))}
+        {addingView ? (
+          <NewViewForm
+            initialFilterText={typeFilter ? `type: ${typeFilter}` : ""}
+            onAdd={(name, filterText) => {
+              setViews((prev) => {
+                const next = createView(prev, name, filterText);
+                selectView(next[next.length - 1].id);
+                return next;
+              });
+              setAddingView(false);
+            }}
+            onCancel={() => setAddingView(false)}
+          />
+        ) : (
+          <button className="table-view-tab-add" onClick={() => setAddingView(true)}>
+            <Plus size={13} aria-hidden="true" /> New View
+          </button>
+        )}
+      </div>
       {relationPropertyNames.length > 0 && (
         <div className="table-rollup-bar">
           {rollups.map((r) => (
@@ -348,7 +470,7 @@ export default function TableView({ notes, onNavigate, onNotesChanged, shareToke
           ))}
         </tbody>
       </table>
-      {notes.length === 0 && (
+      {scopedNotes.length === 0 && (
         <div className="table-empty">
           <Table2 size={32} aria-hidden="true" />
           No notes in this view.
@@ -405,6 +527,45 @@ function AddRollupForm({
       )}
       <button disabled={needsField && !field} onClick={() => onAdd({ property, mode, field: needsField ? field : undefined })}>
         Add
+      </button>
+      <button onClick={onCancel}>Cancel</button>
+    </span>
+  );
+}
+
+// Reveal-a-small-form-inline, same pattern AddRollupForm above already
+// uses rather than a modal. The filter textarea uses noteQuery.ts's own
+// `key: value` per-line syntax — the same one ```query blocks already
+// use — so there's no new syntax to teach here.
+function NewViewForm({
+  initialFilterText,
+  onAdd,
+  onCancel,
+}: {
+  initialFilterText: string;
+  onAdd: (name: string, filterText: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [filterText, setFilterText] = useState(initialFilterText);
+  return (
+    <span className="table-new-view-form">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="View name…"
+        aria-label="View name"
+      />
+      <textarea
+        value={filterText}
+        onChange={(e) => setFilterText(e.target.value)}
+        placeholder={"type: book\nstatus: to-read"}
+        rows={2}
+        aria-label="View filter"
+      />
+      <button disabled={!name.trim()} onClick={() => onAdd(name.trim(), filterText)}>
+        Create
       </button>
       <button onClick={onCancel}>Cancel</button>
     </span>
