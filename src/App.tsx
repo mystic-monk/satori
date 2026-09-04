@@ -39,6 +39,8 @@ import { fetchAuthStatus, type AuthStatus } from "./workspaceAuth";
 import LoginScreen from "./LoginScreen";
 import WorkspacePanel from "./WorkspacePanel";
 import SettingsPanel from "./SettingsPanel";
+import ChatPanel from "./ChatPanel";
+import { getChatSettings, saveChatSettings } from "./chatConfig";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateOnEnterOrSpace } from "./a11y";
@@ -93,6 +95,7 @@ import {
   History,
   Menu as MenuIcon,
   MessageSquare,
+  Sparkles,
   Paintbrush,
   FolderKanban,
   Plus,
@@ -218,6 +221,7 @@ export default function App() {
   const [showCanvasGrid, setShowCanvasGrid] = useState(false);
   const [showProjects, setShowProjects] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -227,7 +231,7 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left a special panel stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "projects" | "reminders" | null;
+  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "projects" | "reminders" | "chat" | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -255,6 +259,7 @@ export default function App() {
     setShowCanvasGrid(panel === "canvas");
     setShowProjects(panel === "projects");
     setShowReminders(panel === "reminders");
+    setShowChat(panel === "chat");
     setSidebarOpen(false);
   }
   // Properties/Comments/History used to sit stacked above the editor,
@@ -378,6 +383,7 @@ export default function App() {
   // Not a secret — just an address — so localStorage is fine (unlike the
   // passphrase above, which deliberately stays in-memory only).
   const [relayUrl, setRelayUrl] = useState(() => localStorage.getItem("pkm-relay-url") || defaultRelayUrl());
+  const [chatSettings, setChatSettings] = useState(() => getChatSettings());
 
   // Always the full vault, never server-side filtered by typeFilter — this
   // feeds far more than the sidebar list (the wikilink/citation resolver,
@@ -1363,7 +1369,14 @@ export default function App() {
   // the rail and the wide panel below to avoid repeating all these
   // negations at every active-state check.
   const isListView =
-    !showGraph && !showTable && !showFlashcards && !showJournal && !showCanvasGrid && !showProjects && !showReminders;
+    !showGraph &&
+    !showTable &&
+    !showFlashcards &&
+    !showJournal &&
+    !showCanvasGrid &&
+    !showProjects &&
+    !showReminders &&
+    !showChat;
   // Frontmatter stripped before counting — otherwise a note's own YAML
   // properties would inflate the count of what's actually being written.
   // For an outline note, body text is spread across many small block
@@ -1624,6 +1637,11 @@ export default function App() {
           cloudConnected={cloudConnected}
           onToggleCloudConnected={() => setCloudConnected((c) => !c)}
           cloudStatus={cloudStatus}
+          chatSettings={chatSettings}
+          onChatSettingsChange={(settings) => {
+            setChatSettings(settings);
+            saveChatSettings(settings);
+          }}
           activePath={activePath}
           canConnectCloud={role === "owner" && !!activePath && !!localSession}
           canExport={!!activePath && !isCanvas && !isPdf && !isOutline}
@@ -1881,6 +1899,20 @@ export default function App() {
                 <Bell size={17} />
                 <span>Reminders</span>
               </button>
+              {/* Same v1 scope cut as Related Notes (App.tsx's other
+                  !IS_TAURI-gated entry point) — retrieval depends on the
+                  same Node/browser-only embeddings, so this inherits that
+                  gap rather than reopening it. */}
+              {!IS_TAURI && (
+                <button
+                  className={showChat ? "active" : ""}
+                  onClick={() => showSpecialPanel(showChat ? null : "chat")}
+                  title="Chat"
+                >
+                  <Sparkles size={17} />
+                  <span>Chat</span>
+                </button>
+              )}
             </nav>
           )}
           {isListView && (
@@ -2262,6 +2294,8 @@ export default function App() {
           <ProjectGridView notes={notes} onNavigate={openNote} onNewProject={onNewProject} />
         ) : showReminders ? (
           <RemindersView notes={notes} onNavigate={openNote} />
+        ) : showChat ? (
+          <ChatPanel onNavigate={openNote} onOpenSettings={() => setSettingsPanelOpen(true)} />
         ) : role === "denied" ? (
           <div className="access-denied">
             This share link is invalid or has been revoked — you don't have access to this note.

@@ -95,6 +95,34 @@ export async function fetchRelated(p: string, token?: string | null): Promise<Si
   return res.json();
 }
 
+export type ChatProviderConfig =
+  | { kind: "ollama"; baseUrl: string; model: string }
+  | { kind: "cloud"; apiKey: string; baseUrl: string; model: string };
+
+export interface ChatAnswer {
+  answer: string;
+  sources: { path: string; title: string }[];
+}
+
+// Same v1 scope cut as fetchRelated above, for the same reason — chat's
+// retrieval step depends on the same Node/browser-only embeddings, so it
+// inherits that gap rather than reopening it. Throws (not a silent []),
+// since ChatPanel.tsx needs to distinguish "no provider configured yet"
+// from "this genuinely can't run here" and show the right empty state.
+export async function sendChatMessage(message: string, provider: ChatProviderConfig): Promise<ChatAnswer> {
+  if (IS_TAURI) throw new Error("Chat isn't available in the native app yet — it needs the same local embeddings Related Notes does.");
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, provider }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Chat request failed");
+  }
+  return res.json();
+}
+
 export async function fetchLinks(): Promise<LinkEdge[]> {
   if (IS_TAURI) return invoke("get_links");
   const res = await fetch("/api/links");

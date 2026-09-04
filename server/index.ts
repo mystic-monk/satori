@@ -39,6 +39,7 @@ import type { Rating } from "./srs.js";
 import { setupCollabServer, closeRoom } from "./collab.js";
 import { setupRelayServer } from "./relay.js";
 import { scheduleEmbeddingUpdate, scheduleEmbeddingUpdateAll } from "./embeddings.js";
+import { answerFromNotes, type ChatProviderConfig } from "./chat.js";
 import { hasOwnerAccess, resolveEffectiveRole } from "./auth.js";
 import { registerAuthRoutes, SESSION_COOKIE } from "./auth-routes.js";
 
@@ -155,6 +156,20 @@ app.get("/api/backlinks/*", requireNoteRead, (req, res) => {
 app.get("/api/related/*", requireNoteRead, (req, res) => {
   const relPath = (req.params as Record<string, string>)[0];
   res.json(findSimilar(relPath, 5));
+});
+
+// provider is never stored server-side — sent per-request straight
+// through to whichever backend it names, same "client owns credentials"
+// posture cloud sync's relay URL/passphrase already have. requireOwner
+// since this reads across the whole vault as retrieval context, not just
+// one note's own share scope.
+app.post("/api/chat", requireOwner, async (req, res) => {
+  const { message, provider } = req.body as { message: string; provider: ChatProviderConfig };
+  try {
+    res.json(await answerFromNotes(message, provider));
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : "chat request failed" });
+  }
 });
 
 app.get("/api/notes/*", requireNoteRead, (req, res) => {

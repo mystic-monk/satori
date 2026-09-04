@@ -4,6 +4,7 @@ import { THEMES } from "./themes";
 import { TriangleAlert } from "lucide-react";
 import { IS_TAURI } from "./platform";
 import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "./api";
+import type { ChatSettings } from "./chatConfig";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -25,6 +26,8 @@ interface SettingsPanelProps {
   cloudConnected: boolean;
   onToggleCloudConnected: () => void;
   cloudStatus: CloudStatus | "";
+  chatSettings: ChatSettings;
+  onChatSettingsChange: (settings: ChatSettings) => void;
   activePath: string | null;
   // role === "owner" && a note is actually open — same gating the inline
   // cloud-sync bar used before this moved here (App.tsx).
@@ -69,6 +72,8 @@ export default function SettingsPanel({
   cloudConnected,
   onToggleCloudConnected,
   cloudStatus,
+  chatSettings,
+  onChatSettingsChange,
   activePath,
   canConnectCloud,
   canExport,
@@ -267,6 +272,79 @@ export default function SettingsPanel({
             <p className="settings-note">Open a note you own to connect cloud sync for it.</p>
           )}
         </div>
+
+        {/* Same reasoning as fetchRelated's Tauri gap — this depends on
+            the same Node/browser-only embeddings Related Notes does, so
+            there's nothing to configure in the native app yet. */}
+        {!IS_TAURI && (
+          <div className="settings-section">
+            <div className="settings-section-label">AI Chat</div>
+            <div className="cloud-role-toggle" role="radiogroup" aria-label="Chat provider">
+              <button
+                className={chatSettings.kind === "ollama" ? "active" : ""}
+                onClick={() => onChatSettingsChange({ ...chatSettings, kind: "ollama" })}
+                aria-pressed={chatSettings.kind === "ollama"}
+              >
+                Local (Ollama)
+              </button>
+              <button
+                className={chatSettings.kind === "cloud" ? "active" : ""}
+                onClick={() => onChatSettingsChange({ ...chatSettings, kind: "cloud" })}
+                aria-pressed={chatSettings.kind === "cloud"}
+              >
+                Cloud API key
+              </button>
+            </div>
+            {chatSettings.kind === "ollama" ? (
+              <div className="cloud-bar">
+                <input
+                  className="cloud-input"
+                  placeholder="Ollama server (http://localhost:11434)"
+                  aria-label="Ollama server address"
+                  value={chatSettings.ollamaBaseUrl}
+                  onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaBaseUrl: e.target.value })}
+                />
+                <input
+                  className="cloud-input"
+                  placeholder="Model (e.g. llama3)"
+                  aria-label="Ollama model name"
+                  value={chatSettings.ollamaModel}
+                  onChange={(e) => onChatSettingsChange({ ...chatSettings, ollamaModel: e.target.value })}
+                />
+              </div>
+            ) : (
+              <div className="cloud-bar">
+                <input
+                  className="cloud-input"
+                  placeholder="API base URL (https://api.openai.com/v1)"
+                  aria-label="Cloud chat API base URL"
+                  value={chatSettings.cloudBaseUrl}
+                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudBaseUrl: e.target.value })}
+                />
+                <input
+                  className="cloud-input"
+                  type="password"
+                  placeholder="API key"
+                  aria-label="Cloud chat API key"
+                  value={chatSettings.cloudApiKey}
+                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudApiKey: e.target.value })}
+                />
+                <input
+                  className="cloud-input"
+                  placeholder="Model (e.g. gpt-4o-mini)"
+                  aria-label="Cloud chat model name"
+                  value={chatSettings.cloudModel}
+                  onChange={(e) => onChatSettingsChange({ ...chatSettings, cloudModel: e.target.value })}
+                />
+              </div>
+            )}
+            <p className="settings-note">
+              {chatSettings.kind === "ollama"
+                ? "Talks to a local Ollama install — nothing leaves your machine. Install Ollama and pull a model separately first."
+                : "Sends your question and relevant note excerpts to this API on every message — not local, opt in deliberately."}
+            </p>
+          </div>
+        )}
 
         <div className="settings-section">
           <div className="settings-section-label">Export current note</div>

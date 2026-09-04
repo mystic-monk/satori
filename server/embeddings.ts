@@ -52,6 +52,18 @@ export async function embedText(text: string): Promise<Float32Array> {
   return Float32Array.from(results[0]);
 }
 
+// The asymmetric case the comment above flags — chat's retrieval step
+// embeds a typed question, not a stored note, so it uses fastembed's
+// query mode instead of passage mode for a better match against the
+// passage-embedded notes already in the index. Unlike passageEmbed,
+// queryEmbed takes a single string (not a batch array) and resolves
+// directly to a plain number[], not an async generator of batches.
+export async function embedQuery(text: string): Promise<Float32Array> {
+  const model = await getModel();
+  const result = await model.queryEmbed(text);
+  return Float32Array.from(result);
+}
+
 // Fire-and-forget: called right after upsertNoteIndex(relPath) in
 // server/index.ts's route handlers, once the index (and so notes_fts)
 // already reflects this save. A failure here (model not ready yet, a

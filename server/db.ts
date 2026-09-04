@@ -508,27 +508,49 @@ export interface SimilarNote {
 // Brute-force cosine similarity over every stored embedding — no ANN
 // index needed at personal-vault scale (a few thousand notes is well
 // within "fine to scan in memory", same reasoning already applied to
-// Table view/query blocks elsewhere in this codebase). Returns [] for a
-// note with no embedding yet (async generation hasn't caught up, or the
-// note is brand new) rather than erroring — the caller just shows an
-// empty Related panel until it's ready.
+// Table view/query blocks elsewhere in this codebase). Shared by
+// findSimilar (compares a note's own stored vector against every other)
+// and findSimilarToText (compares a freshly-embedded typed query instead)
+// — same scan, same ranking, just a different source for `vector`.
+function topKByVector(vector: Float32Array, excludePath: string | null, k: number): SimilarNote[] {
+  const rows = (
+    excludePath
+      ? db
+          .prepare(
+            `SELECT e.path as path, n.title as title, e.vector as vector
+             FROM embeddings e JOIN notes n ON n.path = e.path
+             WHERE e.path != ?`
+          )
+          .all(excludePath)
+      : db
+          .prepare(
+            `SELECT e.path as path, n.title as title, e.vector as vector
+             FROM embeddings e JOIN notes n ON n.path = e.path`
+          )
+          .all()
+  ) as { path: string; title: string; vector: Buffer }[];
+  return rows
+    .map((r) => ({ path: r.path, title: r.title, score: cosineSimilarity(vector, toFloat32Array(r.vector)) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+}
+
+// Returns [] for a note with no embedding yet (async generation hasn't
+// caught up, or the note is brand new) rather than erroring — the caller
+// just shows an empty Related panel until it's ready.
 export function findSimilar(relPath: string, k = 5): SimilarNote[] {
   const target = db.prepare("SELECT vector FROM embeddings WHERE path = ?").get(relPath) as
     | { vector: Buffer }
     | undefined;
   if (!target) return [];
-  const targetVec = toFloat32Array(target.vector);
-  const rows = db
-    .prepare(
-      `SELECT e.path as path, n.title as title, e.vector as vector
-       FROM embeddings e JOIN notes n ON n.path = e.path
-       WHERE e.path != ?`
-    )
-    .all(relPath) as { path: string; title: string; vector: Buffer }[];
-  return rows
-    .map((r) => ({ path: r.path, title: r.title, score: cosineSimilarity(targetVec, toFloat32Array(r.vector)) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, k);
+  return topKByVector(toFloat32Array(target.vector), relPath, k);
+}
+
+// Chat's retrieval step — same ranking as findSimilar, but against a
+// typed question's embedding (see embeddings.ts's embedQuery) instead of
+// an existing note's own vector, so nothing to exclude.
+export function findSimilarToVector(vector: Float32Array, k = 5): SimilarNote[] {
+  return topKByVector(vector, null, k);
 }
 
 export interface SearchResult {
