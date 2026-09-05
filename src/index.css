@@ -941,7 +941,16 @@ body {
   position: absolute;
   bottom: 100%;
   left: 8px;
-  right: 8px;
+  /* A fixed width, not left:8px + right:8px stretching to match
+     .sidebar-create's own width — that made this dropdown only as wide
+     as the sidebar currently is, so dragging it down to icon-only width
+     (64px) squeezed every item's label ("New From Template", "Import
+     Data Dictionary…") onto several wrapped lines overflowing the menu's
+     own box. A dropdown floating out past a narrow trigger's own width
+     is normal (.persona-menu does the same), so this just needs enough
+     room for its longest label regardless of the sidebar's width. */
+  width: 200px;
+  max-width: calc(100vw - 16px);
   margin-bottom: 4px;
   display: flex;
   flex-direction: column;

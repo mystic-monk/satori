@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The **+ Create** dropdown only ever closed by clicking Create again — clicking anywhere else (a nav item, the note list, empty space) left it hanging open over whatever was underneath. Closes on any outside click now, the way every other dropdown/menu is expected to behave
 - The reminder popup had the same only-closes-via-its-own-buttons gap as +Create above — same outside-click fix
 - For You/Favorites/History/Tutorials sidebar sections had no icon-only treatment for a narrowed sidebar the way nav buttons do (their content is plain note titles/persona shortcuts, not one fixed icon each) — labels and lists just wrapped or overflowed instead. Each section's label collapses to a plain "•••" and its list hides entirely at icon-only width now, rather than trying to force text into a column too narrow for it
+- The **+ Create** dropdown stretched to match the sidebar's own current width (`left`/`right: 8px`) instead of having a width of its own — dragging the sidebar down to icon-only (64px) squeezed it to ~47px, wrapping every item's label ("New From Template", "Import Data Dictionary…") onto several lines that overflowed the menu's own box. Fixed width (200px) now, the same way the persona menu already works, so it floats out past a narrow sidebar instead of being crushed by it
 
 ## [0.2.0] — 2026-09-04
 
