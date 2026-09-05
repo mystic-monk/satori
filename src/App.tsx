@@ -59,7 +59,10 @@ import FlashcardGridView from "./FlashcardGridView";
 import JournalView from "./JournalView";
 import CanvasGridView from "./CanvasGridView";
 import ProjectGridView from "./ProjectGridView";
+import HistoryGridView from "./HistoryGridView";
+import TutorialsGridView from "./TutorialsGridView";
 import AllNotesGridView from "./AllNotesGridView";
+import { getAllNotesViewState, saveAllNotesViewState, type AllNotesViewState } from "./allNotesViewState";
 import TabStrip from "./TabStrip";
 import RemindersView from "./RemindersView";
 // Excalidraw is a large dependency (shapes, its own UI, export logic) that
@@ -87,9 +90,9 @@ import { resolveFragment } from "../shared/blockrefs";
 import { parseBlockDoc, flattenAllBlockText, createBlock, serializeBlockDoc } from "./blockTree";
 import {
   Bell,
+  BookOpen,
   Brain,
   Calendar,
-  ChevronRight,
   Code2,
   Download,
   Eye,
@@ -181,6 +184,11 @@ export default function App() {
   const [types, setTypes] = useState<{ type: string; count: number }[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [sidebarView, setSidebarView] = useState<SidebarView>("all");
+  const [allNotesView, setAllNotesView] = useState<AllNotesViewState>(() => getAllNotesViewState());
+  function onAllNotesViewChange(next: AllNotesViewState) {
+    setAllNotesView(next);
+    saveAllNotesViewState(next);
+  }
   const [recentNotes, setRecentNotes] = useState<RecentNote[]>(() => getRecent());
   const [vaultName, setVaultName] = useState<string | null>(null);
   // null = still loading (only ever matters on the server/browser
@@ -254,6 +262,8 @@ export default function App() {
   const [showProjects, setShowProjects] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showTutorials, setShowTutorials] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("live");
   // Remembers whichever of live/preview was last active, so leaving Source
@@ -270,7 +280,18 @@ export default function App() {
   // repeated at every switch point, which is exactly the shape of bug that
   // once left a special panel stuck on-screen after navigating away from
   // it (a forgotten reset at just one of those call sites).
-  type SpecialPanel = "graph" | "table" | "flashcards" | "journal" | "canvas" | "projects" | "reminders" | "chat" | null;
+  type SpecialPanel =
+    | "graph"
+    | "table"
+    | "flashcards"
+    | "journal"
+    | "canvas"
+    | "projects"
+    | "reminders"
+    | "chat"
+    | "history"
+    | "tutorials"
+    | null;
   // Mirrors the booleans above so the Tauri menu listener below (a `[]`-dep
   // effect, so its closures never see a fresh `showGraph`) can still read
   // the live value instead of whatever it was at mount — same problem
@@ -299,6 +320,8 @@ export default function App() {
     setShowProjects(panel === "projects");
     setShowReminders(panel === "reminders");
     setShowChat(panel === "chat");
+    setShowHistory(panel === "history");
+    setShowTutorials(panel === "tutorials");
     setSidebarOpen(false);
   }
   // Properties/Comments/History used to sit stacked above the editor,
@@ -311,27 +334,6 @@ export default function App() {
   function toggleRightPanelCollapsed() {
     setRightPanelCollapsed((collapsed) => {
       localStorage.setItem("pkm-right-panel-collapsed", collapsed ? "0" : "1");
-      return !collapsed;
-    });
-  }
-  // History/Tutorials used to be full-panel rail destinations; now they're
-  // collapsible inline sections like Favorites, but — unlike "For you"
-  // above — default to COLLAPSED: secondary/glanceable content, not
-  // something that needs to announce itself the first time a persona is
-  // set.
-  const [historyCollapsed, setHistoryCollapsed] = useState(() => localStorage.getItem("pkm-history-collapsed") !== "0");
-  function toggleHistoryCollapsed() {
-    setHistoryCollapsed((collapsed) => {
-      localStorage.setItem("pkm-history-collapsed", collapsed ? "0" : "1");
-      return !collapsed;
-    });
-  }
-  const [tutorialsCollapsed, setTutorialsCollapsed] = useState(
-    () => localStorage.getItem("pkm-tutorials-collapsed") !== "0"
-  );
-  function toggleTutorialsCollapsed() {
-    setTutorialsCollapsed((collapsed) => {
-      localStorage.setItem("pkm-tutorials-collapsed", collapsed ? "0" : "1");
       return !collapsed;
     });
   }
@@ -1582,12 +1584,6 @@ export default function App() {
   // typeFilter narrows what the sidebar list (and Table view, which reads
   // this same value) shows — applied here, client-side, rather than by
   // fetching a pre-filtered `notes` from the server (see loadNotes above).
-  // Filtered by tag rather than type: every tutorial note already carries
-  // tags: [tutorial] (it's what the tutorial's own query-block example
-  // demonstrates), including tutorial/properties.md, which is deliberately
-  // type: reference to double as the citation-system demo — a type-based
-  // filter would have missed it.
-  const tutorialNotes = useMemo(() => notes.filter((n) => n.tags.includes("tutorial")), [notes]);
   const displayedNotes = useMemo(
     () =>
       sidebarView === "favorites"
@@ -2067,6 +2063,22 @@ export default function App() {
                 <span>All Notes</span>
               </button>
               <button
+                className={showHistory ? "active" : ""}
+                onClick={() => (showHistory ? showSpecialPanel(null) : showSpecialPanel("history"))}
+                title="History"
+              >
+                <History size={17} />
+                <span>History</span>
+              </button>
+              <button
+                className={showTutorials ? "active" : ""}
+                onClick={() => (showTutorials ? showSpecialPanel(null) : showSpecialPanel("tutorials"))}
+                title="Tutorials"
+              >
+                <BookOpen size={17} />
+                <span>Tutorials</span>
+              </button>
+              <button
                 className={showJournal ? "active" : ""}
                 onClick={() => (showJournal ? showSpecialPanel(null) : openJournal())}
                 title="Journal"
@@ -2246,54 +2258,6 @@ export default function App() {
                 <li className="empty-hint">{sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}</li>
               )}
             </ul>
-            {!results && sidebarView === "all" && !typeFilter && recentNotes.length > 0 && (
-              <div className="sidebar-section">
-                <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleHistoryCollapsed}>
-                  <ChevronRight size={12} className={`sidebar-section-chevron ${historyCollapsed ? "" : "open"}`} />
-                  <span>History</span>
-                </button>
-                {!historyCollapsed && (
-                  <ul className="note-list-compact">
-                    {recentNotes.map((n) => (
-                      <li
-                        key={n.path}
-                        className={n.path === activePath ? "active" : ""}
-                        onClick={() => openNote(n.path, n.title, n.type)}
-                        onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path, n.title, n.type))}
-                        role="button"
-                        tabIndex={0}
-                      >
-                        <div className="note-title">{n.title}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {!results && sidebarView === "all" && !typeFilter && tutorialNotes.length > 0 && (
-              <div className="sidebar-section">
-                <button className="sidebar-section-label sidebar-section-toggle" onClick={toggleTutorialsCollapsed}>
-                  <ChevronRight size={12} className={`sidebar-section-chevron ${tutorialsCollapsed ? "" : "open"}`} />
-                  <span>Tutorials</span>
-                </button>
-                {!tutorialsCollapsed && (
-                  <ul className="note-list-compact">
-                    {tutorialNotes.map((n) => (
-                      <li
-                        key={n.path}
-                        className={n.path === activePath ? "active" : ""}
-                        onClick={() => openNote(n.path)}
-                        onKeyDown={(e) => activateOnEnterOrSpace(e, () => openNote(n.path))}
-                        role="button"
-                        tabIndex={0}
-                      >
-                        <div className="note-title">{n.title}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </>
         )}
         </div>
@@ -2503,6 +2467,10 @@ export default function App() {
           <CanvasGridView notes={notes} onNavigate={openNote} onNewCanvas={onNewCanvas} />
         ) : showProjects ? (
           <ProjectGridView notes={notes} onNavigate={openNote} onNewProject={onNewProject} />
+        ) : showHistory ? (
+          <HistoryGridView recentNotes={recentNotes} onNavigate={openNote} />
+        ) : showTutorials ? (
+          <TutorialsGridView notes={notes} onNavigate={openNote} />
         ) : showReminders ? (
           <RemindersView notes={notes} onNavigate={openNote} />
         ) : showChat ? (
@@ -2522,6 +2490,8 @@ export default function App() {
             onNavigate={openNote}
             onNewNote={onNewNote}
             emptyLabel={sidebarView === "favorites" ? "No favorites yet." : "No notes yet."}
+            view={allNotesView}
+            onViewChange={onAllNotesViewChange}
           />
         ) : activePath && localSession ? (
           <>

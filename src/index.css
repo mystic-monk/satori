@@ -697,13 +697,15 @@ body {
   justify-content: center;
 }
 
-/* For You/Favorites/History/Tutorials have no per-item icon the way nav
-   buttons do (their content is plain note titles or persona shortcuts,
-   not a fixed icon each) — labels and lists just wrapped/overflowed at
-   icon-only width instead of degrading cleanly. Collapse each section to
-   a plain "•••" placeholder and hide its (unreadable at this width)
-   content entirely, rather than trying to force text into a column too
-   narrow for it. */
+/* Favorites has no per-item icon the way nav buttons do (its content is
+   plain note titles, not a fixed icon each) — its label and list just
+   wrapped/overflowed at icon-only width instead of degrading cleanly.
+   Collapses to a plain "•••" placeholder and hides its (unreadable at
+   this width) list entirely, rather than trying to force text into a
+   column too narrow for it. (History/Tutorials used to share this
+   treatment as inline sections; they're real nav destinations now, with
+   their own icon each, so they degrade the same way every other nav
+   button already does.) */
 .sidebar.icon-only .sidebar-section-label span {
   display: none;
 }
@@ -715,10 +717,6 @@ body {
 
 .sidebar.icon-only .sidebar-section-label {
   text-align: center;
-}
-
-.sidebar.icon-only .sidebar-section-chevron {
-  display: none;
 }
 
 .sidebar.icon-only .sidebar-section > *:not(.sidebar-section-label) {
@@ -792,33 +790,6 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
-}
-
-/* Favorites' label is a plain div; "For you" is the one section-label
-   that's also a collapse toggle, so it needs the button reset plus a
-   chevron — kept as an addition on top of .sidebar-section-label rather
-   than a full separate style so both stay visually identical otherwise. */
-.sidebar-section-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  background: transparent;
-  border: none;
-  text-align: left;
-}
-
-.sidebar-section-toggle:hover {
-  color: var(--text);
-}
-
-.sidebar-section-chevron {
-  flex-shrink: 0;
-  transition: transform 0.12s;
-}
-
-.sidebar-section-chevron.open {
-  transform: rotate(90deg);
 }
 
 .note-list-compact {
@@ -2726,6 +2697,108 @@ button:disabled:hover {
   margin: 0 0 16px;
   color: var(--text-dim);
   font-size: 13px;
+}
+
+.tile-grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 900px;
+  margin-bottom: 20px;
+}
+
+.tile-grid-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tile-grid-toolbar-group select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.tile-grid-view-toggle {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tile-grid-view-toggle button {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+}
+
+.tile-grid-view-toggle button:last-child {
+  border-right: none;
+}
+
+.tile-grid-view-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tile-grid-section {
+  max-width: 900px;
+  margin-bottom: 24px;
+}
+
+.tile-grid-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.note-detail-list {
+  width: 100%;
+  max-width: 900px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.note-detail-list th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.note-detail-list th:hover {
+  color: var(--text);
+}
+
+.note-detail-list td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.note-detail-list tbody tr {
+  cursor: pointer;
+}
+
+.note-detail-list tbody tr:hover {
+  background: var(--bg-hover);
 }
 
 .tile-grid {

@@ -6,10 +6,21 @@ export interface RecentNote {
   path: string;
   title: string;
   type: string | null;
+  // Added alongside History becoming a real, sortable tile-grid view
+  // (HistoryGridView.tsx) rather than a glanceable sidebar preview —
+  // entries recorded before this existed don't have it, defaulted below
+  // rather than dropped so old history isn't lost, just unable to be
+  // placed precisely by a List-mode sort (they sort as if opened at
+  // epoch 0, i.e. last).
+  openedAt: number;
 }
 
 const KEY = "pkm-recent-notes";
-const MAX_ENTRIES = 8;
+// Raised from 8 now that History is a real browsable destination, not a
+// handful-of-shortcuts sidebar preview — 8 was sized for "fits in a
+// dropdown without scrolling," a concern that no longer applies now that
+// the preview itself is gone.
+const MAX_ENTRIES = 50;
 
 export function getRecent(): RecentNote[] {
   try {
@@ -17,9 +28,10 @@ export function getRecent(): RecentNote[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // Entries recorded before `type` existed on this shape don't have it —
-    // default rather than drop them, so old recent-note history isn't lost.
-    return parsed.map((n) => ({ type: null, ...n }));
+    // Entries recorded before `type`/`openedAt` existed on this shape
+    // don't have them — default rather than drop them, so old
+    // recent-note history isn't lost.
+    return parsed.map((n) => ({ type: null, openedAt: 0, ...n }));
   } catch {
     return [];
   }
@@ -27,8 +39,13 @@ export function getRecent(): RecentNote[] {
 
 // Moves an already-present entry to the front instead of duplicating it,
 // so reopening a note doesn't leave stale copies of itself in the list.
+// openedAt is computed here, not passed in, so both call sites (App.tsx)
+// stay unchanged.
 export function recordOpened(path: string, title: string, type: string | null): RecentNote[] {
-  const next = [{ path, title, type }, ...getRecent().filter((n) => n.path !== path)].slice(0, MAX_ENTRIES);
+  const next = [{ path, title, type, openedAt: Date.now() }, ...getRecent().filter((n) => n.path !== path)].slice(
+    0,
+    MAX_ENTRIES
+  );
   localStorage.setItem(KEY, JSON.stringify(next));
   return next;
 }
